@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-// 1. IMPORTAMOS EL COMPONENTE DE VERCEL
-import { Analytics } from "@vercel/analytics/react";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,8 +30,6 @@ export default function RootLayout({
         suppressHydrationWarning={true} 
       >
         {children}
-        
-        {/* 2. AGREGAMOS EL COMPONENTE AQUÍ (INVISIBLE) */}
         <Analytics />
       </body>
     </html>
