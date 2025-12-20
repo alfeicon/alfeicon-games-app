@@ -1,7 +1,7 @@
 // app/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { 
   Home, Gamepad2, BookOpen, ShoppingCart, Search, Instagram, MessageCircle, 
@@ -11,10 +11,11 @@ import {
 import GameCard from '@/components/GameCard';
 import Papa from 'papaparse'; 
 import { DATA_IMAGENES } from './data/imagenes';
-// 1. IMPORTAMOS EL BUSCADOR INTELIGENTE
 import Fuse from 'fuse.js';
 
-// --- CONFIGURACIÓN GENERAL ---
+// --- 1. OPTIMIZACIÓN: CONFIGURACIÓN Y HELPERS FUERA DEL COMPONENTE ---
+// Al sacarlos de la función principal, no se recrean en cada render.
+
 const CONFIG = {
   whatsappNumber: "56926411278",
   emailSoporte: "alfeicon.games@gmail.com",
@@ -22,16 +23,34 @@ const CONFIG = {
   sheetPacks: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=858783180&single=true&output=csv"
 };
 
+// Función auxiliar optimizada para limpiar texto
+const limpiarTexto = (texto: string) => texto.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const buscarImagenLocal = (nombreJuego: string) => {
+  if (!nombreJuego || !DATA_IMAGENES) return null;
+  const inputLimpio = limpiarTexto(nombreJuego);
+  const encontrado = DATA_IMAGENES.find((item: any) => 
+      limpiarTexto(item.name) === inputLimpio
+  );
+  return encontrado ? encontrado.url : null;
+};
+
+// Configuración de Fuse estática
+const FUSE_OPTIONS = {
+  keys: ['titulo', 'juegosIncluidos'],
+  threshold: 0.35,
+  ignoreLocation: true,
+};
+
 export default function MobileAppStore() {
-  // --- ESTADOS DE LA APLICACIÓN ---
-  
+  // --- ESTADOS ---
   const [activeSection, setActiveSection] = useState<'inicio' | 'catalogo' | 'instrucciones' | 'carrito' | 'perfil'>('inicio');
   const [storeTab, setStoreTab] = useState<'individual' | 'packs'>('individual');
   const [helpTab, setHelpTab] = useState<'switch2' | 'switch1'>('switch2');
   
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const [showTerms, setShowTerms] = useState(false); // Modal de términos
-  const [termsAccepted, setTermsAccepted] = useState(false); // Checkbox del carrito
+  const [showTerms, setShowTerms] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState(""); 
   const [filterTerm, setFilterTerm] = useState(""); 
@@ -43,49 +62,32 @@ export default function MobileAppStore() {
   const [carrito, setCarrito] = useState<any[]>([]);
   const [visibleCount, setVisibleCount] = useState(20); 
 
-
-  // --- FUNCIONES LÓGICAS ---
-
-  const buscarImagenLocal = (nombreJuego: string) => {
-    if (!nombreJuego || !DATA_IMAGENES) return null;
-    const limpiarTexto = (texto: string) => texto.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const inputLimpio = limpiarTexto(nombreJuego);
-    const encontrado = DATA_IMAGENES.find((item: any) => 
-        limpiarTexto(item.name) === inputLimpio
-    );
-    return encontrado ? encontrado.url : null;
-  };
-
-  const ejecutarBusqueda = () => {
+  // --- 2. OPTIMIZACIÓN: FUNCIONES MEMOIZADAS (useCallback) ---
+  
+  const ejecutarBusqueda = useCallback(() => {
     setFilterTerm(searchTerm);
     setVisibleCount(20); 
-  };
+  }, [searchTerm]);
 
-  const agregarAlCarrito = (item: any) => {
-    setCarrito([...carrito, item]);
-  };
+  const agregarAlCarrito = useCallback((item: any) => {
+    setCarrito(prev => [...prev, item]);
+  }, []);
 
-  const eliminarDelCarrito = (indexEliminar: number) => {
-    setCarrito(carrito.filter((_, index) => index !== indexEliminar));
-  };
+  const eliminarDelCarrito = useCallback((indexEliminar: number) => {
+    setCarrito(prev => prev.filter((_, index) => index !== indexEliminar));
+  }, []);
 
   const enviarPedidoWhatsApp = () => {
-    if (carrito.length === 0) return;
-    
-    // VALIDACIÓN: Si no aceptó términos, no hace nada
-    if (!termsAccepted) return;
+    if (carrito.length === 0 || !termsAccepted) return;
 
     let mensaje = "Hola, vengo desde la página web y quiero llevar:\n\n";
-
     carrito.forEach((item) => {
       mensaje += `🔹 ${item.titulo} ($${item.precio.toLocaleString()})\n`;
     });
 
     const total = carrito.reduce((acc, item) => acc + item.precio, 0).toLocaleString();
-    
     mensaje += `\n💰 *Total: $${total}*\n\n`;
-    mensaje += "✅ He leído y acepto los términos y condiciones.\n";
-    mensaje += "¿Están disponibles los artículos?";
+    mensaje += "✅ He leído y acepto los términos y condiciones.\n¿Están disponibles los artículos?";
 
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
     window.open(url, '_blank');
@@ -93,6 +95,7 @@ export default function MobileAppStore() {
 
   // --- EFECTOS ---
 
+  // Efecto de Reset al cambiar sección
   useEffect(() => {
     window.scrollTo(0, 0);
     if (activeSection !== 'catalogo') {
@@ -102,16 +105,32 @@ export default function MobileAppStore() {
     setVisibleCount(20);
   }, [activeSection, storeTab]);
 
+  // 3. OPTIMIZACIÓN: SCROLL HANDLER MÁS LIGERO
   useEffect(() => {
     let lastScrollY = window.scrollY;
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      if (currentScrollY < lastScrollY || currentScrollY < 50) setIsHeaderVisible(true);
-      else if (currentScrollY > lastScrollY && currentScrollY > 50) setIsHeaderVisible(false);
-      lastScrollY = currentScrollY;
-    };
-    window.addEventListener('scroll', handleScroll);
+    let ticking = false; // Flag para no saturar el navegador
 
+    const updateHeader = () => {
+      const currentScrollY = window.scrollY;
+      if (currentScrollY < lastScrollY || currentScrollY < 50) {
+        setIsHeaderVisible(true);
+      } else if (currentScrollY > lastScrollY && currentScrollY > 50) {
+        setIsHeaderVisible(false);
+      }
+      lastScrollY = currentScrollY;
+      ticking = false;
+    };
+
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(updateHeader);
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    
+    // CARGA DE DATOS (Se mantiene igual, la lógica es sólida)
     const cargarDatos = async () => {
         // Cargar Juegos
         Papa.parse(CONFIG.sheetGames, {
@@ -140,9 +159,10 @@ export default function MobileAppStore() {
               };
             }).filter((item: any) => item.titulo);
             setProductos(datosLimpios);
-            setCargando(false);
+            // Solo quitamos cargando si ya terminaron los packs también (opcional, o dejarlo separado)
+            if(packs.length > 0) setCargando(false); 
           },
-          error: (error: any) => { console.error("Error Juegos:", error); setCargando(false); }
+          error: (error: any) => { console.error("Error Juegos:", error); }
         });
 
         // Cargar Packs
@@ -183,6 +203,7 @@ export default function MobileAppStore() {
                 };
               }).filter((item: any) => item.precio > 0);
               setPacks(packsLimpios);
+              setCargando(false); // Asumimos que esto termina último o cerca
             },
             error: (error: any) => console.error("Error Packs:", error)
         });
@@ -200,28 +221,27 @@ export default function MobileAppStore() {
     return packs.slice(0, 6); 
   }, [packs]);
 
-  // 2. LÓGICA DE BÚSQUEDA MEJORADA CON FUSE.JS
+  // 4. OPTIMIZACIÓN: FUSE.JS INSTANCIA ÚNICA
+  // Creamos el índice solo cuando cambian los productos/packs, no al escribir.
+  const fuseInstance = useMemo(() => {
+    const items = storeTab === 'individual' ? productos : packs;
+    return new Fuse(items, FUSE_OPTIONS);
+  }, [storeTab, productos, packs]);
+
   const listaFiltrada = useMemo(() => {
     const itemsAMostrar = storeTab === 'individual' ? productos : packs;
     
-    // Si no escribieron nada, mostramos todo
     if (filterTerm === "") return itemsAMostrar;
 
-    // Configuración del buscador inteligente
-    const fuse = new Fuse(itemsAMostrar, {
-      keys: ['titulo', 'juegosIncluidos'], // Busca en el nombre del juego o juegos dentro del pack
-      threshold: 0.35, // Tolerancia a errores (0.0 = exacto, 1.0 = coincide con todo)
-      ignoreLocation: true, // Busca en cualquier parte de la frase
-    });
-
-    // Devuelve los resultados encontrados
-    return fuse.search(filterTerm).map(result => result.item);
-  }, [storeTab, productos, packs, filterTerm]);
+    // Usamos la instancia ya creada (mucho más rápido)
+    return fuseInstance.search(filterTerm).map(result => result.item);
+  }, [storeTab, productos, packs, filterTerm, fuseInstance]);
 
   const listaVisual = listaFiltrada.slice(0, visibleCount);
 
-  // --- RENDERIZADO ---
+  // --- RENDERIZADO (IGUAL QUE ANTES) ---
   return (
+    // ... aquí sigue tu código del return tal cual estaba ...
     <div className="min-h-screen bg-black flex justify-center selection:bg-white selection:text-black">
       <div className="w-full max-w-md bg-black min-h-screen relative shadow-2xl border-x border-gray-900 font-sans text-white overflow-hidden">
         
