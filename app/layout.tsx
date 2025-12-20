@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 // 1. IMPORTAMOS EL COMPONENTE DE VERCEL
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next"; // <--- NUEVO
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -34,6 +35,7 @@ export default function RootLayout({
         
         {/* 2. AGREGAMOS EL COMPONENTE AQUÍ (INVISIBLE) */}
         <Analytics />
+        <SpeedInsights /> {/* <--- NUEVO AQUÍ */}
       </body>
     </html>
   );
