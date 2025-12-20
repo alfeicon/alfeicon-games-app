@@ -6,16 +6,18 @@ import Image from 'next/image';
 import { 
   Home, Gamepad2, BookOpen, ShoppingCart, Search, Instagram, MessageCircle, 
   Mail, Loader2, ArrowDownCircle, Trash2, Zap, Layers, Youtube, FileText, 
-  ShieldCheck, Download, X, Check, AlertTriangle, Facebook 
+  ShieldCheck, AlertTriangle, Facebook, Star, X, Check 
 } from 'lucide-react';
 import GameCard from '@/components/GameCard';
 import Papa from 'papaparse'; 
-import { DATA_IMAGENES } from './data/imagenes'; 
+import { DATA_IMAGENES } from './data/imagenes';
+// 1. IMPORTAMOS EL BUSCADOR INTELIGENTE
+import Fuse from 'fuse.js';
 
 // --- CONFIGURACIÓN GENERAL ---
 const CONFIG = {
   whatsappNumber: "56926411278",
-  emailSoporte: "alfeicon.games@gmail.com", // Correo actualizado
+  emailSoporte: "alfeicon.games@gmail.com",
   sheetGames: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=1961555999&single=true&output=csv",
   sheetPacks: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=858783180&single=true&output=csv"
 };
@@ -198,14 +200,22 @@ export default function MobileAppStore() {
     return packs.slice(0, 6); 
   }, [packs]);
 
+  // 2. LÓGICA DE BÚSQUEDA MEJORADA CON FUSE.JS
   const listaFiltrada = useMemo(() => {
     const itemsAMostrar = storeTab === 'individual' ? productos : packs;
+    
+    // Si no escribieron nada, mostramos todo
     if (filterTerm === "") return itemsAMostrar;
-    return itemsAMostrar.filter((item) => {
-      const matchTitulo = item.titulo?.toLowerCase().includes(filterTerm.toLowerCase());
-      const matchJuegosPack = item.juegosIncluidos?.some((j: string) => j.toLowerCase().includes(filterTerm.toLowerCase()));
-      return matchTitulo || matchJuegosPack;
+
+    // Configuración del buscador inteligente
+    const fuse = new Fuse(itemsAMostrar, {
+      keys: ['titulo', 'juegosIncluidos'], // Busca en el nombre del juego o juegos dentro del pack
+      threshold: 0.35, // Tolerancia a errores (0.0 = exacto, 1.0 = coincide con todo)
+      ignoreLocation: true, // Busca en cualquier parte de la frase
     });
+
+    // Devuelve los resultados encontrados
+    return fuse.search(filterTerm).map(result => result.item);
   }, [storeTab, productos, packs, filterTerm]);
 
   const listaVisual = listaFiltrada.slice(0, visibleCount);
@@ -290,6 +300,49 @@ export default function MobileAppStore() {
                               <span className="text-[10px] text-gray-500">Habla con un experto por WhatsApp</span>
                           </div>
                        </div>
+                    </a>
+                  </div>
+              </div>
+
+              {/* --- CLIENTES FELICES --- */}
+              <div className="mb-4">
+                  <div className="flex items-center justify-between mb-4 px-2">
+                    <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-green-400" /> Clientes Felices
+                    </h3>
+                    <a href="https://instagram.com/alfeicon_games" target="_blank" className="text-[10px] text-blue-400 font-bold hover:text-white transition flex items-center gap-1">
+                      Ver Historias Destacadas <Instagram size={10} />
+                    </a>
+                  </div>
+                  
+                  {/* Carrusel de testimonios */}
+                  <div className="flex overflow-x-auto gap-3 px-2 pb-4 snap-x snap-mandatory scrollbar-hide">
+                    {[1, 2, 3, 4].map((num) => (
+                      <div key={num} className="min-w-[140px] w-[140px] aspect-[9/16] relative rounded-xl overflow-hidden border border-white/10 shrink-0 snap-center bg-[#151515] group">
+                        <Image 
+                          src={`/clientes/${num}.jpg`} 
+                          alt={`Cliente Feliz ${num}`} 
+                          fill 
+                          className="object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500" 
+                        />
+                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-3 pt-10">
+                           <div className="flex gap-0.5 mb-1">
+                              {[1,2,3,4,5].map(star => <Star key={star} size={8} className="text-yellow-400 fill-yellow-400" />)}
+                           </div>
+                           <p className="text-[9px] text-gray-300 font-medium">Compra Verificada</p>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* TARJETA FINAL: VER MÁS EN IG */}
+                    <a href="https://instagram.com/alfeicon_games" target="_blank" className="min-w-[140px] w-[140px] aspect-[9/16] relative rounded-xl overflow-hidden border border-white/10 shrink-0 snap-center bg-[#111] flex flex-col items-center justify-center gap-3 group hover:bg-[#1a1a1a] transition-colors">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <Instagram size={24} className="text-white" />
+                        </div>
+                        <div className="text-center px-2">
+                            <p className="text-white text-xs font-bold mb-1">Ver Más</p>
+                            <p className="text-[9px] text-gray-500 leading-tight">Revisa nuestras Historias Destacadas</p>
+                        </div>
                     </a>
                   </div>
               </div>
