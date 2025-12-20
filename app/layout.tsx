@@ -4,6 +4,7 @@ import "./globals.css";
 // 1. IMPORTAMOS EL COMPONENTE DE VERCEL
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next"; // <--- NUEVO
+import Pixels from "@/components/Pixels";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -34,6 +35,7 @@ export default function RootLayout({
         {children}
         
         {/* 2. AGREGAMOS EL COMPONENTE AQUÍ (INVISIBLE) */}
+        <Pixels />  {/* <-- ESTO ES LO IMPORTANTE */}
         <Analytics />
         <SpeedInsights /> {/* <--- NUEVO AQUÍ */}
       </body>
