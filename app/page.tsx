@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { 
   Home, Gamepad2, BookOpen, ShoppingCart, Search, Instagram, MessageCircle, 
   Mail, Loader2, ArrowDownCircle, Trash2, Zap, Layers, Youtube, FileText, 
-  ShieldCheck, AlertTriangle, Facebook, Star, X, Check 
+  ShieldCheck, AlertTriangle, Facebook, Star, X, Check, Megaphone 
 } from 'lucide-react';
 import GameCard from '@/components/GameCard';
 import Papa from 'papaparse'; 
@@ -14,11 +14,11 @@ import { DATA_IMAGENES } from './data/imagenes';
 import Fuse from 'fuse.js';
 
 // --- 1. OPTIMIZACIÓN: CONFIGURACIÓN Y HELPERS FUERA DEL COMPONENTE ---
-// Al sacarlos de la función principal, no se recrean en cada render.
 
 const CONFIG = {
   whatsappNumber: "56926411278",
   emailSoporte: "alfeicon.games@gmail.com",
+  canalWhatsapp: "https://whatsapp.com/channel/0029VafHhlx0G0XpvqQKyG2D", // Tu link real
   sheetGames: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=1961555999&single=true&output=csv",
   sheetPacks: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=858783180&single=true&output=csv"
 };
@@ -130,7 +130,7 @@ export default function MobileAppStore() {
 
     window.addEventListener('scroll', handleScroll);
     
-    // CARGA DE DATOS (Se mantiene igual, la lógica es sólida)
+    // CARGA DE DATOS
     const cargarDatos = async () => {
         // Cargar Juegos
         Papa.parse(CONFIG.sheetGames, {
@@ -159,7 +159,6 @@ export default function MobileAppStore() {
               };
             }).filter((item: any) => item.titulo);
             setProductos(datosLimpios);
-            // Solo quitamos cargando si ya terminaron los packs también (opcional, o dejarlo separado)
             if(packs.length > 0) setCargando(false); 
           },
           error: (error: any) => { console.error("Error Juegos:", error); }
@@ -203,7 +202,7 @@ export default function MobileAppStore() {
                 };
               }).filter((item: any) => item.precio > 0);
               setPacks(packsLimpios);
-              setCargando(false); // Asumimos que esto termina último o cerca
+              setCargando(false);
             },
             error: (error: any) => console.error("Error Packs:", error)
         });
@@ -222,7 +221,6 @@ export default function MobileAppStore() {
   }, [packs]);
 
   // 4. OPTIMIZACIÓN: FUSE.JS INSTANCIA ÚNICA
-  // Creamos el índice solo cuando cambian los productos/packs, no al escribir.
   const fuseInstance = useMemo(() => {
     const items = storeTab === 'individual' ? productos : packs;
     return new Fuse(items, FUSE_OPTIONS);
@@ -233,15 +231,13 @@ export default function MobileAppStore() {
     
     if (filterTerm === "") return itemsAMostrar;
 
-    // Usamos la instancia ya creada (mucho más rápido)
     return fuseInstance.search(filterTerm).map(result => result.item);
   }, [storeTab, productos, packs, filterTerm, fuseInstance]);
 
   const listaVisual = listaFiltrada.slice(0, visibleCount);
 
-  // --- RENDERIZADO (IGUAL QUE ANTES) ---
+  // --- RENDERIZADO ---
   return (
-    // ... aquí sigue tu código del return tal cual estaba ...
     <div className="min-h-screen bg-black flex justify-center selection:bg-white selection:text-black">
       <div className="w-full max-w-md bg-black min-h-screen relative shadow-2xl border-x border-gray-900 font-sans text-white overflow-hidden">
         
@@ -310,17 +306,32 @@ export default function MobileAppStore() {
                        </div>
                     </div>
 
-                    <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="block w-full bg-[#1F2937] hover:bg-[#374151] border border-white/10 p-4 rounded-xl text-center shadow-lg transition-all active:scale-95 group/btn">
-                       <div className="flex items-center justify-center gap-3">
-                          <div className="bg-[#25D366] p-1.5 rounded-full text-black">
-                             <MessageCircle size={16} fill="currentColor" />
+                    {/* --- BOTÓN CANAL WHATSAPP (TEXTO CORREGIDO PARA EVITAR MALENTENDIDOS) --- */}
+                    <a 
+                      href={CONFIG.canalWhatsapp} 
+                      target="_blank" 
+                      className="block w-full bg-gradient-to-r from-green-600 to-green-800 hover:from-green-500 hover:to-green-700 border border-white/10 p-4 rounded-xl text-center shadow-lg transition-all active:scale-95 group/btn relative overflow-hidden"
+                    >
+                       {/* Decoración de fondo */}
+                       <div className="absolute -right-2 -bottom-4 opacity-20 rotate-12 group-hover:scale-110 transition-transform">
+                          <Megaphone size={50} fill="currentColor" />
+                       </div>
+                       
+                       <div className="flex items-center justify-center gap-3 relative z-10">
+                          <div className="bg-white p-2 rounded-full text-green-700 shadow-sm animate-bounce-slow">
+                             <Megaphone size={18} fill="currentColor" />
                           </div>
                           <div className="flex flex-col items-start">
-                              <span className="text-white font-bold uppercase tracking-wide text-xs group-hover/btn:text-green-400 transition-colors">¿Necesitas Ayuda?</span>
-                              <span className="text-[10px] text-gray-500">Habla con un experto por WhatsApp</span>
+                              <span className="text-white font-black uppercase tracking-wide text-xs text-shadow">
+                                 CANAL DE WHATSAPP
+                              </span>
+                              <span className="text-[10px] text-green-100 font-medium">
+                                 Únete <strong className="text-white underline decoration-white/50">GRATIS</strong> y entérate de nuevos packs
+                              </span>
                           </div>
                        </div>
                     </a>
+
                   </div>
               </div>
 
