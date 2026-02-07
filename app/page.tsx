@@ -5,8 +5,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { 
   Home, Gamepad2, BookOpen, Search, Instagram, MessageCircle, 
-  Mail, Loader2, ArrowDownCircle, Zap, Layers, Youtube, FileText, 
-  ShieldCheck, AlertTriangle, Facebook, X, Megaphone, Filter, Star, Gift 
+  Loader2, ArrowDownCircle, Zap, Layers, Youtube, FileText, 
+  ShieldCheck, AlertTriangle, Facebook, X, Megaphone, Filter, Star, Gift, CheckCircle, ChevronRight
 } from 'lucide-react';
 import GameCard from '@/components/GameCard';
 import Papa from 'papaparse'; 
@@ -19,7 +19,10 @@ const CONFIG = {
   emailSoporte: "alfeicon.games@gmail.com",
   canalWhatsapp: "https://whatsapp.com/channel/0029VafHhlx0G0XpvqQKyG2D", 
   sheetGames: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=1961555999&single=true&output=csv",
-  sheetPacks: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=858783180&single=true&output=csv"
+  sheetPacks: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=858783180&single=true&output=csv",
+  
+  // Días para que un pack se considere NUEVO (y aparezca el aviso)
+  diasParaSerNuevo: 5 
 };
 
 // --- HELPERS ---
@@ -28,10 +31,25 @@ const limpiarTexto = (texto: string) => texto.toLowerCase().replace(/[^a-z0-9]/g
 const buscarImagenLocal = (nombreJuego: string) => {
   if (!nombreJuego || !DATA_IMAGENES) return null;
   const inputLimpio = limpiarTexto(nombreJuego);
+  // @ts-ignore
   const encontrado = DATA_IMAGENES.find((item: any) => 
       limpiarTexto(item.name) === inputLimpio
   );
   return encontrado ? encontrado.url : null;
+};
+
+// --- FUNCIÓN DE FECHA BLINDADA ---
+const parseFechaSegura = (fechaStr: string) => {
+    if (!fechaStr) return null;
+    const fechaLimpia = fechaStr.split(' ')[0].trim();
+    const partes = fechaLimpia.split(/[-/]/); 
+    if (partes.length === 3) {
+        const dia = Number(partes[0]);
+        const mes = Number(partes[1]) - 1; 
+        const anio = Number(partes[2]);
+        return new Date(anio, mes, dia);
+    }
+    return null;
 };
 
 const FUSE_OPTIONS = {
@@ -52,7 +70,6 @@ export default function MobileAppStore() {
   const [searchTerm, setSearchTerm] = useState(""); 
   const [filterTerm, setFilterTerm] = useState(""); 
   
-  // Filtro para mostrar solo ofertas
   const [mostrarSoloOfertas, setMostrarSoloOfertas] = useState(false);
 
   const [productos, setProductos] = useState<any[]>([]);
@@ -62,19 +79,21 @@ export default function MobileAppStore() {
   const [visibleCount, setVisibleCount] = useState(20); 
 
   // --- FUNCIONES (HANDLERS) ---
-  
   const ejecutarBusqueda = useCallback(() => {
     setFilterTerm(searchTerm);
     setVisibleCount(20); 
   }, [searchTerm]);
 
-  // Lógica de Compra Directa por WhatsApp
   const comprarDirecto = useCallback((item: any) => {
     let mensaje = "";
     const precioFmt = item.precio.toLocaleString('es-CL');
 
     if (item.esPack) {
-      mensaje = `Hola Alfeicon Games! 👋\n\nMe interesa este Pack que vi en la web:\n\n🎁 *${item.titulo}*\n💰 Precio: $${precioFmt}\n\n¿Lo tienes disponible ?`;
+      const listaJuegosTexto = item.juegosIncluidos 
+          ? item.juegosIncluidos.map((juego: string) => `🔹 ${juego}`).join('\n')
+          : "Consultar juegos";
+
+      mensaje = `Hola Alfeicon Games! 👋\n\nMe interesa este Pack que vi en la web:\n\n🎁 *${item.titulo}*\n\n📋 *Incluye:*\n${listaJuegosTexto}\n\n💰 Precio: $${precioFmt}\n\n¿Lo tienes disponible ?`;
     } else {
       mensaje = `Hola Alfeicon Games! 🎮\n\nVengo de la web y quiero llevarme este juego:\n\n🔹 *${item.titulo}*\n💰 Precio: $${precioFmt}\n\n¿Que métodos de pago tienes disponible?`;
     }
@@ -120,7 +139,9 @@ export default function MobileAppStore() {
     
     // CARGA DE DATOS
     const cargarDatos = async () => {
-        Papa.parse(CONFIG.sheetGames, {
+        const timeStamp = new Date().getTime(); // Anti-caché
+
+        Papa.parse(CONFIG.sheetGames + "&t=" + timeStamp, {
           download: true,
           header: true,
           skipEmptyLines: true,
@@ -134,7 +155,6 @@ export default function MobileAppStore() {
                  const realKey = Object.keys(item).find(k => k.trim().toLowerCase() === key.toLowerCase());
                  return realKey ? item[realKey] : undefined;
               };
-              
               const titulo = getCol("NOMBRE DE JUEGOS");
               const imagenFinal = getCol("imagen") || buscarImagenLocal(titulo);
               const enOferta = getCol("En Oferta") === "SI";
@@ -157,7 +177,7 @@ export default function MobileAppStore() {
           error: (error: any) => { console.error("Error Juegos:", error); }
         });
 
-        Papa.parse(CONFIG.sheetPacks, {
+        Papa.parse(CONFIG.sheetPacks + "&t=" + timeStamp, {
             download: true,
             header: true,
             skipEmptyLines: true,
@@ -183,16 +203,36 @@ export default function MobileAppStore() {
                         if (posibleImagen) { imagenPack = posibleImagen; break; }
                     }
                 }
+
+                let esNuevo = false;
+                const fechaStr = getCol("fecha");
+                const fechaPack = parseFechaSegura(fechaStr);
+                
+                if (fechaPack) {
+                    const hoy = new Date();
+                    const fechaPackSinHora = new Date(fechaPack.getFullYear(), fechaPack.getMonth(), fechaPack.getDate());
+                    const hoySinHora = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+                    const diffTime = Math.abs(hoySinHora.getTime() - fechaPackSinHora.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    
+                    if (diffDays <= CONFIG.diasParaSerNuevo) {
+                        esNuevo = true;
+                    }
+                }
+
                 return {
                   id: `pack-${index}`,
                   titulo: nombrePack,
                   img: imagenPack, 
                   precio: limpiarPrecio(getCol("Precio CLP")),
                   esPack: true,
-                  ahorro: "PACK 🎁",
-                  juegosIncluidos: listaJuegos 
+                  ahorro: esNuevo ? "¡NUEVO! 🚀" : null,
+                  juegosIncluidos: listaJuegos,
+                  esNuevo: esNuevo
                 };
               }).filter((item: any) => item.precio > 0);
+              
+              packsLimpios.sort((a: any, b: any) => (b.esNuevo === true ? 1 : 0) - (a.esNuevo === true ? 1 : 0));
               setPacks(packsLimpios);
               setCargando(false);
             },
@@ -205,6 +245,10 @@ export default function MobileAppStore() {
 
   // --- MEMOS ---
   const ofertasFlash = useMemo(() => productos.filter(p => p.ahorro).slice(0, 8), [productos]);
+  
+  // Filtramos solo los que son nuevos para contar cuántos hay
+  const nuevosLanzamientos = useMemo(() => packs.filter(p => p.esNuevo), [packs]);
+  
   const packsDestacados = useMemo(() => packs.slice(0, 6), [packs]);
 
   const fuseInstance = useMemo(() => {
@@ -214,15 +258,12 @@ export default function MobileAppStore() {
 
   const listaFiltrada = useMemo(() => {
     let items = storeTab === 'individual' ? productos : packs;
-    
     if (filterTerm !== "") {
         items = fuseInstance.search(filterTerm).map(result => result.item);
     }
-
     if (mostrarSoloOfertas && storeTab === 'individual') {
         items = items.filter(item => item.ahorro); 
     }
-
     return items;
   }, [storeTab, productos, packs, filterTerm, fuseInstance, mostrarSoloOfertas]);
 
@@ -303,8 +344,44 @@ export default function MobileAppStore() {
                   </div>
               </div>
 
-              {/* CLIENTES FELICES (Estilo Premium Restaurado) */}
-              <div className="mb-4">
+              {/* AVISO DE NOVEDADES (BANNER ELEGANTE - NO REPETITIVO) */}
+              {nuevosLanzamientos.length > 0 && (
+                <div className="animate-fade-in mx-1">
+                   <div className="relative w-full bg-gradient-to-r from-[#1a1a2e] to-[#16213e] border border-blue-500/30 rounded-2xl p-4 shadow-xl overflow-hidden group">
+                       {/* Decoración de fondo */}
+                       <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[40px] translate-x-10 -translate-y-10"></div>
+                       
+                       <div className="flex items-center justify-between relative z-10">
+                           <div className="flex items-center gap-3">
+                               <div className="bg-blue-600/20 p-2.5 rounded-full border border-blue-500/30 animate-pulse">
+                                   <Megaphone size={18} className="text-blue-400" />
+                               </div>
+                               <div className="flex flex-col">
+                                   <h3 className="text-sm font-black text-white uppercase italic tracking-wider">
+                                       ¡Nuevos Packs Disponibles!
+                                   </h3>
+                                   <p className="text-[10px] text-gray-400 font-medium">
+                                       Hemos agregado <span className="text-blue-400 font-bold">{nuevosLanzamientos.length} packs</span> al catálogo.
+                                   </p>
+                               </div>
+                           </div>
+                           
+                           <button 
+                               onClick={() => {
+                                   setStoreTab('packs'); 
+                                   setActiveSection('catalogo');
+                               }}
+                               className="bg-white text-blue-900 hover:bg-gray-200 text-[9px] font-black uppercase tracking-widest px-4 py-2.5 rounded-full shadow-lg shadow-blue-900/20 transition-all active:scale-95 flex items-center gap-1"
+                           >
+                               Ver Ahora <ChevronRight size={12} />
+                           </button>
+                       </div>
+                   </div>
+                </div>
+              )}
+
+              {/* CLIENTES FELICES */}
+              <div className="mb-4 mt-6">
                   <div className="flex items-center justify-between mb-4 px-2">
                     <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={16} className="text-green-400" /> Clientes Felices</h3>
                     <a href="https://instagram.com/alfeicon_games" target="_blank" className="text-[10px] text-blue-400 font-bold hover:text-white transition flex items-center gap-1">Ver Historias <Instagram size={10} /></a>
@@ -328,7 +405,7 @@ export default function MobileAppStore() {
                   </div>
               </div>
 
-              {/* OFERTAS FLASH (Header Premium Restaurado) */}
+              {/* OFERTAS FLASH */}
               <div>
                 <div className="flex items-center justify-between mb-4 px-1">
                    <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">🔥 Ofertas Flash</h3>
@@ -347,7 +424,7 @@ export default function MobileAppStore() {
                 </div>
               </div>
 
-              {/* PACKS DESTACADOS (Header Premium Restaurado) */}
+              {/* PACKS DESTACADOS */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-4 px-1">
                    <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2"><Gift size={16} className="text-blue-400" /> Packs Imperdibles</h3>
@@ -369,7 +446,7 @@ export default function MobileAppStore() {
             </div>
           )}
 
-          {/* SECCIÓN 2: CATÁLOGO (Con Filtro) */}
+          {/* SECCIÓN 2: CATÁLOGO */}
           {activeSection === 'catalogo' && (
             <div className="animate-fade-in">
               <div className="flex bg-[#111] p-1 rounded-full mb-8 border border-white/10 sticky top-4 z-30 shadow-2xl">
@@ -425,7 +502,7 @@ export default function MobileAppStore() {
             </div>
           )}
 
-          {/* SECCIÓN 3: INSTRUCCIONES (Estilo Premium Restaurado) */}
+          {/* SECCIÓN 3: INSTRUCCIONES */}
           {activeSection === 'instrucciones' && (
             <div className="animate-fade-in pb-20">
                 <div className="text-center mb-6 pt-4">
@@ -433,7 +510,7 @@ export default function MobileAppStore() {
                     <p className="text-gray-500 text-xs font-medium max-w-[250px] mx-auto">Selecciona tu modelo de consola:</p>
                 </div>
 
-                {/* CAJA DE ADVERTENCIA PREMIUM (Restaurada) */}
+                {/* CAJA DE ADVERTENCIA */}
                 <div className="mx-2 mb-8 bg-[#151515] border border-yellow-500/20 rounded-2xl p-5 shadow-lg relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500/50"></div>
                     <h3 className="text-yellow-500 font-black uppercase tracking-widest text-xs mb-4 flex items-center gap-2"><AlertTriangle size={16} /> Antes de Comprar</h3>
@@ -446,13 +523,12 @@ export default function MobileAppStore() {
                     </ul>
                 </div>
 
-                {/* TABS PREMIUM (Restaurados) */}
+                {/* TABS AYUDA */}
                 <div className="flex p-1 bg-[#1a1a1a] rounded-xl border border-white/10 mb-8 mx-2 relative">
                     <button onClick={() => setHelpTab('switch2')} className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${helpTab === 'switch2' ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-500 hover:text-white'}`}><Zap size={14} className={helpTab === 'switch2' ? 'fill-white' : ''} /> Switch 2</button>
                     <button onClick={() => setHelpTab('switch1')} className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${helpTab === 'switch1' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-white'}`}><Gamepad2 size={14} className={helpTab === 'switch1' ? 'fill-white' : ''} /> Switch 1 / Lite</button>
                 </div>
 
-                {/* CONTENIDO TABS PREMIUM (Restaurado) */}
                 <div className="px-2">
                     {helpTab === 'switch2' && (
                         <div className="animate-fade-in bg-[#111] rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
@@ -472,7 +548,6 @@ export default function MobileAppStore() {
                     )}
                 </div>
 
-                {/* FOOTER SOPORTE PREMIUM (Restaurado) */}
                 <div className="mt-12 border-t border-white/5 pt-6 px-4 text-center">
                     <p className="text-gray-500 text-[10px] mb-3">¿Aún tienes dudas con la instalación?</p>
                     <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="inline-flex items-center gap-2 text-green-400 text-xs font-bold bg-green-900/10 px-4 py-2 rounded-full hover:bg-green-900/20 transition"><MessageCircle size={14} /> Soporte WhatsApp</a>
@@ -480,7 +555,7 @@ export default function MobileAppStore() {
             </div>
           )}
 
-          {/* SECCIÓN 4: PERFIL / CONTACTO (Sin cambios) */}
+          {/* SECCIÓN 4: PERFIL / CONTACTO */}
           {activeSection === 'perfil' && (
             <div className="flex flex-col items-center py-8 animate-fade-in px-6">
                 <div className="relative w-32 h-32 bg-black border border-white/20 rounded-full mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)] overflow-hidden"><Image src="/logo.png" alt="Alfeicon Logo Grande" fill className="object-cover p-2"/></div>
@@ -497,7 +572,7 @@ export default function MobileAppStore() {
           )}
         </main>
 
-        {/* MODAL TÉRMINOS (Sin cambios) */}
+        {/* MODAL TÉRMINOS */}
         {showTerms && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
                 <div className="bg-[#111] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl flex flex-col max-h-[85vh]">
@@ -508,7 +583,7 @@ export default function MobileAppStore() {
             </div>
         )}
 
-        {/* NAVEGACIÓN INFERIOR (Sin cambios) */}
+        {/* NAVEGACIÓN INFERIOR */}
         <nav className="fixed bottom-0 w-full max-w-md bg-black border-t border-white/10 flex justify-around items-center z-50 h-20 pb-2 px-2">
           <NavButton active={activeSection === 'inicio'} onClick={() => setActiveSection('inicio')} icon={<Home size={22} />} label="Inicio" />
           <NavButton active={activeSection === 'catalogo'} onClick={() => setActiveSection('catalogo')} icon={<Gamepad2 size={22} />} label="Tienda" />
@@ -520,7 +595,7 @@ export default function MobileAppStore() {
   );
 }
 
-// COMPONENTE AUXILIAR BOTÓN (Sin cambios)
+// COMPONENTE AUXILIAR BOTÓN
 function NavButton({ active, onClick, icon, label }: any) {
   return (
     <button onClick={onClick} className={`relative flex flex-col items-center justify-center w-full h-full transition-colors duration-300 group ${active ? 'text-white' : 'text-gray-600 hover:text-gray-400'}`}>
