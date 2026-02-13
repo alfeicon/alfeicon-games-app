@@ -186,5 +186,7 @@ export const DATA_IMAGENES = [
   {"name":"Yoshi's Crafted World","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000000707/4cd12c9f2233dc671d0ac2bc208f8551d1d0b62c956d6d477585bb42c1ef09ea"},
   {"name":"Cooking Simulator","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000024855/030c5fbd8b3477625586063260316456d6686e82e13945db82327e97a2ab2c4f"},
   {"name":"Human: Fall Flat","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000001204/7273fb390ae0601a8da2b8d937a660ef1a73c178fa53efd1e6e472cb3b73d88d"},
-  {"name":"HHungry Shark® World","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000010279/68b2f4d7e0b6716ef9c5bc5e1ef3693d4f8ab98646fb576dcc8a2d0f10c99d48"}
+  {"name":"Hungry Shark® World","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000010279/68b2f4d7e0b6716ef9c5bc5e1ef3693d4f8ab98646fb576dcc8a2d0f10c99d48"},
+  {"name":"Modern Combat Blackout","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000011362/1778beee5cbc677cd60ce42abcc3534e768162062d08e762fa603cc9d2424302"},
+  {"name":"DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000035337/0f435287e9645b319b2d27acd5b9454b286c91c6c7efaa010d4ee098a38d5c3d"}
 ];
