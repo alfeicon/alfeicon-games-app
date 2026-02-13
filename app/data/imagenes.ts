@@ -5,6 +5,7 @@ export const DATA_IMAGENES = [
   {"name":"Advance Wars™ 1+2: Re-Boot Camp","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000064132/cf6a52d93890df44059d7ba1376beec19155112c7b9cff000ba10eabea0f6ecd"},
   {"name":"Alien Isolation","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000020818/12e8099c149a839a3a1e9255e65a9857629017fc6cd36e74cfc4a2f4f4c2e5c8"},
   {"name":"Animal Crossing New Horizon","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000027619/9989957eae3a6b545194c42fec2071675c34aadacd65e6b33fdfe7b3b6a86c3a"},
+  {"name":"Animal Crossing™: New Horizons","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000027619/9989957eae3a6b545194c42fec2071675c34aadacd65e6b33fdfe7b3b6a86c3a"},
   {"name":"Animal Crossing: New Horizon","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000027619/9989957eae3a6b545194c42fec2071675c34aadacd65e6b33fdfe7b3b6a86c3a"},
   {"name":"Arms","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000000392/0cfd031ae9dcca48aa6a6da6f0babbdd8c848b58a9c8178849dfee08f3edef33"},
   {"name":"Assassin's Creed The Rebel Collection","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000019188/28bf43d37e315a10c2ef5a518994d0bdc731837155177b6def5cbfbb39bf26ed"},
@@ -183,5 +184,7 @@ export const DATA_IMAGENES = [
   {"name":"Xenoblade Chronicles 2","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000053336/e933b48650b33b355e9cf2583da5c94b77180e40fb02d050041083dd62f4df39"},
   {"name":"Xenoblade Chronicles 3","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000000734/d6d49ad8d59a5bd170c96b40c934fc537c613d10e7a43f42154084b75a18955f"},
   {"name":"Yoshi's Crafted World","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/ncom/software/switch/70010000000707/4cd12c9f2233dc671d0ac2bc208f8551d1d0b62c956d6d477585bb42c1ef09ea"},
-  {"name":"Cooking Simulator","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000024855/030c5fbd8b3477625586063260316456d6686e82e13945db82327e97a2ab2c4f"}
+  {"name":"Cooking Simulator","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000024855/030c5fbd8b3477625586063260316456d6686e82e13945db82327e97a2ab2c4f"},
+  {"name":"Human: Fall Flat","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000001204/7273fb390ae0601a8da2b8d937a660ef1a73c178fa53efd1e6e472cb3b73d88d"},
+  {"name":"HHungry Shark® World","url":"https://assets.nintendo.com/image/upload/ar_16:9,c_lpad,w_1240/b_white/f_auto/q_auto/store/software/switch/70010000010279/68b2f4d7e0b6716ef9c5bc5e1ef3693d4f8ab98646fb576dcc8a2d0f10c99d48"}
 ];
