@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { 
   Home, Gamepad2, BookOpen, Search, Instagram, MessageCircle, 
-  Loader2, ArrowDownCircle, Zap, Layers, Youtube, FileText, 
+  Loader2, ArrowDownCircle, Zap, Youtube, FileText, 
   ShieldCheck, AlertTriangle, Facebook, X, Megaphone, Filter, Star, Gift, CheckCircle, ChevronRight
 } from 'lucide-react';
 import GameCard from '@/components/GameCard';
@@ -14,6 +14,7 @@ import Papa from 'papaparse';
 import { DATA_IMAGENES } from './data/imagenes';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase } from '@/lib/catalog';
+import { ShaderAnimation } from '@/components/ui/shader-animation';
 
 // --- CONFIGURACIÓN ---
 const CONFIG = {
@@ -65,8 +66,9 @@ export default function MobileAppStore() {
   const [activeSection, setActiveSection] = useState<'inicio' | 'catalogo' | 'instrucciones' | 'perfil'>('inicio');
   const [storeTab, setStoreTab] = useState<'individual' | 'packs'>('individual');
   const [helpTab, setHelpTab] = useState<'switch2' | 'switch1'>('switch2');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
-  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [showBottomNav, setShowBottomNav] = useState(true);
   const [showTerms, setShowTerms] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState(""); 
@@ -79,6 +81,16 @@ export default function MobileAppStore() {
   const [cargando, setCargando] = useState(true);
   
   const [visibleCount, setVisibleCount] = useState(20); 
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+    const syncTheme = () => setTheme(mediaQuery.matches ? 'light' : 'dark');
+
+    syncTheme();
+    mediaQuery.addEventListener('change', syncTheme);
+
+    return () => mediaQuery.removeEventListener('change', syncTheme);
+  }, []);
 
   // --- FUNCIONES (HANDLERS) ---
   const ejecutarBusqueda = useCallback(() => {
@@ -119,20 +131,19 @@ export default function MobileAppStore() {
     let lastScrollY = window.scrollY;
     let ticking = false;
 
-    const updateHeader = () => {
+    const updateNavigation = () => {
       const currentScrollY = window.scrollY;
-      if (currentScrollY < lastScrollY || currentScrollY < 50) {
-        setIsHeaderVisible(true);
-      } else if (currentScrollY > lastScrollY && currentScrollY > 50) {
-        setIsHeaderVisible(false);
-      }
+      const isScrollingUp = currentScrollY < lastScrollY;
+      const isNearTop = currentScrollY < 80;
+
+      setShowBottomNav(isScrollingUp || isNearTop);
       lastScrollY = currentScrollY;
       ticking = false;
     };
 
     const handleScroll = () => {
       if (!ticking) {
-        window.requestAnimationFrame(updateHeader);
+        window.requestAnimationFrame(updateNavigation);
         ticking = true;
       }
     };
@@ -279,81 +290,89 @@ export default function MobileAppStore() {
   }, [storeTab, productos, packs, filterTerm, fuseInstance, mostrarSoloOfertas]);
 
   const listaVisual = listaFiltrada.slice(0, visibleCount);
+  const navIndex = {
+    inicio: 0,
+    catalogo: 1,
+    instrucciones: 2,
+    perfil: 3,
+  }[activeSection];
 
   // --- RENDER ---
   return (
-    <div className="min-h-screen bg-black flex justify-center selection:bg-white selection:text-black">
+    <div data-theme={theme} className={`alfeicon-theme ${theme === 'light' ? 'theme-light' : 'theme-dark'} min-h-screen bg-black flex justify-center selection:bg-white selection:text-black`}>
       <div className="w-full max-w-md bg-black min-h-screen relative shadow-2xl border-x border-gray-900 font-sans text-white overflow-hidden">
         
-        {/* HEADER */}
-        <header className={`absolute top-0 w-full z-40 border-b border-white/10 bg-black/80 p-5 pb-3 shadow-[0_18px_44px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-transform duration-500 ease-out ${isHeaderVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-            <div className="flex flex-col items-center justify-center mb-4">
-               <div className="relative w-14 h-14 mb-2">
-                 <Image src="/logo.png" alt="Alfeicon Logo" fill className="object-contain" priority />
-               </div>
-               <h1 className="text-xl font-black tracking-[0.2em] text-white uppercase leading-none">ALFEICON <span className="font-light">GAMES</span></h1>
-            </div>
-            {activeSection === 'catalogo' && (
-              <div className="relative group animate-fade-in flex items-center">
-                <input type="text" placeholder={storeTab === 'individual' ? "Busca tu juego..." : "Busca en packs..."} value={searchTerm} onChange={(e) => { const texto = e.target.value; setSearchTerm(texto); if (texto === "") { setFilterTerm(""); setVisibleCount(20); } }} onKeyDown={(e) => { if (e.key === 'Enter') ejecutarBusqueda(); }} className="premium-control w-full rounded-full py-3 pl-5 pr-14 text-base text-white shadow-inner transition-all placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white/15"/>
-                <button onClick={ejecutarBusqueda} className="absolute right-2 flex items-center justify-center rounded-full bg-white p-2.5 text-black shadow-lg shadow-white/10 transition duration-300 hover:bg-gray-100 active:scale-90"><Search size={18} strokeWidth={3} /></button>
-              </div>
-            )}
-        </header>
-
         {/* MAIN */}
-        <main className="pb-32 pt-52 px-4 min-h-screen">
+        <main className="pb-32 px-4 min-h-screen">
           
 {/* SECCIÓN 1: INICIO */}
           {activeSection === 'inicio' && (
             <div className="animate-fade-in space-y-8">
-              
-              {/* DASHBOARD ESTADO */}
-              <div className="relative w-full bg-[#111] rounded-3xl overflow-hidden border border-white/10 shadow-2xl group">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-                  <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-600/10 rounded-full blur-[60px] translate-y-1/3 -translate-x-1/3 pointer-events-none"></div>
-                  <div className="absolute inset-0 bg-[url('/logo.png')] opacity-5 bg-center bg-no-repeat bg-contain pointer-events-none mix-blend-overlay"></div>
-
-                  <div className="relative z-10 p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <h2 className="text-white font-black uppercase tracking-widest text-xs flex items-center gap-2">
-                        <Zap size={16} className="text-yellow-400 fill-yellow-400" />
-                        Estado de la Tienda
-                      </h2>
-                      <span className="flex h-2 w-2 relative">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                       <div className="bg-white/5 rounded-2xl p-4 border border-white/5 hover:bg-white/10 transition-colors flex flex-col items-start relative overflow-hidden group/card">
-                          <div className="absolute top-0 right-0 p-3 opacity-20 group-hover/card:opacity-40 transition-opacity"><Layers size={40} /></div>
-                          <div className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-1 z-10">Packs Totales</div>
-                          <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-purple-400 to-pink-600 z-10">
-                             {packs.length > 0 ? packs.length : '-'}
-                          </div>
-                       </div>
-                       <div className="bg-white/5 rounded-2xl p-4 border border-white/5 hover:bg-white/10 transition-colors flex flex-col items-start relative overflow-hidden group/card">
-                          <div className="absolute top-0 right-0 p-3 opacity-20 group-hover/card:opacity-40 transition-opacity"><Gamepad2 size={40} /></div>
-                          <div className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-1 z-10">Juegos Unitarios</div>
-                          <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-cyan-400 z-10">
-                             {productos.length > 0 ? productos.length : '-'}
-                          </div>
-                       </div>
-                    </div>
-
-                    <a href={CONFIG.canalWhatsapp} target="_blank" className="block w-full bg-gradient-to-r from-green-600 to-green-800 hover:from-green-500 hover:to-green-700 border border-white/10 p-4 rounded-xl text-center shadow-lg transition-all active:scale-95 group/btn relative overflow-hidden">
-                       <div className="flex items-center justify-center gap-3 relative z-10">
-                          <div className="bg-white p-2 rounded-full text-green-700 shadow-sm animate-bounce-slow"><Megaphone size={18} fill="currentColor" /></div>
-                          <div className="flex flex-col items-start">
-                              <span className="text-white font-black uppercase tracking-wide text-xs text-shadow">CANAL DE WHATSAPP</span>
-                              <span className="text-[10px] text-green-100 font-medium">Únete <strong className="text-white underline decoration-white/50">GRATIS</strong> para ofertas</span>
-                          </div>
-                       </div>
-                    </a>
+              {/* PORTADA DE MARCA */}
+              <section className="animate-soft-in -mx-4 overflow-hidden border-b border-white/10 bg-black px-5 pb-7 pt-7">
+                <div className="relative mx-auto max-w-[360px] rounded-[2rem] border border-white/10 bg-[#111] p-5 shadow-2xl">
+                  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[2rem] opacity-25">
+                    <ShaderAnimation />
                   </div>
-              </div>
+                  <div className="pointer-events-none absolute inset-x-8 top-0 h-32 rounded-full bg-white/10 blur-[70px]" />
+                  <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-gradient-to-b from-black/10 via-black/35 to-black/70" />
+                  <div className="relative z-10">
+                    <div className="mb-6 flex items-center justify-between">
+                      <div className="relative h-14 w-14 rounded-2xl border border-white/10 bg-white/5 shadow-xl">
+                        <Image src="/logo.png" alt="Alfeicon Logo" fill className="object-contain p-2" priority />
+                      </div>
+                      <div className="flex items-center gap-2 rounded-full border border-green-400/20 bg-green-500/10 px-3 py-1.5">
+                        <span className="relative flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-green-300">Online</span>
+                      </div>
+                    </div>
+
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-[0.32em] text-gray-500">Nintendo Switch</p>
+                    <h1 className="text-[34px] font-black uppercase leading-[0.9] tracking-tight text-white">
+                      Alfeicon<br />
+                      <span className="font-light tracking-[0.16em]">Games</span>
+                    </h1>
+                    <p className="mt-4 max-w-[270px] text-sm font-semibold leading-relaxed text-gray-400">
+                      Juegos digitales, packs y ofertas con compra directa por WhatsApp.
+                    </p>
+
+                    <div className="mt-6 grid grid-cols-[1fr_auto] gap-3">
+                      <button
+                        onClick={() => setActiveSection('catalogo')}
+                        className="flex h-12 items-center justify-center gap-2 rounded-full bg-white px-5 text-xs font-black uppercase tracking-widest text-black shadow-lg shadow-white/10 transition active:scale-95"
+                      >
+                        Ver catalogo <ChevronRight size={15} />
+                      </button>
+                      <a
+                        href={CONFIG.canalWhatsapp}
+                        target="_blank"
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg shadow-green-900/30 transition active:scale-95"
+                        aria-label="Canal de WhatsApp"
+                      >
+                        <Megaphone size={19} fill="currentColor" />
+                      </a>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-3 gap-2">
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-2xl font-black text-white">{productos.length || '-'}</p>
+                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Juegos</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-2xl font-black text-white">{packs.length || '-'}</p>
+                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Packs</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-2xl font-black text-white">{ofertasFlash.length || '-'}</p>
+                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Ofertas</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
 
               {/* AVISO DE NOVEDADES (BANNER ELEGANTE) */}
               {nuevosLanzamientos.length > 0 && (
@@ -391,38 +410,23 @@ export default function MobileAppStore() {
               )}
 
               {/* RECUADRO CÓMO COMPRAR */}
-              <div className="mx-1 p-5 bg-[#0a0a0a] border border-white/5 rounded-3xl shadow-xl">
-                  <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-5 flex items-center gap-2">
-                      <CheckCircle size={14} /> ¿Cómo comprar en Alfeicon?
+              <div className="mx-1 rounded-3xl border border-white/10 bg-[#0a0a0a] p-5 shadow-xl">
+                  <h3 className="mb-5 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">
+                      <CheckCircle size={14} /> Compra en 3 pasos
                   </h3>
                   
-                  <div className="grid grid-cols-1 gap-4">
-                      {/* Paso 1 */}
-                      <div className="flex items-center gap-4 group">
-                          <div className="w-10 h-10 shrink-0 bg-blue-600/10 border border-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 font-black group-hover:scale-110 transition-transform">1</div>
-                          <div>
-                              <p className="text-xs font-bold text-white uppercase tracking-wide">Elige tu juego</p>
-                              <p className="text-[10px] text-gray-500">Explora el catálogo y selecciona tus favoritos.</p>
-                          </div>
-                      </div>
-
-                      {/* Paso 2 */}
-                      <div className="flex items-center gap-4 group">
-                          <div className="w-10 h-10 shrink-0 bg-pink-600/10 border border-pink-500/20 rounded-2xl flex items-center justify-center text-pink-400 font-black group-hover:scale-110 transition-transform">2</div>
-                          <div>
-                              <p className="text-xs font-bold text-white uppercase tracking-wide">Pide por WhatsApp</p>
-                              <p className="text-[10px] text-gray-500">Haz clic en comprar para coordinar el pago por chat.</p>
-                          </div>
-                      </div>
-
-                      {/* Paso 3 */}
-                      <div className="flex items-center gap-4 group">
-                          <div className="w-10 h-10 shrink-0 bg-green-600/10 border border-green-500/20 rounded-2xl flex items-center justify-center text-green-400 font-black group-hover:scale-110 transition-transform">3</div>
-                          <div>
-                              <p className="text-xs font-bold text-white uppercase tracking-wide">¡Recibe y Juega!</p>
-                              <p className="text-[10px] text-gray-500">Paga con transferencia y recibe las instrucciones al instante.</p>
-                          </div>
-                      </div>
+                  <div className="grid grid-cols-3 gap-3">
+                      {[
+                        ['1', 'Elige', 'Busca tu juego'],
+                        ['2', 'Pide', 'Compra por chat'],
+                        ['3', 'Juega', 'Recibe datos']
+                      ].map(([step, title, copy]) => (
+                        <div key={step} className="rounded-2xl border border-white/10 bg-white/5 p-3 text-center">
+                          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-sm font-black text-black">{step}</div>
+                          <p className="text-xs font-black uppercase text-white">{title}</p>
+                          <p className="mt-1 text-[9px] font-semibold leading-tight text-gray-500">{copy}</p>
+                        </div>
+                      ))}
                   </div>
               </div>
 
@@ -495,9 +499,21 @@ export default function MobileAppStore() {
           {/* SECCIÓN 2: CATÁLOGO */}
           {activeSection === 'catalogo' && (
             <div className="animate-fade-in">
-              <div className="premium-surface sticky top-4 z-30 mb-8 flex rounded-full p-1">
-                <button onClick={() => {setStoreTab('individual'); setSearchTerm(""); setFilterTerm("");}} className={`flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-all duration-300 ${storeTab === 'individual' ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>Juegos Unitarios</button>
-                <button onClick={() => {setStoreTab('packs'); setSearchTerm(""); setFilterTerm("");}} className={`flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-all duration-300 ${storeTab === 'packs' ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>Pack de Juegos</button>
+              <div className="sticky top-3 z-30 -mx-1 mb-4 space-y-3 rounded-3xl border border-white/10 bg-black/75 p-3 shadow-[0_18px_44px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+                <div className={`relative flex items-center transition-transform duration-300 ${searchTerm || filterTerm ? 'scale-[1.01]' : 'scale-100'}`}>
+                  <input type="text" placeholder={storeTab === 'individual' ? "Busca tu juego..." : "Busca en packs..."} value={searchTerm} onChange={(e) => { const texto = e.target.value; setSearchTerm(texto); if (texto === "") { setFilterTerm(""); setVisibleCount(20); } }} onKeyDown={(e) => { if (e.key === 'Enter') ejecutarBusqueda(); }} className="premium-control w-full rounded-full py-3 pl-5 pr-14 text-base text-white shadow-inner transition-all placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white/15"/>
+                  <button onClick={ejecutarBusqueda} className="absolute right-2 flex items-center justify-center rounded-full bg-white p-2.5 text-black shadow-lg shadow-white/10 transition duration-300 hover:bg-gray-100 active:scale-90"><Search size={18} strokeWidth={3} /></button>
+                </div>
+
+                <div className="premium-surface relative flex overflow-hidden rounded-full p-1">
+                  <span
+                    className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-full bg-white shadow-lg shadow-white/10 transition-transform duration-500 ease-out ${
+                      storeTab === 'packs' ? 'translate-x-[calc(100%+0.5rem)]' : 'translate-x-0'
+                    }`}
+                  />
+                  <button onClick={() => {setStoreTab('individual'); setSearchTerm(""); setFilterTerm("");}} className={`relative z-10 flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-colors duration-300 ${storeTab === 'individual' ? 'text-black' : 'text-gray-500 hover:text-white'}`}>Juegos Unitarios</button>
+                  <button onClick={() => {setStoreTab('packs'); setSearchTerm(""); setFilterTerm("");}} className={`relative z-10 flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-colors duration-300 ${storeTab === 'packs' ? 'text-black' : 'text-gray-500 hover:text-white'}`}>Pack de Juegos</button>
+                </div>
               </div>
               
               {cargando ? (
@@ -519,7 +535,7 @@ export default function MobileAppStore() {
                     )}
                   </div>
                   
-                  <div className="grid grid-cols-1 gap-8 animate-fade-in pb-8 px-2">
+                  <div key={`${storeTab}-${filterTerm}-${mostrarSoloOfertas ? 'ofertas' : 'todos'}`} className="grid grid-cols-1 gap-8 animate-fade-in pb-8 px-2">
                       {listaVisual.length > 0 ? (
                         listaVisual.map((item, index) => (
                           <div key={item.id} className="animate-soft-in w-full max-w-[350px] mx-auto" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
@@ -550,53 +566,109 @@ export default function MobileAppStore() {
 
           {/* SECCIÓN 3: INSTRUCCIONES */}
           {activeSection === 'instrucciones' && (
-            <div className="animate-fade-in pb-20">
-                <div className="text-center mb-6 pt-4">
-                    <h2 className="text-2xl font-black text-white uppercase tracking-[0.2em] mb-2">Centro de Ayuda</h2>
-                    <p className="text-gray-500 text-xs font-medium max-w-[250px] mx-auto">Selecciona tu modelo de consola:</p>
-                </div>
+            <div className="animate-fade-in pb-24 pt-5">
+                <section className="premium-surface animate-soft-in relative mx-1 mb-5 overflow-hidden rounded-[2rem] p-5">
+                    <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-blue-500/10 blur-3xl" />
+                    <div className="pointer-events-none absolute -bottom-12 -left-8 h-32 w-32 rounded-full bg-yellow-500/10 blur-3xl" />
+                    <div className="relative">
+                        <div className="mb-5 flex items-center justify-between">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
+                                <BookOpen size={22} className="text-blue-400" />
+                            </div>
+                            <span className="rounded-full border border-green-400/20 bg-green-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-green-400">Soporte activo</span>
+                        </div>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-400">Centro de ayuda</p>
+                        <h2 className="text-3xl font-black uppercase leading-none tracking-tight text-white">Instala sin dudas</h2>
+                        <p className="mt-3 max-w-[290px] text-xs font-semibold leading-relaxed text-gray-500">
+                            Elige tu consola y revisa las instrucciones antes de descargar. Todo está pensado para que no pierdas garantía por errores simples.
+                        </p>
+                    </div>
+                </section>
 
                 {/* CAJA DE ADVERTENCIA */}
-                <div className="mx-2 mb-8 bg-[#151515] border border-yellow-500/20 rounded-2xl p-5 shadow-lg relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500/50"></div>
-                    <h3 className="text-yellow-500 font-black uppercase tracking-widest text-xs mb-4 flex items-center gap-2"><AlertTriangle size={16} /> Antes de Comprar</h3>
-                    <ul className="space-y-3 text-[11px] text-gray-300 leading-relaxed font-medium">
-                        <li className="flex items-start gap-2"><span className="text-yellow-500">•</span><span>Verifica el <strong className="text-white">espacio disponible</strong> en tu consola/SD.</span></li>
-                        <li className="flex items-start gap-2"><span className="text-yellow-500">•</span><span>Las instrucciones son para <strong className="text-white">cuenta principal</strong>.</span></li>
-                        <li className="flex items-start gap-2"><span className="text-yellow-500">•</span><span>Si compras más de un juego, <strong className="text-white">descárgalos todos</strong> de inmediato.</span></li>
-                        <li className="flex items-start gap-2"><span className="text-red-500 font-bold">!</span><span className="text-red-200">Recuerda: <strong>Archivar = Eliminar</strong>. Esto anula la garantía.</span></li>
-                        <li className="flex items-start gap-2 pt-2 border-t border-white/5"><Zap size={12} className="text-blue-400 shrink-0 mt-0.5" /><span className="text-blue-200">Recomendación Pro: Jugar <strong>sin conexión</strong> disminuye riesgo de caídas.</span></li>
-                    </ul>
+                <div className="premium-surface animate-soft-in mx-1 mb-5 overflow-hidden rounded-[1.75rem] p-4" style={{ animationDelay: '80ms' }}>
+                    <h3 className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-500">
+                        <AlertTriangle size={16} /> Antes de comprar
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2">
+                        {[
+                            ['Espacio', 'Revisa memoria/SD disponible.'],
+                            ['Cuenta principal', 'Instala siguiendo el método indicado.'],
+                            ['Descarga inmediata', 'Si son varios, baja todos al recibirlos.'],
+                            ['No archivar', 'Archivar cuenta como eliminar y anula garantía.'],
+                        ].map(([title, copy], index) => (
+                            <div key={title} className="animate-soft-in rounded-2xl border border-white/10 bg-white/5 p-3 text-left" style={{ animationDelay: `${120 + index * 45}ms` }}>
+                                <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-yellow-500/10 text-[10px] font-black text-yellow-500">{index + 1}</div>
+                                <p className="text-[10px] font-black uppercase tracking-wider text-white">{title}</p>
+                                <p className="mt-1 text-[10px] font-semibold leading-snug text-gray-500">{copy}</p>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-3 flex items-start gap-2 rounded-2xl border border-blue-400/10 bg-blue-500/10 p-3">
+                        <Zap size={14} className="mt-0.5 shrink-0 text-blue-400" />
+                        <p className="text-[10px] font-semibold leading-relaxed text-blue-200">Tip: jugar sin conexión disminuye el riesgo de caídas y evita errores durante el uso.</p>
+                    </div>
                 </div>
 
                 {/* TABS AYUDA */}
-                <div className="flex p-1 bg-[#1a1a1a] rounded-xl border border-white/10 mb-8 mx-2 relative">
-                    <button onClick={() => setHelpTab('switch2')} className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${helpTab === 'switch2' ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-500 hover:text-white'}`}><Zap size={14} className={helpTab === 'switch2' ? 'fill-white' : ''} /> Switch 2</button>
-                    <button onClick={() => setHelpTab('switch1')} className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${helpTab === 'switch1' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-white'}`}><Gamepad2 size={14} className={helpTab === 'switch1' ? 'fill-white' : ''} /> Switch 1 / Lite</button>
+                <div className="premium-surface relative mx-1 mb-5 flex overflow-hidden rounded-full p-1">
+                    <span className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-full bg-white shadow-lg shadow-white/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${helpTab === 'switch1' ? 'translate-x-[calc(100%+0.5rem)]' : 'translate-x-0'}`} />
+                    <button onClick={() => setHelpTab('switch2')} className={`relative z-10 flex-1 rounded-full py-3 text-[10px] font-black uppercase tracking-wider transition-colors duration-300 ${helpTab === 'switch2' ? 'text-black' : 'text-gray-500 hover:text-white'}`}><span className="flex items-center justify-center gap-2"><Zap size={14} /> Switch 2</span></button>
+                    <button onClick={() => setHelpTab('switch1')} className={`relative z-10 flex-1 rounded-full py-3 text-[10px] font-black uppercase tracking-wider transition-colors duration-300 ${helpTab === 'switch1' ? 'text-black' : 'text-gray-500 hover:text-white'}`}><span className="flex items-center justify-center gap-2"><Gamepad2 size={14} /> Switch 1 / Lite</span></button>
                 </div>
 
-                <div className="px-2">
+                <div className="px-1">
                     {helpTab === 'switch2' && (
-                        <div className="animate-fade-in bg-[#111] rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
-                            <div className="relative w-full aspect-video bg-black group"><iframe src="https://www.youtube.com/embed/Tl5A7OeRbh0" title="Tutorial Switch 2" className="absolute top-0 left-0 w-full h-full opacity-90 group-hover:opacity-100 transition-opacity" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>
-                            <div className="p-5"><div className="flex items-start gap-3 mb-4"><div className="bg-red-500/10 p-2 rounded-full min-w-[35px] text-center font-black text-red-500 text-xs">01</div><p className="text-gray-300 text-xs leading-relaxed">Mira el video completo antes de empezar. El proceso en <span className="text-white font-bold">Switch 2</span> requiere pasos específicos.</p></div><div className="flex items-center gap-2 p-3 bg-red-900/10 border border-red-500/10 rounded-xl"><Youtube size={16} className="text-red-500 shrink-0" /><span className="text-[10px] text-red-200 font-medium">Video Oficial Alfeicon Games</span></div></div>
+                        <div key="switch2-help" className="premium-surface animate-soft-in overflow-hidden rounded-[1.75rem]">
+                            <div className="relative aspect-video w-full overflow-hidden rounded-t-[1.75rem] bg-black group">
+                                <iframe src="https://www.youtube.com/embed/Tl5A7OeRbh0" title="Tutorial Switch 2" className="absolute left-0 top-0 h-full w-full opacity-90 transition duration-500 group-hover:scale-[1.02] group-hover:opacity-100" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                            </div>
+                            <div className="space-y-3 p-5">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-xs font-black text-red-500">01</div>
+                                    <div className="text-left">
+                                        <p className="text-xs font-black uppercase tracking-wider text-white">Video obligatorio</p>
+                                        <p className="mt-1 text-xs font-semibold leading-relaxed text-gray-500">Mira el tutorial completo antes de empezar. Switch 2 requiere pasos específicos y conviene seguirlos en orden.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 rounded-2xl border border-red-500/10 bg-red-900/10 p-3">
+                                    <Youtube size={16} className="shrink-0 text-red-500" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-red-200">Tutorial oficial Alfeicon Games</span>
+                                </div>
+                            </div>
                         </div>
                     )}
                     {helpTab === 'switch1' && (
-                        <div className="animate-fade-in bg-gradient-to-b from-[#1a1a1a] to-black rounded-3xl p-6 border border-white/10 text-center relative overflow-hidden">
-                            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50"></div>
-                            <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6 ring-1 ring-blue-500/30"><FileText size={32} className="text-blue-400" /></div>
-                            <h3 className="text-lg font-bold text-white mb-2">Manual PDF</h3>
-                            <p className="text-gray-400 text-xs mb-8 leading-relaxed px-4">Guía ilustrada paso a paso para modelos <br/><span className="text-blue-400 font-bold">Estándar, OLED y Lite</span>.</p>
-                            <a href="/guia.pdf" target="_blank" className="block w-full bg-white text-black font-black py-4 rounded-xl uppercase tracking-widest text-xs hover:bg-gray-200 transition-all active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.1)] mb-4">Descargar Guía</a>
-                            <p className="text-[9px] text-gray-600">Formato PDF • 2.5 MB</p>
+                        <div key="switch1-help" className="premium-surface animate-soft-in relative overflow-hidden rounded-[1.75rem] p-6 text-center">
+                            <div className="pointer-events-none absolute inset-x-8 top-0 h-28 rounded-full bg-blue-500/10 blur-3xl" />
+                            <div className="relative">
+                                <div className="animate-gentle-float mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[1.75rem] border border-blue-400/20 bg-blue-500/10">
+                                    <FileText size={32} className="text-blue-400" />
+                                </div>
+                                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-blue-400">Guía ilustrada</p>
+                                <h3 className="text-xl font-black text-white">Manual PDF</h3>
+                                <p className="mx-auto mt-3 max-w-[260px] text-xs font-semibold leading-relaxed text-gray-500">
+                                    Paso a paso para modelos estándar, OLED y Lite. Ideal para tenerlo abierto mientras instalas.
+                                </p>
+                                <a href="/guia.pdf" target="_blank" className="mt-7 flex w-full items-center justify-center gap-2 rounded-full bg-white py-4 text-xs font-black uppercase tracking-widest text-black shadow-lg shadow-white/10 transition active:scale-95">
+                                    <FileText size={15} /> Descargar guía
+                                </a>
+                                <p className="mt-4 text-[9px] font-bold uppercase tracking-widest text-gray-600">Formato PDF • 2.5 MB</p>
+                            </div>
                         </div>
                     )}
                 </div>
 
-                <div className="mt-12 border-t border-white/5 pt-6 px-4 text-center">
-                    <p className="text-gray-500 text-[10px] mb-3">¿Aún tienes dudas con la instalación?</p>
-                    <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="inline-flex items-center gap-2 text-green-400 text-xs font-bold bg-green-900/10 px-4 py-2 rounded-full hover:bg-green-900/20 transition"><MessageCircle size={14} /> Soporte WhatsApp</a>
+                <div className="premium-surface mx-1 mt-5 rounded-[1.75rem] p-4 text-left">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">¿Aún tienes dudas?</p>
+                            <p className="mt-1 text-sm font-black text-white">Te ayudamos por WhatsApp</p>
+                        </div>
+                        <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-500 text-white shadow-lg shadow-green-900/30 transition active:scale-95" aria-label="Soporte WhatsApp">
+                            <MessageCircle size={20} />
+                        </a>
+                    </div>
                 </div>
             </div>
           )}
@@ -604,11 +676,11 @@ export default function MobileAppStore() {
 {/* SECCIÓN 4: AYUDA Y CONFIANZA */}
           {activeSection === 'perfil' && (
             <div className="flex flex-col items-center py-10 animate-fade-in px-6 pb-24 text-center">
-                <div className="relative w-28 h-28 bg-black border border-white/20 rounded-full mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)] overflow-hidden">
-                    <Image src="/logo.png" alt="Alfeicon Logo Grande" fill className="object-cover p-2"/>
+                <div className="mb-8 w-full text-left">
+                    <p className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-400">Ayuda</p>
+                    <h2 className="mt-2 text-2xl font-black uppercase tracking-widest text-white">Soporte y Confianza</h2>
+                    <p className="mt-2 text-xs font-medium leading-relaxed text-gray-500">Canales oficiales, preguntas frecuentes y condiciones importantes antes de comprar.</p>
                 </div>
-                
-                <h2 className="text-2xl font-black text-white uppercase tracking-[0.2em] mb-4">ALFEICON</h2>
                 
                 {/* MENSAJE PERSONAL BASTIAN - TEXTO MÁS GRANDE */}
                 <div className="bg-[#111] border border-white/5 p-6 rounded-3xl mb-10 shadow-inner">
@@ -786,7 +858,14 @@ export default function MobileAppStore() {
 )}
 
         {/* NAVEGACIÓN INFERIOR */}
-        <nav className="fixed bottom-0 w-full max-w-md bg-black border-t border-white/10 flex justify-around items-center z-50 h-20 pb-2 px-2">
+        <nav className={`fixed bottom-5 left-1/2 z-50 flex h-16 w-[min(360px,calc(100%-2rem))] -translate-x-1/2 items-center justify-around overflow-hidden rounded-full border border-white/10 bg-white/10 px-2 shadow-[0_18px_44px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-transform duration-500 ease-out ${showBottomNav ? 'translate-y-0' : 'translate-y-28'}`}>
+          <span
+            className="pointer-events-none absolute left-2 top-2 h-12 rounded-full bg-white shadow-lg shadow-white/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            style={{
+              width: 'calc((100% - 1rem) / 4)',
+              transform: `translateX(${navIndex * 100}%)`,
+            }}
+          />
           <NavButton active={activeSection === 'inicio'} onClick={() => setActiveSection('inicio')} icon={<Home size={22} />} label="Inicio" />
           <NavButton active={activeSection === 'catalogo'} onClick={() => setActiveSection('catalogo')} icon={<Gamepad2 size={22} />} label="Tienda" />
           <NavButton active={activeSection === 'instrucciones'} onClick={() => setActiveSection('instrucciones')} icon={<BookOpen size={22} />} label="Guía" />
@@ -800,9 +879,22 @@ export default function MobileAppStore() {
 // COMPONENTE AUXILIAR BOTÓN
 function NavButton({ active, onClick, icon, label }: any) {
   return (
-    <button onClick={onClick} className={`relative flex flex-col items-center justify-center w-full h-full transition-colors duration-300 group ${active ? 'text-white' : 'text-gray-600 hover:text-gray-400'}`}>
-      <div className={`relative transition-all duration-300 ${active ? 'scale-110 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'scale-100'}`}>{icon}</div>
-      <span className={`text-[9px] font-bold mt-1.5 uppercase tracking-wider transition-opacity duration-300 ${active ? 'opacity-100' : 'opacity-0'}`}>{label}</span>
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="group relative flex h-full flex-1 items-center justify-center"
+    >
+      <span className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full transition-all duration-300 ${
+        active
+          ? 'text-black scale-105'
+          : 'text-gray-600 hover:text-white'
+      }`}>
+        <span className={`transition-transform duration-300 ${active ? 'scale-105' : 'scale-95 group-hover:scale-100'}`}>
+          {icon}
+        </span>
+      </span>
+      <span className="sr-only">{label}</span>
     </button>
   );
 }

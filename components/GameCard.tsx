@@ -38,10 +38,10 @@ export default function GameCard({
   const esNuevo = ahorro && ahorro.includes('NUEVO');
 
   return (
-    <div className="animate-soft-in group relative mx-auto flex h-full w-full max-w-[350px] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#111113] shadow-[0_18px_42px_rgba(0,0,0,0.34)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-[#151517] hover:shadow-[0_24px_56px_rgba(0,0,0,0.46)]">
+    <div className="animate-soft-in group relative mx-auto flex h-full w-full max-w-[350px] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#151311] shadow-[0_18px_42px_rgba(0,0,0,0.34)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-[#1d1915] hover:shadow-[0_24px_56px_rgba(0,0,0,0.46)]">
       
       {/* 1. SECCIÓN DE IMAGEN */}
-      <div className="relative h-[244px] w-full shrink-0 overflow-hidden border-b border-white/5 bg-[#151923]">
+      <div className="relative h-[244px] w-full shrink-0 overflow-hidden border-b border-white/5 bg-[#181613]">
         {img ? (
           <Image 
             src={img} 
