@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Alfeicon Games App
 
-## Getting Started
+Tienda web mobile-first para Alfeicon Games, hecha con Next.js, Supabase y Vercel. El catalogo publico muestra juegos unitarios y packs, y el panel privado `/admin` permite administrar juegos desde la web.
 
-First, run the development server:
+## Stack
+
+- Next.js 16
+- React 19
+- Tailwind CSS 4
+- Supabase Auth + Database
+- Vercel Analytics + Speed Insights
+- Fuse.js para busqueda
+
+## Configuracion Local
+
+Instala dependencias:
+
+```bash
+npm install
+```
+
+Crea `.env.local` usando `.env.example` como base:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://fhsfloqxjvcrvrsswmmc.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_publishable_key
+```
+
+No uses la secret key de Supabase en el frontend.
+
+Ejecuta el servidor:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Tienda: http://localhost:3000
+- Admin: http://localhost:3000/admin
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Supabase
 
-## Learn More
+El esquema principal esta en:
 
-To learn more about Next.js, take a look at the following resources:
+```txt
+supabase/schema.sql
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Para cargar datos desde el Google Sheet actual:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run supabase:seed
+```
 
-## Deploy on Vercel
+Ese comando genera:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```txt
+supabase/seed-from-sheets.sql
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Ejecuta primero `supabase/schema.sql` en Supabase SQL Editor y luego `supabase/seed-from-sheets.sql`.
+
+Si el catalogo queda duplicado, ejecuta:
+
+```txt
+supabase/reset-catalog.sql
+```
+
+Luego vuelve a ejecutar el seed actualizado.
+
+## Admin
+
+El admin usa Supabase Auth. Para dar acceso:
+
+1. Crea el usuario en Supabase Authentication.
+2. Copia el `user_id`.
+3. Ejecuta:
+
+```sql
+insert into public.admin_users (user_id, email)
+values (
+  'USER_ID_AQUI',
+  'correo@ejemplo.com'
+)
+on conflict (user_id) do update
+set email = excluded.email;
+```
+
+Desde `/admin` se pueden crear y editar juegos, cambiar precio, imagen, estado activo/oferta y ver una vista previa de la card.
+
+## Deploy en Vercel
+
+Antes de desplegar, configura estas variables en Vercel:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://fhsfloqxjvcrvrsswmmc.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_publishable_key
+```
+
+Ruta:
+
+```txt
+Project Settings -> Environment Variables
+```
+
+Marca Production, Preview y Development si Vercel lo solicita. Luego haz redeploy.
+
+## Comandos
+
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run supabase:seed
+```
+
+## Notas de Seguridad
+
+- `.env.local` no se sube a GitHub.
+- La publishable/anon key puede usarse en navegador con RLS activo.
+- Nunca publiques la secret key o service role key.
+- Las escrituras del admin estan protegidas con RLS y la tabla `admin_users`.
