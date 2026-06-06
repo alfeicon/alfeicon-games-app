@@ -1,0 +1,339 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { Eye, EyeOff, Loader2, LogOut, Plus, Save, ShieldCheck, Tag } from "lucide-react";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
+import GameCard from "@/components/GameCard";
+
+type AdminGame = {
+  id: string;
+  title: string;
+  price: number;
+  image_url: string | null;
+  storage_required: string | null;
+  is_offer: boolean;
+  offer_price: number | null;
+  is_active: boolean;
+};
+
+type GameForm = {
+  title: string;
+  price: string;
+  image_url: string;
+  storage_required: string;
+  is_offer: boolean;
+  offer_price: string;
+  is_active: boolean;
+};
+
+const emptyForm: GameForm = {
+  title: "",
+  price: "",
+  image_url: "",
+  storage_required: "",
+  is_offer: false,
+  offer_price: "",
+  is_active: true,
+};
+
+const toPrice = (value: string) => Number(value.replace(/[^0-9]/g, "")) || 0;
+
+const toForm = (game: AdminGame): GameForm => ({
+  title: game.title,
+  price: String(game.price),
+  image_url: game.image_url || "",
+  storage_required: game.storage_required || "",
+  is_offer: game.is_offer,
+  offer_price: game.offer_price ? String(game.offer_price) : "",
+  is_active: game.is_active,
+});
+
+export default function AdminPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [sessionReady, setSessionReady] = useState(!isSupabaseConfigured);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [games, setGames] = useState<AdminGame[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [form, setForm] = useState<GameForm>(emptyForm);
+  const [query, setQuery] = useState("");
+
+  const selectedGame = useMemo(
+    () => games.find((game) => game.id === selectedId) || null,
+    [games, selectedId],
+  );
+
+  const filteredGames = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return games;
+    return games.filter((game) => game.title.toLowerCase().includes(term));
+  }, [games, query]);
+
+  const previewPrice = toPrice(form.price);
+  const previewOfferPrice = form.is_offer ? toPrice(form.offer_price) : 0;
+  const previewFinalPrice = form.is_offer && previewOfferPrice > 0 ? previewOfferPrice : previewPrice;
+  const previewOriginalPrice = form.is_offer && previewOfferPrice > 0 ? previewPrice : null;
+
+  const loadGames = async () => {
+    if (!supabase) return;
+
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("games")
+      .select("id,title,price,image_url,storage_required,is_offer,offer_price,is_active")
+      .order("title", { ascending: true });
+
+    setLoading(false);
+
+    if (error) {
+      setMessage("No se pudo cargar el catalogo. Revisa permisos de admin en Supabase.");
+      return;
+    }
+
+    setGames((data || []) as AdminGame[]);
+  };
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data }) => {
+      const hasSession = Boolean(data.session);
+      setIsLoggedIn(hasSession);
+      setSessionReady(true);
+      if (hasSession) loadGames();
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const hasSession = Boolean(session);
+      setIsLoggedIn(hasSession);
+      if (hasSession) loadGames();
+      if (!hasSession) setGames([]);
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const signIn = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!supabase) return;
+
+    setLoading(true);
+    setMessage("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+
+    if (error) {
+      setMessage("Login invalido o usuario sin acceso.");
+      return;
+    }
+  };
+
+  const signOut = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setSelectedId(null);
+    setForm(emptyForm);
+  };
+
+  const startNew = () => {
+    setSelectedId(null);
+    setForm(emptyForm);
+    setMessage("");
+  };
+
+  const selectGame = (game: AdminGame) => {
+    setSelectedId(game.id);
+    setForm(toForm(game));
+    setMessage("");
+  };
+
+  const saveGame = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!supabase) return;
+
+    const payload = {
+      title: form.title.trim(),
+      price: toPrice(form.price),
+      image_url: form.image_url.trim() || null,
+      storage_required: form.storage_required.trim() || null,
+      is_offer: form.is_offer,
+      offer_price: form.is_offer ? toPrice(form.offer_price) : null,
+      is_active: form.is_active,
+    };
+
+    if (!payload.title || payload.price <= 0) {
+      setMessage("Falta nombre o precio.");
+      return;
+    }
+
+    setLoading(true);
+    const request = selectedId
+      ? supabase.from("games").update(payload).eq("id", selectedId)
+      : supabase.from("games").insert(payload);
+    const { error } = await request;
+    setLoading(false);
+
+    if (error) {
+      setMessage("No se pudo guardar. Revisa permisos o datos.");
+      return;
+    }
+
+    setMessage(selectedId ? "Juego actualizado." : "Juego agregado.");
+    startNew();
+    await loadGames();
+  };
+
+  if (!isSupabaseConfigured) {
+    return (
+      <main className="min-h-screen bg-black text-white px-5 py-8">
+        <div className="mx-auto max-w-md rounded-xl border border-white/10 bg-[#111] p-5">
+          <h1 className="mb-2 text-xl font-black uppercase tracking-widest">Admin</h1>
+          <p className="text-sm text-gray-400">Faltan las variables de Supabase en `.env.local`.</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!sessionReady) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-black text-blue-400">
+        <Loader2 className="animate-spin" />
+      </main>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <main className="min-h-screen bg-black px-5 py-10 text-white">
+        <form onSubmit={signIn} className="mx-auto max-w-sm rounded-xl border border-white/10 bg-[#111] p-5">
+          <div className="mb-6 flex items-center gap-3">
+            <ShieldCheck className="text-blue-400" size={24} />
+            <h1 className="text-xl font-black uppercase tracking-widest">Admin</h1>
+          </div>
+          <label className="mb-3 block">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Email</span>
+            <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-white/10 bg-black px-3 py-3 text-white outline-none focus:border-blue-500" type="email" />
+          </label>
+          <label className="mb-5 block">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Clave</span>
+            <input value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-white/10 bg-black px-3 py-3 text-white outline-none focus:border-blue-500" type="password" />
+          </label>
+          {message && <p className="mb-4 text-sm text-red-300">{message}</p>}
+          <button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-black uppercase tracking-widest text-black disabled:opacity-60">
+            {loading && <Loader2 size={16} className="animate-spin" />}
+            Entrar
+          </button>
+        </form>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-black px-4 py-5 text-white">
+      <div className="mx-auto grid max-w-7xl gap-5 xl:grid-cols-[320px_minmax(0,1fr)_380px] lg:grid-cols-[300px_minmax(0,1fr)]">
+        <section className="rounded-xl border border-white/10 bg-[#111] p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <h1 className="text-lg font-black uppercase tracking-widest">Juegos</h1>
+            <button onClick={signOut} className="rounded-lg border border-white/10 p-2 text-gray-400 hover:text-white" aria-label="Salir">
+              <LogOut size={18} />
+            </button>
+          </div>
+          <div className="mb-3 flex gap-2">
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black px-3 py-2 text-sm outline-none focus:border-blue-500" />
+            <button onClick={startNew} className="rounded-lg bg-blue-600 p-2 text-white" aria-label="Nuevo juego">
+              <Plus size={18} />
+            </button>
+          </div>
+          <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
+            {filteredGames.map((game) => (
+              <button key={game.id} onClick={() => selectGame(game)} className={`flex w-full items-center gap-3 rounded-lg border p-2 text-left transition ${selectedId === game.id ? "border-blue-500 bg-blue-500/10" : "border-white/5 bg-black/30"}`}>
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-black">
+                  {game.image_url ? <Image src={game.image_url} alt={game.title} fill className="object-cover" /> : <Tag className="m-3 text-gray-600" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">{game.title}</p>
+                  <p className="text-xs text-gray-500">${game.price.toLocaleString("es-CL")} CLP</p>
+                </div>
+                {game.is_active ? <Eye size={15} className="text-green-400" /> : <EyeOff size={15} className="text-gray-500" />}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <form onSubmit={saveGame} className="rounded-xl border border-white/10 bg-[#111] p-4">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-black uppercase tracking-widest">{selectedGame ? "Editar" : "Nuevo"}</h2>
+            <button disabled={loading} className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-black disabled:opacity-60">
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Guardar
+            </button>
+          </div>
+
+          {message && <p className="mb-4 rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-gray-300">{message}</p>}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="md:col-span-2">
+              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Nombre</span>
+              <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className="w-full rounded-lg border border-white/10 bg-black px-3 py-3 outline-none focus:border-blue-500" />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Precio</span>
+              <input value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} inputMode="numeric" className="w-full rounded-lg border border-white/10 bg-black px-3 py-3 outline-none focus:border-blue-500" />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Espacio</span>
+              <input value={form.storage_required} onChange={(event) => setForm({ ...form, storage_required: event.target.value })} className="w-full rounded-lg border border-white/10 bg-black px-3 py-3 outline-none focus:border-blue-500" />
+            </label>
+            <label className="md:col-span-2">
+              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Imagen URL</span>
+              <input value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} className="w-full rounded-lg border border-white/10 bg-black px-3 py-3 outline-none focus:border-blue-500" />
+            </label>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <label className="flex items-center justify-between rounded-lg border border-white/10 bg-black p-3">
+              <span className="text-sm font-bold">Activo</span>
+              <input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
+            </label>
+            <label className="flex items-center justify-between rounded-lg border border-white/10 bg-black p-3">
+              <span className="text-sm font-bold">Oferta</span>
+              <input type="checkbox" checked={form.is_offer} onChange={(event) => setForm({ ...form, is_offer: event.target.checked })} />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Precio Oferta</span>
+              <input value={form.offer_price} onChange={(event) => setForm({ ...form, offer_price: event.target.value })} inputMode="numeric" disabled={!form.is_offer} className="w-full rounded-lg border border-white/10 bg-black px-3 py-3 outline-none focus:border-blue-500 disabled:opacity-40" />
+            </label>
+          </div>
+        </form>
+
+        <aside className="rounded-xl border border-white/10 bg-[#111] p-4 xl:sticky xl:top-5 xl:h-fit lg:col-span-2 xl:col-span-1">
+          <div className="mb-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400">Vista previa</p>
+            <h2 className="text-lg font-black uppercase tracking-widest text-white">Tienda</h2>
+          </div>
+
+          <div className="mx-auto max-w-[350px]">
+            <GameCard
+              titulo={form.title.trim() || "Nombre del juego"}
+              precio={previewFinalPrice}
+              precioOriginal={previewOriginalPrice}
+              img={form.image_url.trim() || null}
+              ahorro={form.is_offer && previewOfferPrice > 0 ? "OFERTA 🔥" : null}
+              esPack={false}
+              onAdd={() => setMessage("Vista previa: el boton comprar se prueba en la tienda publica.")}
+            />
+          </div>
+
+          {!form.is_active && (
+            <p className="mt-4 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-200">
+              Este juego esta inactivo, por eso no aparecera en la tienda publica.
+            </p>
+          )}
+        </aside>
+      </div>
+    </main>
+  );
+}

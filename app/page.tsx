@@ -1,5 +1,6 @@
 // app/page.tsx
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment, react-hooks/set-state-in-effect, react/no-unescaped-entities */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
@@ -12,6 +13,7 @@ import GameCard from '@/components/GameCard';
 import Papa from 'papaparse'; 
 import { DATA_IMAGENES } from './data/imagenes';
 import Fuse from 'fuse.js';
+import { fetchCatalogFromSupabase } from '@/lib/catalog';
 
 // --- CONFIGURACIÓN ---
 const CONFIG = {
@@ -139,6 +141,15 @@ export default function MobileAppStore() {
     
     // CARGA DE DATOS
     const cargarDatos = async () => {
+        const supabaseCatalog = await fetchCatalogFromSupabase();
+
+        if (supabaseCatalog) {
+          setProductos(supabaseCatalog.productos);
+          setPacks(supabaseCatalog.packs);
+          setCargando(false);
+          return;
+        }
+
         const timeStamp = new Date().getTime(); // Anti-caché
 
         Papa.parse(CONFIG.sheetGames + "&t=" + timeStamp, {
@@ -275,7 +286,7 @@ export default function MobileAppStore() {
       <div className="w-full max-w-md bg-black min-h-screen relative shadow-2xl border-x border-gray-900 font-sans text-white overflow-hidden">
         
         {/* HEADER */}
-        <header className={`absolute top-0 w-full z-40 bg-black/90 backdrop-blur-xl p-5 pb-3 border-b border-white/5 transition-transform duration-300 ease-in-out ${isHeaderVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+        <header className={`absolute top-0 w-full z-40 border-b border-white/10 bg-black/80 p-5 pb-3 shadow-[0_18px_44px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-transform duration-500 ease-out ${isHeaderVisible ? 'translate-y-0' : '-translate-y-full'}`}>
             <div className="flex flex-col items-center justify-center mb-4">
                <div className="relative w-14 h-14 mb-2">
                  <Image src="/logo.png" alt="Alfeicon Logo" fill className="object-contain" priority />
@@ -284,8 +295,8 @@ export default function MobileAppStore() {
             </div>
             {activeSection === 'catalogo' && (
               <div className="relative group animate-fade-in flex items-center">
-                <input type="text" placeholder={storeTab === 'individual' ? "Busca tu juego..." : "Busca en packs..."} value={searchTerm} onChange={(e) => { const texto = e.target.value; setSearchTerm(texto); if (texto === "") { setFilterTerm(""); setVisibleCount(20); } }} onKeyDown={(e) => { if (e.key === 'Enter') ejecutarBusqueda(); }} className="w-full bg-[#111] text-white rounded-full py-3 pl-5 pr-14 focus:outline-none focus:ring-1 focus:ring-blue-500 text-base placeholder-gray-500 border border-white/10 transition-all shadow-inner"/>
-                <button onClick={ejecutarBusqueda} className="absolute right-2 bg-blue-600 hover:bg-blue-500 p-2.5 rounded-full text-white shadow-lg shadow-blue-900/50 transition-transform active:scale-90 flex items-center justify-center"><Search size={18} strokeWidth={3} /></button>
+                <input type="text" placeholder={storeTab === 'individual' ? "Busca tu juego..." : "Busca en packs..."} value={searchTerm} onChange={(e) => { const texto = e.target.value; setSearchTerm(texto); if (texto === "") { setFilterTerm(""); setVisibleCount(20); } }} onKeyDown={(e) => { if (e.key === 'Enter') ejecutarBusqueda(); }} className="premium-control w-full rounded-full py-3 pl-5 pr-14 text-base text-white shadow-inner transition-all placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white/15"/>
+                <button onClick={ejecutarBusqueda} className="absolute right-2 flex items-center justify-center rounded-full bg-white p-2.5 text-black shadow-lg shadow-white/10 transition duration-300 hover:bg-gray-100 active:scale-90"><Search size={18} strokeWidth={3} /></button>
               </div>
             )}
         </header>
@@ -450,7 +461,7 @@ export default function MobileAppStore() {
                    {cargando ? ([1,2,3].map(i => <div key={i} className="min-w-[280px] h-[350px] bg-[#111] rounded-xl animate-pulse border border-white/5 shrink-0" />)) : (
                       ofertasFlash.map((item) => (
                         <div key={item.id} className="min-w-[280px] snap-center shrink-0">
-                             <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} 
+                             <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack}
                                 onAdd={() => comprarDirecto(item)} 
                              />
                         </div>
@@ -484,9 +495,9 @@ export default function MobileAppStore() {
           {/* SECCIÓN 2: CATÁLOGO */}
           {activeSection === 'catalogo' && (
             <div className="animate-fade-in">
-              <div className="flex bg-[#111] p-1 rounded-full mb-8 border border-white/10 sticky top-4 z-30 shadow-2xl">
-                <button onClick={() => {setStoreTab('individual'); setSearchTerm(""); setFilterTerm("");}} className={`flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${storeTab === 'individual' ? 'bg-white text-black shadow-lg' : 'text-gray-500 hover:text-white'}`}>Juegos Unitarios</button>
-                <button onClick={() => {setStoreTab('packs'); setSearchTerm(""); setFilterTerm("");}} className={`flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${storeTab === 'packs' ? 'bg-white text-black shadow-lg' : 'text-gray-500 hover:text-white'}`}>Pack de Juegos</button>
+              <div className="premium-surface sticky top-4 z-30 mb-8 flex rounded-full p-1">
+                <button onClick={() => {setStoreTab('individual'); setSearchTerm(""); setFilterTerm("");}} className={`flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-all duration-300 ${storeTab === 'individual' ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>Juegos Unitarios</button>
+                <button onClick={() => {setStoreTab('packs'); setSearchTerm(""); setFilterTerm("");}} className={`flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-all duration-300 ${storeTab === 'packs' ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>Pack de Juegos</button>
               </div>
               
               {cargando ? (
@@ -502,7 +513,7 @@ export default function MobileAppStore() {
                       <span className="text-white ml-2 text-sm">({listaFiltrada.length})</span>
                     </p>
                     {storeTab === 'individual' && (
-                        <button onClick={() => setMostrarSoloOfertas(!mostrarSoloOfertas)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide border transition-all ${mostrarSoloOfertas ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/40" : "bg-[#111] border-white/20 text-gray-400 hover:text-white"}`}>
+                        <button onClick={() => setMostrarSoloOfertas(!mostrarSoloOfertas)} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase transition-all duration-300 ${mostrarSoloOfertas ? "border-red-400/60 bg-red-500 text-white shadow-lg shadow-red-900/30" : "premium-control text-gray-400 hover:text-white"}`}>
                             <Filter size={12} />{mostrarSoloOfertas ? "Ver Todo" : "Ver Ofertas"}
                         </button>
                     )}
@@ -510,8 +521,8 @@ export default function MobileAppStore() {
                   
                   <div className="grid grid-cols-1 gap-8 animate-fade-in pb-8 px-2">
                       {listaVisual.length > 0 ? (
-                        listaVisual.map((item) => (
-                          <div key={item.id} className="w-full max-w-[350px] mx-auto">
+                        listaVisual.map((item, index) => (
+                          <div key={item.id} className="animate-soft-in w-full max-w-[350px] mx-auto" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
                              <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos}
                                 onAdd={() => comprarDirecto(item)}
                              />
@@ -527,7 +538,7 @@ export default function MobileAppStore() {
                   </div>
                   {visibleCount < listaFiltrada.length && (
                     <div className="flex justify-center mt-8 pb-4">
-                      <button onClick={() => setVisibleCount(prev => prev + 20)} className="flex items-center gap-2 bg-[#111] border border-white/20 px-6 py-3 rounded-full text-xs font-bold uppercase tracking-widest text-white hover:bg-white hover:text-black transition-all">
+                      <button onClick={() => setVisibleCount(prev => prev + 20)} className="premium-surface flex items-center gap-2 rounded-full px-6 py-3 text-xs font-black uppercase text-white transition-all duration-300 hover:bg-white hover:text-black">
                         <ArrowDownCircle size={16} /> Ver más
                       </button>
                     </div>

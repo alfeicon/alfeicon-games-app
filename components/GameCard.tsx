@@ -38,16 +38,16 @@ export default function GameCard({
   const esNuevo = ahorro && ahorro.includes('NUEVO');
 
   return (
-    <div className="group relative w-full max-w-[350px] mx-auto bg-[#111] border border-white/10 rounded-xl overflow-hidden hover:border-white/30 transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] flex flex-col h-full">
+    <div className="animate-soft-in group relative mx-auto flex h-full w-full max-w-[350px] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#111113] shadow-[0_18px_42px_rgba(0,0,0,0.34)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-[#151517] hover:shadow-[0_24px_56px_rgba(0,0,0,0.46)]">
       
       {/* 1. SECCIÓN DE IMAGEN */}
-      <div className="relative h-[250px] w-full bg-gray-900 overflow-hidden border-b border-white/5 shrink-0">
+      <div className="relative h-[244px] w-full shrink-0 overflow-hidden border-b border-white/5 bg-[#151923]">
         {img ? (
           <Image 
             src={img} 
             alt={titulo} 
             fill 
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            className="object-cover transition duration-700 ease-out group-hover:scale-[1.035] group-hover:brightness-110"
             sizes="(max-width: 768px) 100vw, 350px"
           />
         ) : (
@@ -56,18 +56,20 @@ export default function GameCard({
           </div>
         )}
 
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0)_52%,rgba(0,0,0,0.42)_100%)]" />
+
         {/* Badge Izquierdo (Tipo de Producto) */}
-        <div className={`absolute top-3 left-3 backdrop-blur-md border px-2 py-1 rounded text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-1 ${esPack ? 'bg-blue-600/90 border-blue-400/30' : 'bg-black/80 border-white/10'}`}>
+        <div className={`absolute top-3 left-3 flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[10px] font-bold uppercase text-white shadow-lg backdrop-blur-xl ${esPack ? 'border-blue-300/25 bg-blue-500/80' : 'border-white/10 bg-black/65'}`}>
             {esPack ? <Gift size={10} /> : <Tag size={10} className="text-gray-400" />}
             {esPack ? 'Pack' : 'Digital'}
         </div>
 
         {/* Badge Derecho (Ofertas / Nuevo) - MEJORADO */}
         {ahorro && (
-            <div className={`absolute top-3 right-3 text-[10px] font-black px-2 py-1 rounded shadow-lg tracking-wider uppercase z-10
+            <div className={`absolute right-3 top-3 z-10 rounded-md px-2.5 py-1.5 text-[10px] font-black uppercase shadow-lg
                 ${esNuevo 
-                    ? 'bg-yellow-400 text-black animate-pulse shadow-yellow-500/20' // Estilo para NUEVO
-                    : 'bg-red-600 text-white shadow-red-600/20' // Estilo para OFERTA
+                    ? 'bg-yellow-300 text-black shadow-yellow-500/20' // Estilo para NUEVO
+                    : 'bg-red-500 text-white shadow-red-600/20' // Estilo para OFERTA
                 }`}>
                 {ahorro}
             </div>
@@ -75,17 +77,17 @@ export default function GameCard({
       </div>
 
       {/* 2. SECCIÓN DE INFORMACIÓN */}
-      <div className="p-4 flex flex-col flex-1">
+      <div className="flex flex-1 flex-col p-4">
         
         <div className="mb-4">
-            <h3 className="text-white font-bold text-[15px] leading-snug mb-2 line-clamp-2 min-h-[40px]">
+            <h3 className="mb-2 min-h-[40px] text-[16px] font-black leading-snug text-white line-clamp-2">
               {titulo}
             </h3>
             
             {/* LÓGICA DE LISTA EXPANDIBLE (Solo si es pack y tiene juegos) */}
             {esPack && juegosIncluidos && juegosIncluidos.length > 0 ? (
-                <div className="bg-white/5 rounded-lg p-3 border border-white/5 transition-all duration-300">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 border-b border-white/5 pb-1">
+                <div className="rounded-lg border border-white/10 bg-white/[0.055] p-3 shadow-inner transition-all duration-300">
+                    <p className="mb-2 border-b border-white/5 pb-1 text-[10px] font-bold uppercase text-gray-400">
                         Contiene {juegosIncluidos.length} Juegos:
                     </p>
                     <ul className="text-gray-300 text-[11px] leading-relaxed space-y-1">
@@ -104,21 +106,21 @@ export default function GameCard({
                                 e.stopPropagation(); // Evita que se active el hover del padre
                                 setExpandido(!expandido);
                             }}
-                            className="w-full mt-2 pt-2 border-t border-white/5 flex items-center justify-center gap-1 text-[10px] font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-wider"
+                            className="mt-2 flex w-full items-center justify-center gap-1 border-t border-white/5 pt-2 text-[10px] font-bold uppercase text-blue-300 transition-colors hover:text-white"
                         >
                             {expandido ? <>Ver menos <ChevronUp size={12} /></> : <>+ {juegosIncluidos.length - 4} juegos más <ChevronDown size={12} /></>}
                         </button>
                     )}
                 </div>
             ) : (
-                <p className="text-gray-500 text-[11px] mt-2">Licencia Oficial Nintendo</p>
+                <p className="mt-2 text-[11px] font-medium text-gray-500">Licencia Oficial Nintendo</p>
             )}
         </div>
         
         {/* PRECIO Y BOTÓN */}
-        <div className="mt-auto flex items-center justify-between gap-3 pt-4 border-t border-white/5">
+        <div className="mt-auto flex items-end justify-between gap-3 border-t border-white/5 pt-4">
             <div className="flex flex-col">
-                <span className="text-[10px] text-gray-500 font-bold uppercase">Precio</span>
+                <span className="text-[10px] font-black uppercase text-gray-500">Precio</span>
                 
                 {/* LÓGICA DE PRECIO TACHADO */}
                 <div className="flex flex-col">
@@ -128,7 +130,7 @@ export default function GameCard({
                          </span>
                     )}
                     <div className="flex items-baseline gap-1">
-                        <span className="text-lg font-black text-white tracking-tight">
+                        <span className="text-[22px] font-black leading-none text-white">
                             ${formatoCLP(precio)}
                         </span>
                         <span className="text-[10px] text-gray-400">CLP</span>
@@ -139,10 +141,10 @@ export default function GameCard({
             {/* BOTÓN UNIFICADO */}
             <button 
                 onClick={onAdd}
-                className={`h-10 px-5 rounded-lg font-bold text-xs uppercase tracking-wide flex items-center gap-2 transition active:scale-95 shadow-[0_0_10px_rgba(255,255,255,0.1)] ${
+                className={`flex h-11 items-center gap-2 rounded-full px-5 text-xs font-black uppercase shadow-lg transition duration-300 active:scale-95 ${
                   esPack 
-                    ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20" 
-                    : "bg-white hover:bg-gray-200 text-black"     
+                    ? "bg-blue-500 text-white shadow-blue-900/20 hover:bg-blue-400" 
+                    : "bg-white text-black shadow-white/10 hover:bg-gray-100"     
                 }`}
             >
                 {esPack ? <Gift size={16} strokeWidth={2.5} /> : <Zap size={16} strokeWidth={2.5} fill="currentColor" className="opacity-50" />}
