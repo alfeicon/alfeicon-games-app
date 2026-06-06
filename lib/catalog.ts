@@ -8,6 +8,8 @@ export type CatalogGame = {
   precioOriginal: number | null;
   esPack: false;
   ahorro: string | null;
+  storageRequired: string | null;
+  consoleName: string | null;
 };
 
 export type CatalogPack = {
@@ -31,6 +33,8 @@ type GameRow = {
   title: string;
   price: number;
   image_url: string | null;
+  storage_required: string | null;
+  console: string | null;
   is_offer: boolean;
   offer_price: number | null;
 };
@@ -46,14 +50,29 @@ type PackRow = {
 
 export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
   if (!supabase) return null;
+  const client = supabase;
+
+  const fetchGames = async () => {
+    const result = await client
+      .from("games")
+      .select("id,title,price,image_url,storage_required,console,is_offer,offer_price")
+      .eq("is_active", true)
+      .order("title", { ascending: true });
+
+    if (!result.error || !result.error.message?.toLowerCase().includes("console")) {
+      return result;
+    }
+
+    return client
+      .from("games")
+      .select("id,title,price,image_url,storage_required,is_offer,offer_price")
+      .eq("is_active", true)
+      .order("title", { ascending: true });
+  };
 
   const [gamesResult, packsResult] = await Promise.all([
-    supabase
-      .from("games")
-      .select("id,title,price,image_url,is_offer,offer_price")
-      .eq("is_active", true)
-      .order("title", { ascending: true }),
-    supabase
+    fetchGames(),
+    client
       .from("packs")
       .select("id,title,price,image_url,is_new,pack_items(title,sort_order)")
       .eq("is_active", true)
@@ -77,6 +96,8 @@ export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
       precioOriginal: precioOferta ? game.price : null,
       esPack: false as const,
       ahorro: precioOferta ? "OFERTA 🔥" : null,
+      storageRequired: game.storage_required,
+      consoleName: game.console,
     };
   });
 

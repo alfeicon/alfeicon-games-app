@@ -17,6 +17,7 @@ create table if not exists public.games (
   description text,
   trailer_url text,
   storage_required text,
+  console text not null default 'switch' check (console in ('switch', 'switch2')),
   is_offer boolean not null default false,
   offer_price integer check (offer_price is null or offer_price >= 0),
   is_active boolean not null default true,

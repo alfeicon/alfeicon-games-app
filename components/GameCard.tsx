@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { Tag, Gift, ChevronDown, ChevronUp, Zap } from 'lucide-react'; 
+import { Tag, Gift, ChevronDown, ChevronUp, Zap, HardDrive, Gamepad2 } from 'lucide-react'; 
 
 // 1. Definimos los tipos para que TypeScript no se queje en page.tsx
 interface GameCardProps {
@@ -12,6 +12,8 @@ interface GameCardProps {
   img: string | null;
   ahorro?: string | null;     // Aquí viene "OFERTA 🔥" o "¡NUEVO! 🚀"
   esPack?: boolean;
+  storageRequired?: string | null;
+  consoleName?: string | null;
   juegosIncluidos?: string[]; // Lista de juegos para el desplegable
   onAdd: () => void;
 }
@@ -23,6 +25,8 @@ export default function GameCard({
   img, 
   ahorro, 
   esPack, 
+  storageRequired,
+  consoleName,
   juegosIncluidos, 
   onAdd 
 }: GameCardProps) {
@@ -36,6 +40,8 @@ export default function GameCard({
 
   // Detectamos si es una etiqueta de novedad para cambiarle el color
   const esNuevo = ahorro && ahorro.includes('NUEVO');
+  const isSwitch2Only = !esPack && (consoleName || '').toLowerCase().replace(/\s+/g, '').includes('switch2');
+  const hasMeta = Boolean(storageRequired) || isSwitch2Only;
 
   return (
     <div className="animate-soft-in group relative mx-auto flex h-full w-full max-w-[350px] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#151311] shadow-[0_18px_42px_rgba(0,0,0,0.34)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-[#1d1915] hover:shadow-[0_24px_56px_rgba(0,0,0,0.46)]">
@@ -113,7 +119,24 @@ export default function GameCard({
                     )}
                 </div>
             ) : (
-                <p className="mt-2 text-[11px] font-medium text-gray-500">Licencia Oficial Nintendo</p>
+                <div className="mt-2 space-y-3">
+                    <p className="text-[11px] font-medium text-gray-500">Licencia Oficial Nintendo</p>
+
+                    {hasMeta && (
+                        <div className="flex flex-wrap gap-2">
+                            {isSwitch2Only && (
+                                <span className="animate-soft-in inline-flex items-center gap-1.5 rounded-full border border-blue-400/20 bg-blue-500/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-blue-300">
+                                    <Gamepad2 size={12} /> Solo Switch 2
+                                </span>
+                            )}
+                            {storageRequired && (
+                                <span className="animate-soft-in inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.055] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400">
+                                    <HardDrive size={12} /> {storageRequired}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
             )}
         </div>
         

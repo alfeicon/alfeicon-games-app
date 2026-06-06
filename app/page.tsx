@@ -182,6 +182,8 @@ export default function MobileAppStore() {
               const enOferta = getCol("En Oferta") === "SI";
               const precioNormal = limpiarPrecio(getCol("Precio"));
               const precioOferta = limpiarPrecio(getCol("Precio Oferta"));
+              const espacio = getCol("Espacio") || getCol("storage_required") || null;
+              const consola = getCol("Consola") || getCol("console") || null;
 
               return {
                 id: `game-${index}`,
@@ -190,7 +192,9 @@ export default function MobileAppStore() {
                 precio: enOferta ? precioOferta : precioNormal,
                 precioOriginal: enOferta ? precioNormal : null, 
                 esPack: false,
-                ahorro: enOferta ? "OFERTA 🔥" : null
+                ahorro: enOferta ? "OFERTA 🔥" : null,
+                storageRequired: espacio,
+                consoleName: consola
               };
             }).filter((item: any) => item.titulo);
             setProductos(datosLimpios);
@@ -675,92 +679,107 @@ export default function MobileAppStore() {
 
 {/* SECCIÓN 4: AYUDA Y CONFIANZA */}
           {activeSection === 'perfil' && (
-            <div className="flex flex-col items-center py-10 animate-fade-in px-6 pb-24 text-center">
-                <div className="mb-8 w-full text-left">
-                    <p className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-400">Ayuda</p>
-                    <h2 className="mt-2 text-2xl font-black uppercase tracking-widest text-white">Soporte y Confianza</h2>
-                    <p className="mt-2 text-xs font-medium leading-relaxed text-gray-500">Canales oficiales, preguntas frecuentes y condiciones importantes antes de comprar.</p>
-                </div>
-                
-                {/* MENSAJE PERSONAL BASTIAN - TEXTO MÁS GRANDE */}
-                <div className="bg-[#111] border border-white/5 p-6 rounded-3xl mb-10 shadow-inner">
-                    <p className="text-gray-200 text-sm leading-relaxed font-medium">
-                        "¡Hola! Gracias por visitar mi página. Sé que puedes tener dudas antes de comprar; escríbenos sin miedo por WhatsApp o Instagram, estamos aquí para ayudarte en todo el proceso. 🎮"
+            <div className="animate-fade-in space-y-5 px-1 pb-24 pt-5">
+                <section className="premium-surface animate-soft-in relative overflow-hidden rounded-[2rem] p-5 text-left">
+                    <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-green-500/10 blur-3xl" />
+                    <div className="pointer-events-none absolute -bottom-12 -left-8 h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
+                    <div className="relative">
+                        <div className="mb-5 flex items-center justify-between">
+                            <div className="relative h-14 w-14 rounded-2xl border border-white/10 bg-white/10 shadow-xl">
+                                <Image src="/logo.png" alt="Alfeicon Games" fill className="object-contain p-2" />
+                            </div>
+                            <div className="flex items-center gap-2 rounded-full border border-green-400/20 bg-green-500/10 px-3 py-1.5">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                                    <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+                                </span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-green-400">Online</span>
+                            </div>
+                        </div>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-400">Alfeicon Games</p>
+                        <h2 className="text-3xl font-black uppercase leading-none tracking-tight text-white">Soporte y confianza</h2>
+                        <p className="mt-3 max-w-[300px] text-xs font-semibold leading-relaxed text-gray-500">
+                            Canales oficiales, dudas frecuentes y condiciones importantes antes de comprar.
+                        </p>
+                    </div>
+                </section>
+
+                <section className="premium-surface animate-soft-in rounded-[1.75rem] p-5 text-left" style={{ animationDelay: '70ms' }}>
+                    <div className="mb-4 flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
+                            <ShieldCheck size={18} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Mensaje oficial</p>
+                            <p className="text-sm font-black text-white">Estamos para ayudarte</p>
+                        </div>
+                    </div>
+                    <p className="text-sm font-semibold leading-relaxed text-gray-300">
+                        Gracias por visitar Alfeicon Games. Si tienes dudas antes de comprar, escríbenos por nuestros canales oficiales y te guiamos durante el proceso.
                     </p>
-                    <p className="text-blue-400 text-xs font-black uppercase tracking-widest mt-4">— Bastian, Alfeicon Games</p>
-                </div>
+                    <p className="mt-4 text-[10px] font-black uppercase tracking-[0.22em] text-blue-400">Alfeicon Games</p>
+                </section>
 
-                <div className="w-full space-y-3 mb-10">
-                    {/* WHATSAPP */}
-                    <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="flex items-center justify-between w-full bg-[#25D366] hover:bg-[#20bd5a] text-black p-4 rounded-2xl transition-transform hover:scale-[1.02] shadow-lg group">
-                        <div className="flex items-center gap-4"><MessageCircle size={22} className="text-black" /><span className="font-bold uppercase tracking-wide text-xs">WhatsApp Oficial</span></div>
-                        <span className="text-black/50 font-bold group-hover:translate-x-1 transition-transform">→</span>
-                    </a>
-                    
-                    {/* INSTAGRAM */}
-                    <a href="https://instagram.com/alfeicon_games" target="_blank" className="flex items-center justify-between w-full bg-[#111] border border-white/10 p-4 rounded-2xl group transition-colors hover:bg-white/5">
-                        <div className="flex items-center gap-4"><Instagram size={22} className="text-pink-500" /><span className="text-white font-bold uppercase tracking-wide text-xs">Instagram (+2.800 Seguidores)</span></div>
-                        <span className="text-gray-600 group-hover:text-white transition-colors">↗</span>
-                    </a>
+                <section className="grid grid-cols-2 gap-3">
+                    {[
+                        { href: `https://wa.me/${CONFIG.whatsappNumber}`, label: 'WhatsApp', meta: 'Compra y soporte', icon: <MessageCircle size={20} />, color: 'text-green-400', delay: 110 },
+                        { href: 'https://instagram.com/alfeicon_games', label: 'Instagram', meta: '+2.800 seguidores', icon: <Instagram size={20} />, color: 'text-pink-500', delay: 155 },
+                        { href: 'https://web.facebook.com/alfeicon.games', label: 'Facebook', meta: 'Página oficial', icon: <Facebook size={20} />, color: 'text-blue-500', delay: 200 },
+                        { href: 'https://www.youtube.com/@alfeicon_games', label: 'YouTube', meta: 'Tutoriales', icon: <Youtube size={20} />, color: 'text-red-500', delay: 245 },
+                    ].map((channel) => (
+                        <a
+                            key={channel.label}
+                            href={channel.href}
+                            target="_blank"
+                            className="premium-surface animate-soft-in group rounded-[1.5rem] p-4 text-left transition duration-300 hover:-translate-y-1 active:scale-[0.98]"
+                            style={{ animationDelay: `${channel.delay}ms` }}
+                        >
+                            <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 ${channel.color}`}>
+                                {channel.icon}
+                            </div>
+                            <p className="text-sm font-black uppercase tracking-wide text-white">{channel.label}</p>
+                            <div className="mt-1 flex items-center justify-between gap-2">
+                                <p className="text-[10px] font-semibold text-gray-500">{channel.meta}</p>
+                                <span className="text-gray-600 transition-transform group-hover:translate-x-1">↗</span>
+                            </div>
+                        </a>
+                    ))}
+                </section>
 
-                    {/* FACEBOOK */}
-                    <a href="https://web.facebook.com/alfeicon.games" target="_blank" className="flex items-center justify-between w-full bg-[#111] border border-white/10 p-4 rounded-2xl group transition-colors hover:bg-white/5">
-                        <div className="flex items-center gap-4"><Facebook size={22} className="text-blue-600" /><span className="text-white font-bold uppercase tracking-wide text-xs">Facebook Oficial</span></div>
-                        <span className="text-gray-600 group-hover:text-white transition-colors">↗</span>
-                    </a>
-
-                    {/* YOUTUBE */}
-                    <a href="https://www.youtube.com/@alfeicon_games" target="_blank" className="flex items-center justify-between w-full bg-[#111] border border-white/10 p-4 rounded-2xl group transition-colors hover:bg-white/5">
-                        <div className="flex items-center gap-4"><Youtube size={22} className="text-red-600" /><span className="text-white font-bold uppercase tracking-wide text-xs">YouTube (Tutoriales)</span></div>
-                        <span className="text-gray-600 group-hover:text-white transition-colors">↗</span>
-                    </a>
-                </div>
-
-{/* DUDAS FRECUENTES (FAQS) - TEXTO MÁS GRANDE Y ACTUALIZADO */}
-                <div className="w-full space-y-4 mb-10">
-                    <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] text-center mb-4">Dudas Frecuentes</h3>
-                    
-                    {/* Pregunta 1: Desbloqueo */}
-                    <div className="bg-white/5 p-5 rounded-2xl border border-white/5 text-left">
-                        <p className="text-white font-bold text-xs mb-2 uppercase tracking-wide">¿Necesito mi consola desbloqueada?</p>
-                        <p className="text-gray-400 text-xs leading-relaxed">
-                            <span className="text-blue-400 font-bold">No.</span> Nuestros juegos son 100% originales y digitales. Se descargan directamente desde la <span className="text-white font-bold">eShop oficial</span> de Nintendo.
-                            <br/><br/>
-                            En teoría, apenas sacas tu consola de la caja, ya puedes instalar nuestros juegos sin modificar nada.
-                        </p>
+                <section className="premium-surface rounded-[1.75rem] p-5 text-left">
+                    <div className="mb-4 flex items-center justify-between">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-400">FAQ</p>
+                            <h3 className="mt-1 text-xl font-black uppercase tracking-tight text-white">Dudas frecuentes</h3>
+                        </div>
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-blue-400">
+                            <BookOpen size={20} />
+                        </div>
                     </div>
 
-                    {/* Pregunta 2: Baneo y Riesgos */}
-                    <div className="bg-white/5 p-5 rounded-2xl border border-white/5 text-left">
-                        <p className="text-white font-bold text-xs mb-2 uppercase tracking-wide">¿Existe riesgo de baneo?</p>
-                        <p className="text-gray-400 text-xs leading-relaxed">
-                            Nuestro método tiene un 99.9% de efectividad y no infringe normas de seguridad. Sin embargo, como en todo método alternativo, existe un riesgo mínimo. 
-                            <br/><br/>
-                            <span className="text-red-400 font-bold uppercase text-[10px]">Alfeicon Games no se hace responsable por baneos</span> o restricciones aplicadas por Nintendo. El cliente acepta este riesgo al comprar.
-                        </p>
+                    <div className="space-y-3">
+                        {[
+                            ['¿Necesito mi consola desbloqueada?', 'No. Los juegos son digitales y se descargan desde la eShop oficial de Nintendo.'],
+                            ['¿Existe riesgo de baneo?', 'Existe un riesgo mínimo asociado a normas externas de Nintendo. El cliente acepta este punto al comprar.'],
+                            ['¿Tienen garantía y soporte?', 'Ofrecemos 3 meses de garantía técnica y ayuda por WhatsApp durante la instalación.'],
+                            ['¿Cuánto tiempo durará el juego?', 'La duración es indefinida si sigues las instrucciones: no borrar juego/cuenta ni modificar datos.'],
+                        ].map(([question, answer], index) => (
+                            <div key={question} className="animate-soft-in rounded-2xl border border-white/10 bg-white/5 p-4" style={{ animationDelay: `${280 + index * 45}ms` }}>
+                                <div className="mb-2 flex items-center gap-3">
+                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-black text-black">{index + 1}</span>
+                                    <p className="text-xs font-black uppercase tracking-wide text-white">{question}</p>
+                                </div>
+                                <p className="pl-10 text-xs font-semibold leading-relaxed text-gray-500">{answer}</p>
+                            </div>
+                        ))}
                     </div>
+                </section>
 
-                    {/* Pregunta 3: Garantía y Soporte */}
-                    <div className="bg-white/5 p-5 rounded-2xl border border-white/5 text-left">
-                        <p className="text-white font-bold text-xs mb-2 uppercase tracking-wide">¿Tienen garantía y soporte?</p>
-                        <p className="text-gray-400 text-xs leading-relaxed">
-                            Ofrecemos <span className="text-white font-bold">3 meses de garantía técnica</span>. Durante este periodo, te ayudamos con cualquier duda en la instalación por WhatsApp.
-                            <br/><br/>
-                            Pasado este tiempo, el soporte técnico caduca y no nos hacemos responsables por fallas posteriores o actualizaciones de sistema.
-                        </p>
-                    </div>
-
-                    {/* Pregunta 4: Duración */}
-                    <div className="bg-white/5 p-5 rounded-2xl border border-white/5 text-left">
-                        <p className="text-white font-bold text-xs mb-2 uppercase tracking-wide">¿Cuánto tiempo durará el juego?</p>
-                        <p className="text-gray-400 text-xs leading-relaxed">
-                            La duración es indefinida siempre que sigas las <span className="text-white font-bold">instrucciones de uso</span> (no borrar el juego ni la cuenta, ni cambiar claves). Si cumples las reglas, el juego debería funcionar por años.
-                        </p>
-                    </div>
-                </div>
-
-                <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-[10px] text-gray-600 hover:text-white transition uppercase tracking-widest border-b border-transparent hover:border-white pb-0.5">
-                    <ShieldCheck size={12} /> Ver Términos y Condiciones
+                <button onClick={() => setShowTerms(true)} className="premium-surface flex w-full items-center justify-between rounded-full px-5 py-4 text-left transition active:scale-[0.98]">
+                    <span className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                        <ShieldCheck size={15} className="text-blue-400" /> Términos y condiciones
+                    </span>
+                    <ChevronRight size={16} className="text-gray-500" />
                 </button>
             </div>
           )}
