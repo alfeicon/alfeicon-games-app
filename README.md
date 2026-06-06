@@ -1,124 +1,31 @@
-# Alfeicon Games App
+# Alfeicon Games
 
-Tienda web mobile-first para Alfeicon Games, hecha con Next.js, Supabase y Vercel. El catalogo publico muestra juegos unitarios y packs, y el panel privado `/admin` permite administrar juegos desde la web.
+Sitio web oficial de Alfeicon Games para revisar juegos digitales de Nintendo Switch, packs disponibles, ofertas y contacto directo por WhatsApp.
 
-## Stack
+## Caracteristicas
 
-- Next.js 16
-- React 19
-- Tailwind CSS 4
-- Supabase Auth + Database
-- Vercel Analytics + Speed Insights
-- Fuse.js para busqueda
+- Catalogo de juegos unitarios.
+- Catalogo de packs.
+- Busqueda por nombre de juego.
+- Filtro de ofertas.
+- Boton de compra directa por WhatsApp.
+- Seccion de instrucciones y preguntas frecuentes.
+- Diseno mobile-first optimizado para navegar desde celular.
+- Panel privado para administracion interna del catalogo.
 
-## Configuracion Local
+## Experiencia
 
-Instala dependencias:
+La pagina esta pensada para que el cliente pueda:
 
-```bash
-npm install
-```
+1. Revisar juegos y packs disponibles.
+2. Ver precios y ofertas activas.
+3. Contactar rapidamente por WhatsApp.
+4. Consultar instrucciones y condiciones antes de comprar.
 
-Crea `.env.local` usando `.env.example` como base:
+## Deploy
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://fhsfloqxjvcrvrsswmmc.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_publishable_key
-```
+El sitio esta preparado para publicarse en Vercel y mantenerse actualizado desde un panel privado de administracion.
 
-No uses la secret key de Supabase en el frontend.
+## Seguridad
 
-Ejecuta el servidor:
-
-```bash
-npm run dev
-```
-
-Abre:
-
-- Tienda: http://localhost:3000
-- Admin: http://localhost:3000/admin
-
-## Supabase
-
-El esquema principal esta en:
-
-```txt
-supabase/schema.sql
-```
-
-Para cargar datos desde el Google Sheet actual:
-
-```bash
-npm run supabase:seed
-```
-
-Ese comando genera:
-
-```txt
-supabase/seed-from-sheets.sql
-```
-
-Ejecuta primero `supabase/schema.sql` en Supabase SQL Editor y luego `supabase/seed-from-sheets.sql`.
-
-Si el catalogo queda duplicado, ejecuta:
-
-```txt
-supabase/reset-catalog.sql
-```
-
-Luego vuelve a ejecutar el seed actualizado.
-
-## Admin
-
-El admin usa Supabase Auth. Para dar acceso:
-
-1. Crea el usuario en Supabase Authentication.
-2. Copia el `user_id`.
-3. Ejecuta:
-
-```sql
-insert into public.admin_users (user_id, email)
-values (
-  'USER_ID_AQUI',
-  'correo@ejemplo.com'
-)
-on conflict (user_id) do update
-set email = excluded.email;
-```
-
-Desde `/admin` se pueden crear y editar juegos, cambiar precio, imagen, estado activo/oferta y ver una vista previa de la card.
-
-## Deploy en Vercel
-
-Antes de desplegar, configura estas variables en Vercel:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://fhsfloqxjvcrvrsswmmc.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_publishable_key
-```
-
-Ruta:
-
-```txt
-Project Settings -> Environment Variables
-```
-
-Marca Production, Preview y Development si Vercel lo solicita. Luego haz redeploy.
-
-## Comandos
-
-```bash
-npm run dev
-npm run build
-npm run start
-npm run lint
-npm run supabase:seed
-```
-
-## Notas de Seguridad
-
-- `.env.local` no se sube a GitHub.
-- La publishable/anon key puede usarse en navegador con RLS activo.
-- Nunca publiques la secret key o service role key.
-- Las escrituras del admin estan protegidas con RLS y la tabla `admin_users`.
+El panel de administracion es privado y requiere autenticacion. Las credenciales, configuraciones internas y datos de conexion no se publican en este repositorio.
