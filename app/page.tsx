@@ -314,23 +314,24 @@ export default function MobileAppStore() {
             <div className="animate-fade-in space-y-8">
               {/* PORTADA DE MARCA */}
               <section className="animate-soft-in -mx-4 overflow-hidden border-b border-white/10 bg-black px-5 pb-7 pt-7">
-                <div className="relative mx-auto max-w-[360px] rounded-[2rem] border border-white/10 bg-[#111] p-5 shadow-2xl">
+                <div className="relative mx-auto max-w-[360px] rounded-[2rem] border border-[#536878]/40 bg-[#0a0a0a] p-5 shadow-2xl">
                   <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[2rem] opacity-25">
                     <ShaderAnimation />
                   </div>
-                  <div className="pointer-events-none absolute inset-x-8 top-0 h-32 rounded-full bg-white/10 blur-[70px]" />
-                  <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-gradient-to-b from-black/10 via-black/35 to-black/70" />
+                  <div className="pointer-events-none absolute inset-x-6 top-0 h-36 rounded-full bg-[#536878]/35 blur-[72px]" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-[#e5e4e2]/5 blur-2xl" />
+                  <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-gradient-to-b from-[#536878]/12 via-[#0a0a0a]/40 to-[#0a0a0a]/85" />
                   <div className="relative z-10">
                     <div className="mb-6 flex items-center justify-between">
-                      <div className="relative h-14 w-14 rounded-2xl border border-white/10 bg-white/5 shadow-xl">
+                      <div className="relative h-14 w-14 rounded-2xl border border-[#536878]/35 bg-[#536878]/15 shadow-xl">
                         <Image src="/logo.png" alt="Alfeicon Logo" fill className="object-contain p-2" priority />
                       </div>
-                      <div className="flex items-center gap-2 rounded-full border border-green-400/20 bg-green-500/10 px-3 py-1.5">
+                      <div className="flex items-center gap-2 rounded-full border border-[#536878]/45 bg-[#536878]/18 px-3 py-1.5">
                         <span className="relative flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#a9bac5] opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#a9bac5]" />
                         </span>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-green-300">Online</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#d5dde1]">Online</span>
                       </div>
                     </div>
 
@@ -346,14 +347,14 @@ export default function MobileAppStore() {
                     <div className="mt-6 grid grid-cols-[1fr_auto] gap-3">
                       <button
                         onClick={() => setActiveSection('catalogo')}
-                        className="flex h-12 items-center justify-center gap-2 rounded-full bg-white px-5 text-xs font-black uppercase tracking-widest text-black shadow-lg shadow-white/10 transition active:scale-95"
+                        className="flex h-12 items-center justify-center gap-2 rounded-full bg-[#536878] px-5 text-xs font-black uppercase tracking-widest text-[#e5e4e2] shadow-lg shadow-[#536878]/30 transition hover:bg-[#627988] active:scale-95"
                       >
                         Ver catalogo <ChevronRight size={15} />
                       </button>
                       <a
                         href={CONFIG.canalWhatsapp}
                         target="_blank"
-                        className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg shadow-green-900/30 transition active:scale-95"
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-[#e5e4e2]/10 transition active:scale-95"
                         aria-label="Canal de WhatsApp"
                       >
                         <Megaphone size={19} fill="currentColor" />
@@ -361,17 +362,23 @@ export default function MobileAppStore() {
                     </div>
 
                     <div className="mt-5 grid grid-cols-3 gap-2">
-                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <p className="text-2xl font-black text-white">{productos.length || '-'}</p>
-                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Juegos</p>
+                      <div className="group relative min-h-[86px] overflow-hidden rounded-2xl border border-[#7f9aaa]/35 bg-[#536878]/18 px-3 py-3 shadow-[inset_0_1px_0_rgba(229,228,226,0.12)] backdrop-blur-xl transition duration-500 hover:bg-[#536878]/26">
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/10 to-transparent" />
+                        <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#9fb3c0]/12 blur-2xl" />
+                        <p className="relative text-2xl font-black leading-none text-white">{productos.length || '-'}</p>
+                        <p className="relative mt-3 text-[9px] font-black uppercase tracking-widest text-gray-500">Juegos</p>
                       </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <p className="text-2xl font-black text-white">{packs.length || '-'}</p>
-                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Packs</p>
+                      <div className="group relative min-h-[86px] overflow-hidden rounded-2xl border border-[#8aa1ad]/30 bg-[#6f8190]/16 px-3 py-3 shadow-[inset_0_1px_0_rgba(229,228,226,0.12)] backdrop-blur-xl transition duration-500 hover:bg-[#6f8190]/24">
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/10 to-transparent" />
+                        <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#b8c3ca]/12 blur-2xl" />
+                        <p className="relative text-2xl font-black leading-none text-white">{packs.length || '-'}</p>
+                        <p className="relative mt-3 text-[9px] font-black uppercase tracking-widest text-gray-500">Packs</p>
                       </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <p className="text-2xl font-black text-white">{ofertasFlash.length || '-'}</p>
-                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Ofertas</p>
+                      <div className="group relative min-h-[86px] overflow-hidden rounded-2xl border border-[#c8c8c4]/22 bg-[#e5e4e2]/10 px-3 py-3 shadow-[inset_0_1px_0_rgba(229,228,226,0.14)] backdrop-blur-xl transition duration-500 hover:bg-[#e5e4e2]/16">
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/12 to-transparent" />
+                        <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#e5e4e2]/10 blur-2xl" />
+                        <p className="relative text-2xl font-black leading-none text-white">{ofertasFlash.length || '-'}</p>
+                        <p className="relative mt-3 text-[9px] font-black uppercase tracking-widest text-gray-500">Ofertas</p>
                       </div>
                     </div>
                   </div>
@@ -414,22 +421,58 @@ export default function MobileAppStore() {
               )}
 
               {/* RECUADRO CÓMO COMPRAR */}
-              <div className="mx-1 rounded-3xl border border-white/10 bg-[#0a0a0a] p-5 shadow-xl">
-                  <h3 className="mb-5 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">
-                      <CheckCircle size={14} /> Compra en 3 pasos
-                  </h3>
-                  
-                  <div className="grid grid-cols-3 gap-3">
+              <div className="mx-1 overflow-hidden rounded-3xl border border-[#536878]/30 bg-[#0a0a0a] p-5 shadow-xl">
+                  <div className="mb-5 flex items-center justify-between gap-3">
+                    <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">
+                        <CheckCircle size={14} /> Compra en 4 pasos
+                    </h3>
+                    <span className="rounded-full border border-[#536878]/30 bg-[#536878]/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Desliza</span>
+                  </div>
+
+                  <div className="-mx-2 flex snap-x snap-mandatory gap-3 overflow-x-auto px-2 pb-3 scrollbar-hide">
                       {[
-                        ['1', 'Elige', 'Busca tu juego'],
-                        ['2', 'Pide', 'Compra por chat'],
-                        ['3', 'Juega', 'Recibe datos']
-                      ].map(([step, title, copy]) => (
-                        <div key={step} className="rounded-2xl border border-white/10 bg-white/5 p-3 text-center">
-                          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-sm font-black text-black">{step}</div>
-                          <p className="text-xs font-black uppercase text-white">{title}</p>
-                          <p className="mt-1 text-[9px] font-semibold leading-tight text-gray-500">{copy}</p>
-                        </div>
+                        {
+                          step: '1',
+                          title: 'Elige',
+                          copy: 'Busca tu juego favorito en el catálogo.',
+                          image: '/steps/step-choose.png',
+                        },
+                        {
+                          step: '2',
+                          title: 'Chatea',
+                          copy: 'Escríbenos para confirmar disponibilidad.',
+                          image: '/steps/step-chat.png',
+                        },
+                        {
+                          step: '3',
+                          title: 'Paga',
+                          copy: 'Realiza el pago del juego.',
+                          image: '/steps/step-pay.png',
+                        },
+                        {
+                          step: '4',
+                          title: 'Juega',
+                          copy: 'Recibe los datos y comienza a jugar.',
+                          image: '/steps/step-play.png',
+                        },
+                      ].map((item, index) => (
+                        <article
+                          key={item.step}
+                          className="animate-soft-in relative min-w-[82%] snap-center overflow-hidden rounded-[1.35rem] border border-[#536878]/35 bg-[#101417] shadow-[0_18px_36px_rgba(0,0,0,0.28)]"
+                          style={{ animationDelay: `${index * 90}ms` }}
+                        >
+                          <div className="relative aspect-[16/9] overflow-hidden bg-[#0a0a0a]">
+                            <Image src={item.image} alt={`${item.title}: ${item.copy}`} fill className="object-cover transition duration-700 hover:scale-[1.03]" sizes="(max-width: 768px) 82vw, 320px" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent" />
+                            <div className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#e5e4e2] text-sm font-black text-[#0a0a0a] shadow-lg shadow-black/30">
+                              {item.step}
+                            </div>
+                          </div>
+                          <div className="p-4">
+                            <p className="text-sm font-black uppercase tracking-widest text-white">{item.title}</p>
+                            <p className="mt-1 text-xs font-semibold leading-relaxed text-gray-500">{item.copy}</p>
+                          </div>
+                        </article>
                       ))}
                   </div>
               </div>
@@ -469,7 +512,7 @@ export default function MobileAppStore() {
                    {cargando ? ([1,2,3].map(i => <div key={i} className="min-w-[280px] h-[350px] bg-[#111] rounded-xl animate-pulse border border-white/5 shrink-0" />)) : (
                       ofertasFlash.map((item) => (
                         <div key={item.id} className="min-w-[280px] snap-center shrink-0">
-                             <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack}
+                             <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} storageRequired={item.storageRequired} consoleName={item.consoleName}
                                 onAdd={() => comprarDirecto(item)} 
                              />
                         </div>
@@ -543,7 +586,7 @@ export default function MobileAppStore() {
                       {listaVisual.length > 0 ? (
                         listaVisual.map((item, index) => (
                           <div key={item.id} className="animate-soft-in w-full max-w-[350px] mx-auto" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
-                             <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos}
+                             <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos} storageRequired={item.storageRequired} consoleName={item.consoleName}
                                 onAdd={() => comprarDirecto(item)}
                              />
                           </div>
@@ -879,7 +922,7 @@ export default function MobileAppStore() {
         {/* NAVEGACIÓN INFERIOR */}
         <nav className={`fixed bottom-5 left-1/2 z-50 flex h-16 w-[min(360px,calc(100%-2rem))] -translate-x-1/2 items-center justify-around overflow-hidden rounded-full border border-white/10 bg-white/10 px-2 shadow-[0_18px_44px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-transform duration-500 ease-out ${showBottomNav ? 'translate-y-0' : 'translate-y-28'}`}>
           <span
-            className="pointer-events-none absolute left-2 top-2 h-12 rounded-full bg-white shadow-lg shadow-white/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            className="pointer-events-none absolute left-2 top-2 h-12 rounded-full bg-[#e5e4e2] shadow-lg shadow-[#e5e4e2]/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
               width: 'calc((100% - 1rem) / 4)',
               transform: `translateX(${navIndex * 100}%)`,

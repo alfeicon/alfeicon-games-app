@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import { DATA_IMAGENES } from "@/app/data/imagenes";
 
 export type CatalogGame = {
   id: string;
@@ -46,6 +47,27 @@ type PackRow = {
   image_url: string | null;
   is_new: boolean;
   pack_items: { title: string; sort_order: number }[] | null;
+};
+
+const normalizeGameName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/^\s*\d+\.?\s*/, "")
+    .replace(/[^a-z0-9]/g, "");
+
+const imageByGameName = new Map(
+  DATA_IMAGENES.map((item) => [normalizeGameName(item.name), item.url]),
+);
+
+const findPackFallbackImage = (titles: string[]) => {
+  for (const title of titles) {
+    const image = imageByGameName.get(normalizeGameName(title));
+    if (image) return image;
+  }
+
+  return null;
 };
 
 export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
@@ -109,7 +131,7 @@ export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
     return {
       id: pack.id,
       titulo: pack.title,
-      img: pack.image_url,
+      img: pack.image_url || findPackFallbackImage(juegosIncluidos),
       precio: pack.price,
       esPack: true as const,
       ahorro: pack.is_new ? "¡NUEVO! 🚀" : null,

@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
-  --surface: #111113;
-  --surface-elevated: #171719;
-  --hairline: rgba(255, 255, 255, 0.1);
+  --background: #0a0a0a;
+  --foreground: #e5e4e2;
+  --surface: #111416;
+  --surface-elevated: #161c20;
+  --hairline: rgba(229, 228, 226, 0.12);
 }
 
 /* Fondo negro y base equilibrada */
 html, body {
-  background-color: #000000 !important;
-  color: #ffffff;
+  background-color: #0a0a0a !important;
+  color: #e5e4e2;
   font-family: Arial, Helvetica, sans-serif;
   overscroll-behavior-y: none;
   /* Bajamos a 16px: Legible pero elegante */
@@ -67,41 +67,49 @@ button, a, input, textarea {
 }
 
 .alfeicon-theme {
-  --theme-bg: #151311;
-  --theme-shell: #0d0c0b;
-  --theme-surface: #151311;
-  --theme-surface-2: #201c18;
-  --theme-image-shell: #181613;
-  --theme-text: #f7e6d6;
-  --theme-muted: #a99a8c;
-  --theme-soft: rgba(238, 211, 186, 0.07);
-  --theme-border: rgba(238, 211, 186, 0.12);
-  --theme-inverse: #eed3ba;
-  --theme-inverse-text: #151311;
-  --theme-shadow: rgba(0, 0, 0, 0.36);
-  --theme-accent: #e7b482;
-  background-color: var(--theme-bg) !important;
+  --theme-bg: #0a0a0a;
+  --theme-shell: #0a0a0a;
+  --theme-surface: #111416;
+  --theme-surface-2: #182126;
+  --theme-image-shell: #12181c;
+  --theme-text: #e5e4e2;
+  --theme-muted: #8c989f;
+  --theme-soft: rgba(229, 228, 226, 0.065);
+  --theme-border: rgba(229, 228, 226, 0.13);
+  --theme-inverse: #e5e4e2;
+  --theme-inverse-text: #0a0a0a;
+  --theme-shadow: rgba(0, 0, 0, 0.42);
+  --theme-accent: #536878;
+  --theme-accent-soft: rgba(83, 104, 120, 0.18);
+  --theme-accent-border: rgba(83, 104, 120, 0.38);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(83, 104, 120, 0.22), transparent 38%),
+    linear-gradient(180deg, #0a0a0a 0%, #101417 58%, #0a0a0a 100%) !important;
   color: var(--theme-text);
 }
 
 .theme-light {
-  --theme-bg: #eed3ba;
-  --theme-shell: #f7e7d5;
-  --theme-surface: #fff8ef;
-  --theme-surface-2: #f0dac4;
-  --theme-image-shell: #ead2ba;
-  --theme-text: #151311;
-  --theme-muted: #705f50;
-  --theme-soft: rgba(21, 19, 17, 0.06);
-  --theme-border: rgba(21, 19, 17, 0.13);
-  --theme-inverse: #151311;
-  --theme-inverse-text: #eed3ba;
-  --theme-shadow: rgba(88, 61, 37, 0.15);
-  --theme-accent: #9b7048;
+  --theme-bg: #e5e4e2;
+  --theme-shell: #f3f3f1;
+  --theme-surface: #fbfbf9;
+  --theme-surface-2: #d7dcdf;
+  --theme-image-shell: #dfe3e5;
+  --theme-text: #0a0a0a;
+  --theme-muted: #536878;
+  --theme-soft: rgba(10, 10, 10, 0.055);
+  --theme-border: rgba(10, 10, 10, 0.13);
+  --theme-inverse: #0a0a0a;
+  --theme-inverse-text: #e5e4e2;
+  --theme-shadow: rgba(10, 10, 10, 0.16);
+  --theme-accent: #536878;
+  --theme-accent-soft: rgba(83, 104, 120, 0.14);
+  --theme-accent-border: rgba(83, 104, 120, 0.34);
 }
 
 .alfeicon-theme > div {
-  background-color: var(--theme-shell) !important;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(83, 104, 120, 0.12), transparent 34%),
+    linear-gradient(180deg, #0a0a0a 0%, #101417 100%) !important;
   border-color: var(--theme-border) !important;
   color: var(--theme-text);
 }
@@ -135,7 +143,7 @@ button, a, input, textarea {
 
 .alfeicon-theme .premium-surface {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
+    linear-gradient(145deg, rgba(229, 228, 226, 0.075), rgba(83, 104, 120, 0.075) 48%, rgba(10, 10, 10, 0.24)),
     var(--theme-surface);
   border-color: var(--theme-border);
   box-shadow: 0 18px 44px var(--theme-shadow);
@@ -169,11 +177,11 @@ button, a, input, textarea {
 .alfeicon-theme .bg-white\/5,
 .alfeicon-theme .bg-white\/10,
 .alfeicon-theme .bg-white\/\[0\.055\] {
-  background-color: var(--theme-soft) !important;
+  background-color: color-mix(in srgb, var(--theme-accent) 18%, transparent) !important;
 }
 
 .alfeicon-theme .bg-white {
-  background-color: var(--theme-inverse) !important;
+  background-color: #e5e4e2 !important;
 }
 
 .alfeicon-theme .text-black {
@@ -188,7 +196,7 @@ button, a, input, textarea {
 }
 
 .theme-light .premium-control {
-  background: rgba(255, 248, 239, 0.86);
+  background: rgba(251, 251, 249, 0.88);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
@@ -209,14 +217,14 @@ button, a, input, textarea {
 
 .theme-light .from-purple-400,
 .theme-light .from-blue-400 {
-  --tw-gradient-from: #151311 var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgba(21, 19, 17, 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-from: #0a0a0a var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(10, 10, 10, 0) var(--tw-gradient-to-position) !important;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
 }
 
 .theme-light .to-pink-600,
 .theme-light .to-cyan-400 {
-  --tw-gradient-to: #8d6f54 var(--tw-gradient-to-position) !important;
+  --tw-gradient-to: #536878 var(--tw-gradient-to-position) !important;
 }
 
 .theme-light .bg-blue-600\/10,
@@ -225,22 +233,66 @@ button, a, input, textarea {
 .theme-light .bg-blue-600\/20,
 .theme-light .bg-pink-600\/10,
 .theme-light .bg-green-600\/10 {
-  background-color: rgba(21, 19, 17, 0.06) !important;
+  background-color: rgba(10, 10, 10, 0.06) !important;
 }
 
 .theme-light .text-blue-400,
+.theme-light .text-blue-300,
+.theme-light .text-blue-500,
 .theme-light .text-pink-400,
 .theme-light .text-green-400 {
   color: var(--theme-accent) !important;
 }
 
-.theme-dark .text-blue-400 {
-  color: #8bbcff !important;
+.theme-dark .text-blue-300,
+.theme-dark .text-blue-400,
+.theme-dark .text-blue-500 {
+  color: #8fa7b8 !important;
+}
+
+.alfeicon-theme .bg-blue-500\/10,
+.alfeicon-theme .bg-blue-600\/10,
+.alfeicon-theme .bg-blue-900\/20,
+.alfeicon-theme .bg-blue-600\/20 {
+  background-color: var(--theme-accent-soft) !important;
+}
+
+.alfeicon-theme .border-blue-300\/25,
+.alfeicon-theme .border-blue-400\/10,
+.alfeicon-theme .border-blue-400\/20,
+.alfeicon-theme .border-blue-500\/30 {
+  border-color: var(--theme-accent-border) !important;
+}
+
+.alfeicon-theme .bg-blue-500,
+.alfeicon-theme .bg-blue-600 {
+  background-color: var(--theme-accent) !important;
+}
+
+.alfeicon-theme .bg-green-500,
+.alfeicon-theme .bg-green-500\/10,
+.alfeicon-theme .bg-green-600\/10 {
+  background-color: var(--theme-accent-soft) !important;
+}
+
+.alfeicon-theme .border-green-400\/20,
+.alfeicon-theme .border-green-500\/30 {
+  border-color: var(--theme-accent-border) !important;
+}
+
+.alfeicon-theme .text-green-300,
+.alfeicon-theme .text-green-400 {
+  color: #a9bac5 !important;
+}
+
+.alfeicon-theme .hover\:bg-blue-400:hover,
+.alfeicon-theme .hover\:bg-blue-500:hover {
+  background-color: color-mix(in srgb, var(--theme-accent) 82%, white 18%) !important;
 }
 
 @media (prefers-color-scheme: light) {
   html, body {
-    background-color: #eed3ba !important;
+    background-color: #e5e4e2 !important;
   }
 }
 

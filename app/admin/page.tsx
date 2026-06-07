@@ -81,7 +81,7 @@ export default function AdminPage() {
   const previewOfferPrice = form.is_offer ? toPrice(form.offer_price) : 0;
   const previewFinalPrice = form.is_offer && previewOfferPrice > 0 ? previewOfferPrice : previewPrice;
   const previewOriginalPrice = form.is_offer && previewOfferPrice > 0 ? previewPrice : null;
-  const previewConsoleLabel = form.console === "switch2" ? "Solo Switch 2" : "Switch / Switch 2";
+  const previewConsoleLabel = form.console === "switch2" ? "Solo Switch 2" : "Switch 1 y 2";
 
   const showNotice = (type: "success" | "error", text: string) => {
     setNotice({ type, text });
@@ -298,7 +298,7 @@ export default function AdminPage() {
                   <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] font-bold uppercase text-gray-500">
                     <span>${game.price.toLocaleString("es-CL")} CLP</span>
                     {game.storage_required && <span>• {game.storage_required}</span>}
-                    {game.console === "switch2" && <span className="text-blue-400">• Switch 2</span>}
+                    <span className={game.console === "switch2" ? "text-blue-400" : ""}>• {game.console === "switch2" ? "Solo Switch 2" : "Switch 1 y 2"}</span>
                   </div>
                 </div>
                 {game.is_active ? <Eye size={15} className="text-green-400" /> : <EyeOff size={15} className="text-gray-500" />}
@@ -336,7 +336,7 @@ export default function AdminPage() {
               <div className="relative flex overflow-hidden rounded-lg border border-white/10 bg-black p-1">
                 <span className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-md bg-white transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${form.console === "switch2" ? "translate-x-[calc(100%+0.5rem)]" : "translate-x-0"}`} />
                 <button type="button" onClick={() => setForm({ ...form, console: "switch" })} className={`relative z-10 flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${form.console === "switch" ? "text-black" : "text-gray-500 hover:text-white"}`}>
-                  Switch
+                  Switch 1 y 2
                 </button>
                 <button type="button" onClick={() => setForm({ ...form, console: "switch2" })} className={`relative z-10 flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${form.console === "switch2" ? "text-black" : "text-gray-500 hover:text-white"}`}>
                   Switch 2

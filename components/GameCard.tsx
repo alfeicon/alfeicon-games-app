@@ -41,13 +41,14 @@ export default function GameCard({
   // Detectamos si es una etiqueta de novedad para cambiarle el color
   const esNuevo = ahorro && ahorro.includes('NUEVO');
   const isSwitch2Only = !esPack && (consoleName || '').toLowerCase().replace(/\s+/g, '').includes('switch2');
-  const hasMeta = Boolean(storageRequired) || isSwitch2Only;
+  const consoleLabel = !esPack && consoleName ? (isSwitch2Only ? 'Solo Switch 2' : 'Switch 1 y 2') : null;
+  const hasMeta = Boolean(storageRequired) || Boolean(consoleLabel);
 
   return (
-    <div className="animate-soft-in group relative mx-auto flex h-full w-full max-w-[350px] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#151311] shadow-[0_18px_42px_rgba(0,0,0,0.34)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-white/20 hover:bg-[#1d1915] hover:shadow-[0_24px_56px_rgba(0,0,0,0.46)]">
+    <div className="animate-soft-in group relative mx-auto flex h-full w-full max-w-[350px] flex-col overflow-hidden rounded-lg border border-[#536878]/30 bg-[#0a0a0a] shadow-[0_18px_42px_rgba(0,0,0,0.34)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-[#536878]/55 hover:bg-[#11181c] hover:shadow-[0_24px_56px_rgba(0,0,0,0.46)]">
       
       {/* 1. SECCIÓN DE IMAGEN */}
-      <div className="relative h-[244px] w-full shrink-0 overflow-hidden border-b border-white/5 bg-[#181613]">
+      <div className="relative h-[244px] w-full shrink-0 overflow-hidden border-b border-[#536878]/25 bg-[#101417]">
         {img ? (
           <Image 
             src={img} 
@@ -65,7 +66,7 @@ export default function GameCard({
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0)_52%,rgba(0,0,0,0.42)_100%)]" />
 
         {/* Badge Izquierdo (Tipo de Producto) */}
-        <div className={`absolute top-3 left-3 flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[10px] font-bold uppercase text-white shadow-lg backdrop-blur-xl ${esPack ? 'border-blue-300/25 bg-blue-500/80' : 'border-white/10 bg-black/65'}`}>
+        <div className={`absolute top-3 left-3 flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[10px] font-bold uppercase text-white shadow-lg backdrop-blur-xl ${esPack ? 'border-[#536878]/40 bg-[#536878]/85' : 'border-white/10 bg-black/65'}`}>
             {esPack ? <Gift size={10} /> : <Tag size={10} className="text-gray-400" />}
             {esPack ? 'Pack' : 'Digital'}
         </div>
@@ -92,7 +93,7 @@ export default function GameCard({
             
             {/* LÓGICA DE LISTA EXPANDIBLE (Solo si es pack y tiene juegos) */}
             {esPack && juegosIncluidos && juegosIncluidos.length > 0 ? (
-                <div className="rounded-lg border border-white/10 bg-white/[0.055] p-3 shadow-inner transition-all duration-300">
+                <div className="rounded-lg border border-[#536878]/30 bg-[#536878]/12 p-3 shadow-inner transition-all duration-300">
                     <p className="mb-2 border-b border-white/5 pb-1 text-[10px] font-bold uppercase text-gray-400">
                         Contiene {juegosIncluidos.length} Juegos:
                     </p>
@@ -100,7 +101,7 @@ export default function GameCard({
                         {/* Muestra todos si está expandido, o solo los primeros 4 */}
                         {(expandido ? juegosIncluidos : juegosIncluidos.slice(0, 4)).map((juego: string, i: number) => (
                              <li key={i} className="flex items-start gap-1.5">
-                                <span className="text-blue-500 mt-0.5 text-[8px] shrink-0">●</span> 
+                                <span className="mt-0.5 shrink-0 text-[8px] text-[#8fa7b8]">●</span> 
                                 <span className={`${expandido ? "" : "line-clamp-1"} break-words`}>{juego}</span>
                              </li>
                         ))}
@@ -112,7 +113,7 @@ export default function GameCard({
                                 e.stopPropagation(); // Evita que se active el hover del padre
                                 setExpandido(!expandido);
                             }}
-                            className="mt-2 flex w-full items-center justify-center gap-1 border-t border-white/5 pt-2 text-[10px] font-bold uppercase text-blue-300 transition-colors hover:text-white"
+                            className="mt-2 flex w-full items-center justify-center gap-1 border-t border-white/5 pt-2 text-[10px] font-bold uppercase text-[#a9bac5] transition-colors hover:text-white"
                         >
                             {expandido ? <>Ver menos <ChevronUp size={12} /></> : <>+ {juegosIncluidos.length - 4} juegos más <ChevronDown size={12} /></>}
                         </button>
@@ -124,13 +125,13 @@ export default function GameCard({
 
                     {hasMeta && (
                         <div className="flex flex-wrap gap-2">
-                            {isSwitch2Only && (
-                                <span className="animate-soft-in inline-flex items-center gap-1.5 rounded-full border border-blue-400/20 bg-blue-500/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-blue-300">
-                                    <Gamepad2 size={12} /> Solo Switch 2
+                            {consoleLabel && (
+                                <span className="animate-soft-in inline-flex items-center gap-1.5 rounded-full border border-[#536878]/35 bg-[#536878]/18 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#a9bac5]">
+                                    <Gamepad2 size={12} /> {consoleLabel}
                                 </span>
                             )}
                             {storageRequired && (
-                                <span className="animate-soft-in inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.055] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400">
+                                <span className="animate-soft-in inline-flex items-center gap-1.5 rounded-full border border-[#536878]/30 bg-[#536878]/12 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400">
                                     <HardDrive size={12} /> {storageRequired}
                                 </span>
                             )}
@@ -166,8 +167,8 @@ export default function GameCard({
                 onClick={onAdd}
                 className={`flex h-11 items-center gap-2 rounded-full px-5 text-xs font-black uppercase shadow-lg transition duration-300 active:scale-95 ${
                   esPack 
-                    ? "bg-blue-500 text-white shadow-blue-900/20 hover:bg-blue-400" 
-                    : "bg-white text-black shadow-white/10 hover:bg-gray-100"     
+                    ? "bg-[#536878] text-[#e5e4e2] shadow-[#536878]/20 hover:bg-[#627988]" 
+                    : "bg-[#e5e4e2] text-[#0a0a0a] shadow-[#e5e4e2]/10 hover:bg-[#f0f0ee]"     
                 }`}
             >
                 {esPack ? <Gift size={16} strokeWidth={2.5} /> : <Zap size={16} strokeWidth={2.5} fill="currentColor" className="opacity-50" />}
