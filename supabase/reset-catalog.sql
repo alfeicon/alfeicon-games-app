@@ -1,5 +1,5 @@
--- Clears the public catalog before running seed-from-sheets.sql again.
--- Run this in Supabase SQL Editor if products were duplicated.
+-- Clears the public catalog.
+-- Run this in Supabase SQL Editor if products or packs were duplicated.
 
 begin;
 

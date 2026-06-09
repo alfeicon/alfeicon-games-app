@@ -22,6 +22,7 @@ export type CatalogPack = {
   ahorro: string | null;
   juegosIncluidos: string[];
   esNuevo: boolean;
+  consoleName: string | null;
 };
 
 export type CatalogData = {
@@ -45,6 +46,7 @@ type PackRow = {
   title: string;
   price: number;
   image_url: string | null;
+  console: string | null;
   is_new: boolean;
   pack_items: { title: string; sort_order: number }[] | null;
 };
@@ -96,7 +98,7 @@ export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
     fetchGames(),
     client
       .from("packs")
-      .select("id,title,price,image_url,is_new,pack_items(title,sort_order)")
+      .select("id,title,price,image_url,console,is_new,pack_items(title,sort_order)")
       .eq("is_active", true)
       .order("is_new", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -137,6 +139,7 @@ export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
       ahorro: pack.is_new ? "¡NUEVO! 🚀" : null,
       juegosIncluidos,
       esNuevo: pack.is_new,
+      consoleName: pack.console,
     };
   });
 

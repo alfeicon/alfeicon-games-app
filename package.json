@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "supabase:seed": "node scripts/export-sheets-to-supabase-sql.mjs",
     "publish": "node scripts/publish.mjs"
   },
   "dependencies": {
@@ -18,7 +17,6 @@
     "fuse.js": "^7.1.0",
     "lucide-react": "^0.561.0",
     "next": "^16.2.7",
-    "papaparse": "^5.5.3",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "three": "^0.184.0"
@@ -26,7 +24,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/papaparse": "^5.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

@@ -1,6 +1,6 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 // 1. IMPORTACIONES DE HERRAMIENTAS
@@ -8,7 +8,17 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Pixels from "@/components/Pixels";
 
-const inter = Inter({ subsets: ["latin"] });
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
+});
 
 // 2. AQUÍ ESTÁ LO NUEVO: CONFIGURACIÓN DE LA TARJETA (BANNER)
 export const metadata: Metadata = {
@@ -54,7 +64,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body 
-        className={`${inter.className} bg-black text-white overscroll-none`}
+        className={`${geist.variable} ${geistMono.variable} bg-black text-white overscroll-none`}
         suppressHydrationWarning={true} 
       >
         {/* 3. LOS PIXELES VAN PRIMERO PARA RASTREAR DESDE EL INICIO */}

@@ -601,16 +601,17 @@ function extraerTextoLimpio(texto) {
 function limpiarJuegos(textoBloque) {
   return textoBloque
     .replace(/<br>/g, "\n").replace(/<[^>]*>/g, "").split("\n")
-    .map(l => l.replace(/[🧩🔥⭐️💰💵✅❌🎮]+/g, "").trim())
+    .map(l => l.replace(/[🧩🔥⭐️💰💵✅❌🎮🔮™]+/g, "").trim())
     .filter(linea => {
       // 1. Si la línea es muy corta o son solo guiones, fuera.
       if (linea.length < 3 || /^[-=_]+$/.test(linea)) return false;
       
       // 2. Filtros de Precios y Totales
-      if (/Price|Valor|Monto|Total|^\d+\s*\$/i.test(linea)) return false;
+      if (/Price|Precio|Valor|Monto|Total|^\d+\s*\$/i.test(linea)) return false;
       
       // 3. Filtros de Datos de Cuenta (ID, Country, etc.)
-      if (/^(ID|Country|For buy|Buy product|Nickname|Date of|Gender|Wallet|PayPal|Linked|Gold Point|Membership|Details|Transaction|NINTENDO SWITCH ACCOUNT)/i.test(linea)) return false;
+      if (/^(ID|Country|For buy|Buy product|Nickname|Date of|Gender|Wallet|PayPal|Linked|Gold Point|Membership|Details|Transaction|Vendedor|Seller|Vendor|NINTENDO SWITCH ACCOUNT)/i.test(linea)) return false;
+      if (/waluigi store chile|nintendo primarias|store chile/i.test(linea)) return false;
       
       // 4. NUEVO FILTRO: Elimina "no games found" y variantes
       if (/no games found|no active membership|no linked paypal/i.test(linea)) return false;
@@ -623,11 +624,17 @@ function limpiarJuegos(textoBloque) {
     .map(j => j.replace(/^\d+[\.\)\-]\s*/, "").replace(/&apos;/g, "'").replace(/["“”]/g, "").replace(/DLC only/gi, "(DLC)").trim());
 }
 function extraerPrecioCLP(texto, aumento) {
-  let match = texto.match(/(?:Price|Total|Valor)[^0-9]*([0-9\.]+)\s*(?:\$|USD)/i);
-  if (!match) match = texto.match(/(?:^|\n)\s*([0-9\.]+)\s*\$/); 
-  if (match) return (parseFloat(match[1].replace(",", ".")) * 1000) + aumento;
-  match = texto.match(/(?:CLP|🇨🇱|\$)\s*([0-9]{1,3}(?:[.\s]?[0-9]{3})+)/i);
-  if (match) return parseInt(match[1].replace(/\./g, "").replace(/\s/g, "")) + aumento;
+  const parseMontoCLP = (valor) => parseInt(valor.replace(/[^\d]/g, ""), 10);
+
+  let match = texto.match(/(?:Precio|Valor|Monto|Total|CLP|🇨🇱)[^\d]{0,20}([0-9]{1,3}(?:[.\s]?[0-9]{3})+)/i);
+  if (match) return parseMontoCLP(match[1]) + aumento;
+
+  match = texto.match(/(?:^|\n)\s*\$?\s*([0-9]{1,3}(?:[.\s]?[0-9]{3})+)(?:\s*CLP)?/i);
+  if (match) return parseMontoCLP(match[1]) + aumento;
+
+  match = texto.match(/(?:Price|USD|US)[^0-9]*([0-9]+(?:[.,][0-9]+)?)/i);
+  if (match) return Math.round(parseFloat(match[1].replace(",", ".")) * 1000) + aumento;
+
   return null;
 }
 function subirPackLogica(mensaje, chatID) {
@@ -734,13 +741,14 @@ function crearRespaldoPacks() {
 }
 function limpiarBaseDeDatos(chatID) {
   try {
-    supabaseRequest("packs?bot_pack_number=not.is.null", "delete");
+    supabaseRequest("pack_items?id=not.is.null", "delete");
+    supabaseRequest("packs?id=not.is.null", "delete");
     if (!chatID) {
-      Logger.log("Todos los packs del bot fueron borrados en Supabase.");
+      Logger.log("Todos los packs fueron borrados en Supabase.");
       return;
     }
 
-    enviarMensaje(chatID, "🔥 TODOS LOS PACKS DEL BOT FUERON BORRADOS EN SUPABASE.");
+    enviarMensaje(chatID, "🔥 TODOS LOS PACKS FUERON BORRADOS EN SUPABASE.");
     mostrarMenuPrincipal(chatID, "🏠 Menú Principal:");
   } catch (error) {
     if (!chatID) {

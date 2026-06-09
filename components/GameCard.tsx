@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { Tag, Gift, ChevronDown, ChevronUp, Zap, HardDrive, Gamepad2 } from 'lucide-react'; 
+import { Tag, Gift, ChevronDown, ChevronUp, Zap, HardDrive, Gamepad2, Heart, ArrowUpRight } from 'lucide-react'; 
 
 // 1. Definimos los tipos para que TypeScript no se queje en page.tsx
 interface GameCardProps {
@@ -16,6 +16,8 @@ interface GameCardProps {
   consoleName?: string | null;
   juegosIncluidos?: string[]; // Lista de juegos para el desplegable
   onAdd: () => void;
+  onSave?: () => void;
+  saved?: boolean;
 }
 
 export default function GameCard({ 
@@ -28,7 +30,9 @@ export default function GameCard({
   storageRequired,
   consoleName,
   juegosIncluidos, 
-  onAdd 
+  onAdd,
+  onSave,
+  saved = false,
 }: GameCardProps) {
   
   const [expandido, setExpandido] = useState(false);
@@ -40,21 +44,22 @@ export default function GameCard({
 
   // Detectamos si es una etiqueta de novedad para cambiarle el color
   const esNuevo = ahorro && ahorro.includes('NUEVO');
-  const isSwitch2Only = !esPack && (consoleName || '').toLowerCase().replace(/\s+/g, '').includes('switch2');
-  const consoleLabel = !esPack && consoleName ? (isSwitch2Only ? 'Solo Switch 2' : 'Switch 1 y 2') : null;
+  const cleanBadge = ahorro?.replace(/[🔥🚀]/g, '').replace(/[¡!]/g, '').trim();
+  const isSwitch2Only = (consoleName || '').toLowerCase().replace(/\s+/g, '').includes('switch2');
+  const consoleLabel = consoleName ? (isSwitch2Only ? 'Solo Switch 2' : 'Switch 1 y 2') : null;
   const hasMeta = Boolean(storageRequired) || Boolean(consoleLabel);
 
   return (
-    <div className="animate-soft-in group relative mx-auto flex h-full w-full max-w-[350px] flex-col overflow-hidden rounded-lg border border-[#536878]/30 bg-[#0a0a0a] shadow-[0_18px_42px_rgba(0,0,0,0.34)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-[#536878]/55 hover:bg-[#11181c] hover:shadow-[0_24px_56px_rgba(0,0,0,0.46)]">
+    <article className="animate-soft-in liquid-glass group relative mx-auto flex h-full w-full max-w-[350px] flex-col rounded-[1.55rem] p-1.5 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:shadow-[0_32px_78px_rgba(83,104,120,0.22)]">
       
       {/* 1. SECCIÓN DE IMAGEN */}
-      <div className="relative h-[244px] w-full shrink-0 overflow-hidden border-b border-[#536878]/25 bg-[#101417]">
+      <div className="relative h-[236px] w-full shrink-0 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[#101417]/80 shadow-inner shadow-white/5">
         {img ? (
           <Image 
             src={img} 
             alt={titulo} 
             fill 
-            className="object-cover transition duration-700 ease-out group-hover:scale-[1.035] group-hover:brightness-110"
+            className="object-cover transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.035] group-hover:brightness-110"
             sizes="(max-width: 768px) 100vw, 350px"
           />
         ) : (
@@ -63,45 +68,66 @@ export default function GameCard({
           </div>
         )}
 
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0)_52%,rgba(0,0,0,0.42)_100%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0)_45%,rgba(0,0,0,0.58)_100%)]" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/10 to-transparent" />
 
         {/* Badge Izquierdo (Tipo de Producto) */}
-        <div className={`absolute top-3 left-3 flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[10px] font-bold uppercase text-white shadow-lg backdrop-blur-xl ${esPack ? 'border-[#536878]/40 bg-[#536878]/85' : 'border-white/10 bg-black/65'}`}>
+        <div className={`absolute left-3 top-3 flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide shadow-lg backdrop-blur-xl ${esPack ? 'border-[#536878]/45 bg-[#536878]/85 text-[#e5e4e2]' : 'border-white/10 bg-black/62 text-white'}`}>
             {esPack ? <Gift size={10} /> : <Tag size={10} className="text-gray-400" />}
             {esPack ? 'Pack' : 'Digital'}
         </div>
 
         {/* Badge Derecho (Ofertas / Nuevo) - MEJORADO */}
         {ahorro && (
-            <div className={`absolute right-3 top-3 z-10 rounded-md px-2.5 py-1.5 text-[10px] font-black uppercase shadow-lg
+            <div className={`absolute right-3 top-3 z-10 rounded-full border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide shadow-lg backdrop-blur-xl
                 ${esNuevo 
-                    ? 'bg-yellow-300 text-black shadow-yellow-500/20' // Estilo para NUEVO
-                    : 'bg-red-500 text-white shadow-red-600/20' // Estilo para OFERTA
+                    ? 'border-[#e5e4e2]/40 bg-[#e5e4e2] text-[#0a0a0a] shadow-[#e5e4e2]/15'
+                    : 'border-red-300/25 bg-red-500/90 text-white shadow-red-600/20'
                 }`}>
-                {ahorro}
+                {cleanBadge}
             </div>
+        )}
+
+        {onSave && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSave();
+            }}
+            aria-label={saved ? "Favorito" : "Agregar a favoritos"}
+            className={`magnetic absolute right-3 z-20 flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-xl ${
+              ahorro ? "bottom-3" : "top-3"
+            } ${
+              saved
+                ? "border-[#e5e4e2]/70 bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-[#e5e4e2]/10"
+                : "border-white/10 bg-black/55 text-white hover:bg-white/15"
+            }`}
+          >
+            <Heart size={18} fill={saved ? "currentColor" : "none"} strokeWidth={2.5} />
+          </button>
         )}
       </div>
 
       {/* 2. SECCIÓN DE INFORMACIÓN */}
-      <div className="flex flex-1 flex-col p-4">
+      <div className="relative z-10 flex flex-1 flex-col px-3 pb-3 pt-4">
         
         <div className="mb-4">
-            <h3 className="mb-2 min-h-[40px] text-[16px] font-black leading-snug text-white line-clamp-2">
+            <h3 className="mb-2 min-h-[42px] text-[17px] font-black leading-tight tracking-[-0.01em] text-white line-clamp-2">
               {titulo}
             </h3>
             
             {/* LÓGICA DE LISTA EXPANDIBLE (Solo si es pack y tiene juegos) */}
             {esPack && juegosIncluidos && juegosIncluidos.length > 0 ? (
-                <div className="rounded-lg border border-[#536878]/30 bg-[#536878]/12 p-3 shadow-inner transition-all duration-300">
-                    <p className="mb-2 border-b border-white/5 pb-1 text-[10px] font-bold uppercase text-gray-400">
+                <div className="pack-list-glass rounded-[1rem] p-3 transition-all duration-500">
+                    <p className="mb-2 border-b border-white/10 pb-2 text-[10px] font-black uppercase tracking-wider text-[#d5dde1]">
                         Contiene {juegosIncluidos.length} Juegos:
                     </p>
-                    <ul className="text-gray-300 text-[11px] leading-relaxed space-y-1">
+                    <ul className="space-y-1.5 text-[12px] font-semibold leading-relaxed text-[#e5e4e2]">
                         {/* Muestra todos si está expandido, o solo los primeros 4 */}
                         {(expandido ? juegosIncluidos : juegosIncluidos.slice(0, 4)).map((juego: string, i: number) => (
                              <li key={i} className="flex items-start gap-1.5">
-                                <span className="mt-0.5 shrink-0 text-[8px] text-[#8fa7b8]">●</span> 
+                                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#9fb3c0]" /> 
                                 <span className={`${expandido ? "" : "line-clamp-1"} break-words`}>{juego}</span>
                              </li>
                         ))}
@@ -113,7 +139,7 @@ export default function GameCard({
                                 e.stopPropagation(); // Evita que se active el hover del padre
                                 setExpandido(!expandido);
                             }}
-                            className="mt-2 flex w-full items-center justify-center gap-1 border-t border-white/5 pt-2 text-[10px] font-bold uppercase text-[#a9bac5] transition-colors hover:text-white"
+                            className="magnetic mt-3 flex w-full items-center justify-center gap-1 border-t border-white/10 pt-2.5 text-[10px] font-black uppercase tracking-wide text-[#d5dde1] hover:text-white"
                         >
                             {expandido ? <>Ver menos <ChevronUp size={12} /></> : <>+ {juegosIncluidos.length - 4} juegos más <ChevronDown size={12} /></>}
                         </button>
@@ -121,17 +147,17 @@ export default function GameCard({
                 </div>
             ) : (
                 <div className="mt-2 space-y-3">
-                    <p className="text-[11px] font-medium text-gray-500">Licencia Oficial Nintendo</p>
+                    <p className="text-[11px] font-semibold text-gray-500">Licencia oficial Nintendo</p>
 
                     {hasMeta && (
                         <div className="flex flex-wrap gap-2">
                             {consoleLabel && (
-                                <span className="animate-soft-in inline-flex items-center gap-1.5 rounded-full border border-[#536878]/35 bg-[#536878]/18 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#a9bac5]">
+                                <span className="brand-chip animate-soft-in px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#a9bac5]">
                                     <Gamepad2 size={12} /> {consoleLabel}
                                 </span>
                             )}
                             {storageRequired && (
-                                <span className="animate-soft-in inline-flex items-center gap-1.5 rounded-full border border-[#536878]/30 bg-[#536878]/12 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400">
+                                <span className="brand-chip animate-soft-in px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400">
                                     <HardDrive size={12} /> {storageRequired}
                                 </span>
                             )}
@@ -144,7 +170,7 @@ export default function GameCard({
         {/* PRECIO Y BOTÓN */}
         <div className="mt-auto flex items-end justify-between gap-3 border-t border-white/5 pt-4">
             <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase text-gray-500">Precio</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Precio</span>
                 
                 {/* LÓGICA DE PRECIO TACHADO */}
                 <div className="flex flex-col">
@@ -154,7 +180,7 @@ export default function GameCard({
                          </span>
                     )}
                     <div className="flex items-baseline gap-1">
-                        <span className="text-[22px] font-black leading-none text-white">
+                        <span className="text-[24px] font-black leading-none tracking-[-0.04em] text-white">
                             ${formatoCLP(precio)}
                         </span>
                         <span className="text-[10px] text-gray-400">CLP</span>
@@ -165,17 +191,16 @@ export default function GameCard({
             {/* BOTÓN UNIFICADO */}
             <button 
                 onClick={onAdd}
-                className={`flex h-11 items-center gap-2 rounded-full px-5 text-xs font-black uppercase shadow-lg transition duration-300 active:scale-95 ${
-                  esPack 
-                    ? "bg-[#536878] text-[#e5e4e2] shadow-[#536878]/20 hover:bg-[#627988]" 
-                    : "bg-[#e5e4e2] text-[#0a0a0a] shadow-[#e5e4e2]/10 hover:bg-[#f0f0ee]"     
-                }`}
+                className="magnetic group/cta flex h-11 items-center gap-2 rounded-full bg-[#25d366] pl-4 pr-1.5 text-xs font-black uppercase tracking-wide text-[#06130a] shadow-lg shadow-[#25d366]/20 hover:bg-[#36e477]"
             >
-                {esPack ? <Gift size={16} strokeWidth={2.5} /> : <Zap size={16} strokeWidth={2.5} fill="currentColor" className="opacity-50" />}
-                COMPRAR
+                {esPack ? <Gift size={15} strokeWidth={2.5} /> : <Zap size={15} strokeWidth={2.5} fill="currentColor" className="opacity-55" />}
+                Comprar
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#06130a]/10 transition-transform duration-500 group-hover/cta:translate-x-0.5">
+                  <ArrowUpRight size={14} strokeWidth={2.6} />
+                </span>
             </button>
         </div>
       </div>
-    </div>
+    </article>
   );
 }

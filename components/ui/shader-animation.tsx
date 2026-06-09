@@ -67,6 +67,7 @@ export function ShaderAnimation({ className = "" }: ShaderAnimationProps) {
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
     renderer.domElement.style.display = "block";
+    renderer.domElement.style.pointerEvents = "none";
 
     container.appendChild(renderer.domElement);
 
@@ -110,5 +111,5 @@ export function ShaderAnimation({ className = "" }: ShaderAnimationProps) {
     };
   }, []);
 
-  return <div ref={containerRef} className={`h-full w-full overflow-hidden ${className}`} />;
+  return <div ref={containerRef} className={`pointer-events-none h-full w-full overflow-hidden ${className}`} />;
 }

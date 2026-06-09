@@ -1,17 +1,15 @@
 // app/page.tsx
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment, react-hooks/set-state-in-effect, react/no-unescaped-entities */
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react/no-unescaped-entities */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { 
   Home, Gamepad2, BookOpen, Search, Instagram, MessageCircle, 
   Loader2, ArrowDownCircle, Zap, Youtube, FileText, 
-  ShieldCheck, AlertTriangle, Facebook, X, Megaphone, Filter, Star, Gift, CheckCircle, ChevronRight
+  ShieldCheck, AlertTriangle, Facebook, X, Megaphone, Filter, Star, Gift, CheckCircle, ChevronRight, Heart
 } from 'lucide-react';
 import GameCard from '@/components/GameCard';
-import Papa from 'papaparse'; 
-import { DATA_IMAGENES } from './data/imagenes';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase } from '@/lib/catalog';
 import { ShaderAnimation } from '@/components/ui/shader-animation';
@@ -21,38 +19,6 @@ const CONFIG = {
   whatsappNumber: "56926411278",
   emailSoporte: "alfeicon.games@gmail.com",
   canalWhatsapp: "https://whatsapp.com/channel/0029VafHhlx0G0XpvqQKyG2D", 
-  sheetGames: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=1961555999&single=true&output=csv",
-  sheetPacks: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsDYcvcNTrISbWFc5O2Cyvtsn7Aaz_nEV32yWDLh_dIR_4t1Kz-cep6oaXnQQrCxfhRy1K-H6JTk4/pub?gid=858783180&single=true&output=csv",
-  
-  // Días para que un pack se considere NUEVO (y aparezca el aviso)
-  diasParaSerNuevo: 5 
-};
-
-// --- HELPERS ---
-const limpiarTexto = (texto: string) => texto.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-const buscarImagenLocal = (nombreJuego: string) => {
-  if (!nombreJuego || !DATA_IMAGENES) return null;
-  const inputLimpio = limpiarTexto(nombreJuego);
-  // @ts-ignore
-  const encontrado = DATA_IMAGENES.find((item: any) => 
-      limpiarTexto(item.name) === inputLimpio
-  );
-  return encontrado ? encontrado.url : null;
-};
-
-// --- FUNCIÓN DE FECHA BLINDADA ---
-const parseFechaSegura = (fechaStr: string) => {
-    if (!fechaStr) return null;
-    const fechaLimpia = fechaStr.split(' ')[0].trim();
-    const partes = fechaLimpia.split(/[-/]/); 
-    if (partes.length === 3) {
-        const dia = Number(partes[0]);
-        const mes = Number(partes[1]) - 1; 
-        const anio = Number(partes[2]);
-        return new Date(anio, mes, dia);
-    }
-    return null;
 };
 
 const FUSE_OPTIONS = {
@@ -75,6 +41,10 @@ export default function MobileAppStore() {
   const [filterTerm, setFilterTerm] = useState(""); 
   
   const [mostrarSoloOfertas, setMostrarSoloOfertas] = useState(false);
+  const [mostrarGuardados, setMostrarGuardados] = useState(false);
+  const [consoleFilter, setConsoleFilter] = useState<'all' | 'switch' | 'switch2'>('all');
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [savedToast, setSavedToast] = useState(false);
 
   const [productos, setProductos] = useState<any[]>([]);
   const [packs, setPacks] = useState<any[]>([]);
@@ -90,6 +60,15 @@ export default function MobileAppStore() {
     mediaQuery.addEventListener('change', syncTheme);
 
     return () => mediaQuery.removeEventListener('change', syncTheme);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('alfeicon_saved_items');
+      if (saved) setSavedIds(JSON.parse(saved));
+    } catch {
+      setSavedIds([]);
+    }
   }, []);
 
   // --- FUNCIONES (HANDLERS) ---
@@ -116,6 +95,22 @@ export default function MobileAppStore() {
     window.open(url, '_blank');
   }, []);
 
+  const toggleSaved = useCallback((item: any) => {
+    const itemId = String(item.id);
+
+    setSavedIds((current) => {
+      const next = current.includes(itemId)
+        ? current.filter((id) => id !== itemId)
+        : [...current, itemId];
+
+      window.localStorage.setItem('alfeicon_saved_items', JSON.stringify(next));
+      return next;
+    });
+
+    setSavedToast(true);
+    window.setTimeout(() => setSavedToast(false), 2400);
+  }, []);
+
   // --- EFECTOS ---
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -123,6 +118,8 @@ export default function MobileAppStore() {
         setSearchTerm("");
         setFilterTerm("");
         setMostrarSoloOfertas(false);
+        setMostrarGuardados(false);
+        setConsoleFilter('all');
     }
     setVisibleCount(20);
   }, [activeSection, storeTab]);
@@ -152,118 +149,11 @@ export default function MobileAppStore() {
     
     // CARGA DE DATOS
     const cargarDatos = async () => {
-        const supabaseCatalog = await fetchCatalogFromSupabase();
+      const supabaseCatalog = await fetchCatalogFromSupabase();
 
-        if (supabaseCatalog) {
-          setProductos(supabaseCatalog.productos);
-          setPacks(supabaseCatalog.packs);
-          setCargando(false);
-          return;
-        }
-
-        const timeStamp = new Date().getTime(); // Anti-caché
-
-        Papa.parse(CONFIG.sheetGames + "&t=" + timeStamp, {
-          download: true,
-          header: true,
-          skipEmptyLines: true,
-          complete: (results: any) => {
-            const datosLimpios = results.data.map((item: any, index: number) => {
-              const limpiarPrecio = (valor: string) => {
-                if (!valor) return 0;
-                return Number(valor.toString().replace(/[^0-9]/g, '')); 
-              };
-              const getCol = (key: string) => {
-                 const realKey = Object.keys(item).find(k => k.trim().toLowerCase() === key.toLowerCase());
-                 return realKey ? item[realKey] : undefined;
-              };
-              const titulo = getCol("NOMBRE DE JUEGOS");
-              const imagenFinal = getCol("imagen") || buscarImagenLocal(titulo);
-              const enOferta = getCol("En Oferta") === "SI";
-              const precioNormal = limpiarPrecio(getCol("Precio"));
-              const precioOferta = limpiarPrecio(getCol("Precio Oferta"));
-              const espacio = getCol("Espacio") || getCol("storage_required") || null;
-              const consola = getCol("Consola") || getCol("console") || null;
-
-              return {
-                id: `game-${index}`,
-                titulo: titulo, 
-                img: imagenFinal,
-                precio: enOferta ? precioOferta : precioNormal,
-                precioOriginal: enOferta ? precioNormal : null, 
-                esPack: false,
-                ahorro: enOferta ? "OFERTA 🔥" : null,
-                storageRequired: espacio,
-                consoleName: consola
-              };
-            }).filter((item: any) => item.titulo);
-            setProductos(datosLimpios);
-            if(packs.length > 0) setCargando(false); 
-          },
-          error: (error: any) => { console.error("Error Juegos:", error); }
-        });
-
-        Papa.parse(CONFIG.sheetPacks + "&t=" + timeStamp, {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: (results: any) => {
-              const packsLimpios = results.data.map((item: any, index: number) => {
-                const limpiarPrecio = (valor: string) => {
-                    if (!valor) return 0;
-                    return Number(valor.toString().replace(/[^0-9]/g, '')); 
-                };
-                const getCol = (key: string) => {
-                     const realKey = Object.keys(item).find(k => k.trim().toLowerCase() === key.toLowerCase());
-                     return realKey ? item[realKey] : undefined;
-                };
-                const rawJuegos = getCol("Juegos Incluidos") || "";
-                const listaJuegos = rawJuegos.split(/\r?\n/).filter((line: string) => line.trim() !== "");
-                const nombrePack = `Pack ${getCol("Pack ID") || index + 1}`;
-                
-                let imagenPack = getCol("imagen") || getCol("img");
-                if (!imagenPack && listaJuegos.length > 0) {
-                    for (const juegoRaw of listaJuegos) {
-                        const juegoLimpio = juegoRaw.replace(/^\d+\.?\s*/, '').trim();
-                        const posibleImagen = buscarImagenLocal(juegoLimpio);
-                        if (posibleImagen) { imagenPack = posibleImagen; break; }
-                    }
-                }
-
-                let esNuevo = false;
-                const fechaStr = getCol("fecha");
-                const fechaPack = parseFechaSegura(fechaStr);
-                
-                if (fechaPack) {
-                    const hoy = new Date();
-                    const fechaPackSinHora = new Date(fechaPack.getFullYear(), fechaPack.getMonth(), fechaPack.getDate());
-                    const hoySinHora = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-                    const diffTime = Math.abs(hoySinHora.getTime() - fechaPackSinHora.getTime());
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-                    
-                    if (diffDays <= CONFIG.diasParaSerNuevo) {
-                        esNuevo = true;
-                    }
-                }
-
-                return {
-                  id: `pack-${index}`,
-                  titulo: nombrePack,
-                  img: imagenPack, 
-                  precio: limpiarPrecio(getCol("Precio CLP")),
-                  esPack: true,
-                  ahorro: esNuevo ? "¡NUEVO! 🚀" : null,
-                  juegosIncluidos: listaJuegos,
-                  esNuevo: esNuevo
-                };
-              }).filter((item: any) => item.precio > 0);
-              
-              packsLimpios.sort((a: any, b: any) => (b.esNuevo === true ? 1 : 0) - (a.esNuevo === true ? 1 : 0));
-              setPacks(packsLimpios);
-              setCargando(false);
-            },
-            error: (error: any) => console.error("Error Packs:", error)
-        });
+      setProductos(supabaseCatalog?.productos || []);
+      setPacks(supabaseCatalog?.packs || []);
+      setCargando(false);
     };
     cargarDatos();
     return () => window.removeEventListener('scroll', handleScroll);
@@ -290,8 +180,18 @@ export default function MobileAppStore() {
     if (mostrarSoloOfertas && storeTab === 'individual') {
         items = items.filter(item => item.ahorro); 
     }
+    if (mostrarGuardados) {
+        items = items.filter(item => savedIds.includes(String(item.id)));
+    }
+    if (consoleFilter !== 'all') {
+        items = items.filter(item => {
+          const consoleName = String(item.consoleName || '').toLowerCase().replace(/\s+/g, '');
+          const isSwitch2Only = consoleName.includes('switch2');
+          return consoleFilter === 'switch2' ? isSwitch2Only : !isSwitch2Only;
+        });
+    }
     return items;
-  }, [storeTab, productos, packs, filterTerm, fuseInstance, mostrarSoloOfertas]);
+  }, [storeTab, productos, packs, filterTerm, fuseInstance, mostrarSoloOfertas, mostrarGuardados, savedIds, consoleFilter]);
 
   const listaVisual = listaFiltrada.slice(0, visibleCount);
   const navIndex = {
@@ -304,17 +204,18 @@ export default function MobileAppStore() {
   // --- RENDER ---
   return (
     <div data-theme={theme} className={`alfeicon-theme ${theme === 'light' ? 'theme-light' : 'theme-dark'} min-h-screen bg-black flex justify-center selection:bg-white selection:text-black`}>
-      <div className="w-full max-w-md bg-black min-h-screen relative shadow-2xl border-x border-gray-900 font-sans text-white overflow-hidden">
+      <div className="noise-overlay" />
+      <div className="relative z-10 w-full max-w-md bg-black min-h-screen shadow-2xl border-x border-gray-900 font-sans text-white overflow-hidden">
         
         {/* MAIN */}
         <main className="pb-32 px-4 min-h-screen">
           
 {/* SECCIÓN 1: INICIO */}
           {activeSection === 'inicio' && (
-            <div className="animate-fade-in space-y-8">
+            <div className="animate-fade-in space-y-7">
               {/* PORTADA DE MARCA */}
-              <section className="animate-soft-in -mx-4 overflow-hidden border-b border-white/10 bg-black px-5 pb-7 pt-7">
-                <div className="relative mx-auto max-w-[360px] rounded-[2rem] border border-[#536878]/40 bg-[#0a0a0a] p-5 shadow-2xl">
+              <section className="animate-soft-in -mx-4 overflow-hidden border-b border-white/10 bg-black px-5 pb-7 pt-6">
+                <div className="brand-shell relative mx-auto max-w-[360px] rounded-[2.15rem] p-5">
                   <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[2rem] opacity-25">
                     <ShaderAnimation />
                   </div>
@@ -328,17 +229,17 @@ export default function MobileAppStore() {
                       </div>
                       <div className="flex items-center gap-2 rounded-full border border-[#536878]/45 bg-[#536878]/18 px-3 py-1.5">
                         <span className="relative flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#a9bac5] opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#a9bac5]" />
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3de26f] opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#3de26f] shadow-[0_0_12px_rgba(61,226,111,0.85)]" />
                         </span>
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#d5dde1]">Online</span>
                       </div>
                     </div>
 
-                    <p className="mb-2 text-[10px] font-black uppercase tracking-[0.32em] text-gray-500">Nintendo Switch</p>
-                    <h1 className="text-[34px] font-black uppercase leading-[0.9] tracking-tight text-white">
+                    <p className="brand-kicker mb-3">Nintendo Switch</p>
+                    <h1 className="brand-title text-[38px] font-black uppercase text-white">
                       Alfeicon<br />
-                      <span className="font-light tracking-[0.16em]">Games</span>
+                      <span className="font-light tracking-[0.18em]">Games</span>
                     </h1>
                     <p className="mt-4 max-w-[270px] text-sm font-semibold leading-relaxed text-gray-400">
                       Juegos digitales, packs y ofertas con compra directa por WhatsApp.
@@ -347,38 +248,38 @@ export default function MobileAppStore() {
                     <div className="mt-6 grid grid-cols-[1fr_auto] gap-3">
                       <button
                         onClick={() => setActiveSection('catalogo')}
-                        className="flex h-12 items-center justify-center gap-2 rounded-full bg-[#536878] px-5 text-xs font-black uppercase tracking-widest text-[#e5e4e2] shadow-lg shadow-[#536878]/30 transition hover:bg-[#627988] active:scale-95"
+                        className="magnetic group flex h-12 items-center justify-center gap-2 rounded-full bg-[#536878] px-5 text-xs font-black uppercase tracking-widest text-[#e5e4e2] shadow-lg shadow-[#536878]/30 hover:bg-[#627988]"
                       >
-                        Ver catalogo <ChevronRight size={15} />
+                        Ver catalogo <ChevronRight size={15} className="transition-transform duration-500 group-hover:translate-x-0.5" />
                       </button>
                       <a
                         href={CONFIG.canalWhatsapp}
                         target="_blank"
-                        className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-[#e5e4e2]/10 transition active:scale-95"
+                        className="magnetic flex h-12 w-12 items-center justify-center rounded-full bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-[#e5e4e2]/10"
                         aria-label="Canal de WhatsApp"
                       >
                         <Megaphone size={19} fill="currentColor" />
                       </a>
                     </div>
 
-                    <div className="mt-5 grid grid-cols-3 gap-2">
-                      <div className="group relative min-h-[86px] overflow-hidden rounded-2xl border border-[#7f9aaa]/35 bg-[#536878]/18 px-3 py-3 shadow-[inset_0_1px_0_rgba(229,228,226,0.12)] backdrop-blur-xl transition duration-500 hover:bg-[#536878]/26">
+                    <div className="mt-5 grid grid-cols-3 gap-2.5">
+                      <div className="liquid-glass group min-h-[78px] rounded-[1.1rem] px-3 py-3 transition duration-500">
                         <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/10 to-transparent" />
                         <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#9fb3c0]/12 blur-2xl" />
                         <p className="relative text-2xl font-black leading-none text-white">{productos.length || '-'}</p>
-                        <p className="relative mt-3 text-[9px] font-black uppercase tracking-widest text-gray-500">Juegos</p>
+                        <p className="relative mt-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500">Juegos</p>
                       </div>
-                      <div className="group relative min-h-[86px] overflow-hidden rounded-2xl border border-[#8aa1ad]/30 bg-[#6f8190]/16 px-3 py-3 shadow-[inset_0_1px_0_rgba(229,228,226,0.12)] backdrop-blur-xl transition duration-500 hover:bg-[#6f8190]/24">
+                      <div className="liquid-glass group min-h-[78px] rounded-[1.1rem] px-3 py-3 transition duration-500">
                         <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/10 to-transparent" />
                         <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#b8c3ca]/12 blur-2xl" />
                         <p className="relative text-2xl font-black leading-none text-white">{packs.length || '-'}</p>
-                        <p className="relative mt-3 text-[9px] font-black uppercase tracking-widest text-gray-500">Packs</p>
+                        <p className="relative mt-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500">Packs</p>
                       </div>
-                      <div className="group relative min-h-[86px] overflow-hidden rounded-2xl border border-[#c8c8c4]/22 bg-[#e5e4e2]/10 px-3 py-3 shadow-[inset_0_1px_0_rgba(229,228,226,0.14)] backdrop-blur-xl transition duration-500 hover:bg-[#e5e4e2]/16">
+                      <div className="liquid-glass group min-h-[78px] rounded-[1.1rem] px-3 py-3 transition duration-500">
                         <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/12 to-transparent" />
                         <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#e5e4e2]/10 blur-2xl" />
                         <p className="relative text-2xl font-black leading-none text-white">{ofertasFlash.length || '-'}</p>
-                        <p className="relative mt-3 text-[9px] font-black uppercase tracking-widest text-gray-500">Ofertas</p>
+                        <p className="relative mt-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500">Ofertas</p>
                       </div>
                     </div>
                   </div>
@@ -388,17 +289,17 @@ export default function MobileAppStore() {
               {/* AVISO DE NOVEDADES (BANNER ELEGANTE) */}
               {nuevosLanzamientos.length > 0 && (
                 <div className="animate-fade-in mx-1">
-                   <div className="relative w-full bg-gradient-to-r from-[#1a1a2e] to-[#16213e] border border-blue-500/30 rounded-2xl p-4 shadow-xl overflow-hidden group">
-                       <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[40px] translate-x-10 -translate-y-10"></div>
+                   <div className="liquid-glass group rounded-[1.45rem] p-4">
+                       <div className="absolute right-0 top-0 h-28 w-28 translate-x-10 -translate-y-10 rounded-full bg-[#536878]/20 blur-[40px]"></div>
                        
                        <div className="flex items-center justify-between relative z-10">
                            <div className="flex items-center gap-3">
-                               <div className="bg-blue-600/20 p-2.5 rounded-full border border-blue-500/30 animate-pulse">
+                               <div className="rounded-full border border-[#536878]/30 bg-[#536878]/20 p-2.5">
                                    <Megaphone size={18} className="text-blue-400" />
                                </div>
                                <div className="flex flex-col">
-                                   <h3 className="text-sm font-black text-white uppercase italic tracking-wider">
-                                       ¡Nuevos Packs Disponibles!
+                                   <h3 className="text-sm font-black uppercase tracking-wide text-white">
+                                       Packs recientes
                                    </h3>
                                    <p className="text-[10px] text-gray-400 font-medium">
                                        Hemos agregado <span className="text-blue-400 font-bold">{nuevosLanzamientos.length} packs</span> al catálogo.
@@ -411,9 +312,9 @@ export default function MobileAppStore() {
                                    setStoreTab('packs'); 
                                    setActiveSection('catalogo');
                                }}
-                               className="bg-white text-blue-900 hover:bg-gray-200 text-[9px] font-black uppercase tracking-widest px-4 py-2.5 rounded-full shadow-lg shadow-blue-900/20 transition-all active:scale-95 flex items-center gap-1"
+                               className="magnetic flex items-center gap-1 rounded-full bg-white px-4 py-2.5 text-[9px] font-black uppercase tracking-widest text-black shadow-lg shadow-white/10 hover:bg-gray-200"
                            >
-                               Ver Ahora <ChevronRight size={12} />
+                               Ver ahora <ChevronRight size={12} />
                            </button>
                        </div>
                    </div>
@@ -421,12 +322,12 @@ export default function MobileAppStore() {
               )}
 
               {/* RECUADRO CÓMO COMPRAR */}
-              <div className="mx-1 overflow-hidden rounded-3xl border border-[#536878]/30 bg-[#0a0a0a] p-5 shadow-xl">
+              <div className="brand-shell mx-1 rounded-[2rem] p-5">
                   <div className="mb-5 flex items-center justify-between gap-3">
-                    <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">
+                    <h3 className="brand-kicker flex items-center gap-2">
                         <CheckCircle size={14} /> Compra en 4 pasos
                     </h3>
-                    <span className="rounded-full border border-[#536878]/30 bg-[#536878]/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Desliza</span>
+                    <span className="brand-chip px-2.5 py-1 text-[9px] font-black uppercase tracking-widest">Desliza</span>
                   </div>
 
                   <div className="-mx-2 flex snap-x snap-mandatory gap-3 overflow-x-auto px-2 pb-3 scrollbar-hide">
@@ -458,7 +359,7 @@ export default function MobileAppStore() {
                       ].map((item, index) => (
                         <article
                           key={item.step}
-                          className="animate-soft-in relative min-w-[82%] snap-center overflow-hidden rounded-[1.35rem] border border-[#536878]/35 bg-[#101417] shadow-[0_18px_36px_rgba(0,0,0,0.28)]"
+                          className="liquid-glass animate-soft-in min-w-[82%] snap-center rounded-[1.35rem]"
                           style={{ animationDelay: `${index * 90}ms` }}
                         >
                           <div className="relative aspect-[16/9] overflow-hidden bg-[#0a0a0a]">
@@ -480,18 +381,18 @@ export default function MobileAppStore() {
               {/* CLIENTES FELICES */}
               <div className="mb-4 mt-6">
                   <div className="flex items-center justify-between mb-4 px-2">
-                    <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={16} className="text-green-400" /> Clientes Felices</h3>
-                    <a href="https://instagram.com/alfeicon_games" target="_blank" className="text-[10px] text-blue-400 font-bold hover:text-white transition flex items-center gap-1">Ver Historias <Instagram size={10} /></a>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2"><ShieldCheck size={16} className="text-blue-400" /> Clientes felices</h3>
+                    <a href="https://instagram.com/alfeicon_games" target="_blank" className="magnetic flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold text-blue-400 hover:bg-white/5 hover:text-white">Ver historias <Instagram size={10} /></a>
                   </div>
                   <div className="flex overflow-x-auto gap-3 px-2 pb-4 snap-x snap-mandatory scrollbar-hide">
                     {[1, 2, 3, 4].map((num) => (
-                      <div key={num} className="min-w-[140px] w-[140px] aspect-[9/16] relative rounded-xl overflow-hidden border border-white/10 shrink-0 snap-center bg-[#151515] group">
+                      <div key={num} className="liquid-glass min-w-[140px] w-[140px] aspect-[9/16] relative rounded-[1.15rem] shrink-0 snap-center group">
                         <Image src={`/clientes/${num}.jpg`} alt={`Cliente ${num}`} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
                         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-3 pt-10">
                            <div className="flex gap-0.5 mb-1">
                               {[1,2,3,4,5].map(star => <Star key={star} size={8} className="text-yellow-400 fill-yellow-400" />)}
                            </div>
-                           <p className="text-[9px] text-gray-300 font-medium">Compra Verificada</p>
+                           <p className="text-[9px] text-gray-300 font-medium">Compra verificada</p>
                         </div>
                       </div>
                     ))}
@@ -505,15 +406,17 @@ export default function MobileAppStore() {
               {/* OFERTAS FLASH */}
               <div>
                 <div className="flex items-center justify-between mb-4 px-1">
-                   <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">🔥 Ofertas Flash</h3>
-                   <span className="text-[10px] text-gray-500 font-bold bg-white/10 px-2 py-1 rounded-full animate-pulse">Desliza →</span>
+                   <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2"><Zap size={15} className="text-blue-400" /> Ofertas destacadas</h3>
+                   <span className="brand-chip px-2 py-1 text-[10px] font-bold">Desliza</span>
                 </div>
                 <div className="flex overflow-x-auto gap-4 px-2 pb-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                   {cargando ? ([1,2,3].map(i => <div key={i} className="min-w-[280px] h-[350px] bg-[#111] rounded-xl animate-pulse border border-white/5 shrink-0" />)) : (
+                   {cargando ? ([1,2,3].map(i => <div key={i} className="brand-shell min-w-[280px] h-[410px] rounded-[1.55rem] shrink-0 animate-pulse" />)) : (
                       ofertasFlash.map((item) => (
                         <div key={item.id} className="min-w-[280px] snap-center shrink-0">
                              <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} storageRequired={item.storageRequired} consoleName={item.consoleName}
                                 onAdd={() => comprarDirecto(item)} 
+                                onSave={() => toggleSaved(item)}
+                                saved={savedIds.includes(String(item.id))}
                              />
                         </div>
                       ))
@@ -524,15 +427,17 @@ export default function MobileAppStore() {
               {/* PACKS DESTACADOS */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-4 px-1">
-                   <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2"><Gift size={16} className="text-blue-400" /> Packs Imperdibles</h3>
-                   <button onClick={() => {setStoreTab('packs'); setActiveSection('catalogo');}} className="text-[10px] text-blue-400 font-bold bg-blue-900/20 px-3 py-1.5 rounded-full hover:bg-blue-900/40 transition border border-blue-500/30">Ver todos →</button>
+                   <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2"><Gift size={16} className="text-blue-400" /> Packs imperdibles</h3>
+                   <button onClick={() => {setStoreTab('packs'); setActiveSection('catalogo');}} className="magnetic rounded-full border border-blue-500/30 bg-blue-900/20 px-3 py-1.5 text-[10px] font-bold text-blue-400 hover:bg-blue-900/40">Ver todos</button>
                 </div>
                 <div className="flex overflow-x-auto gap-4 px-2 pb-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                   {cargando ? ([1,2,3].map(i => <div key={i} className="min-w-[280px] h-[350px] bg-[#111] rounded-xl animate-pulse border border-white/5 shrink-0" />)) : (
+                   {cargando ? ([1,2,3].map(i => <div key={i} className="brand-shell min-w-[280px] h-[410px] rounded-[1.55rem] shrink-0 animate-pulse" />)) : (
                       packsDestacados.map((item) => (
                         <div key={item.id} className="min-w-[280px] snap-center shrink-0">
-                             <GameCard titulo={item.titulo} precio={item.precio} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos}
+                             <GameCard titulo={item.titulo} precio={item.precio} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos} consoleName={item.consoleName}
                                 onAdd={() => comprarDirecto(item)} 
+                                onSave={() => toggleSaved(item)}
+                                saved={savedIds.includes(String(item.id))}
                              />
                         </div>
                       ))
@@ -546,40 +451,65 @@ export default function MobileAppStore() {
           {/* SECCIÓN 2: CATÁLOGO */}
           {activeSection === 'catalogo' && (
             <div className="animate-fade-in">
-              <div className="sticky top-3 z-30 -mx-1 mb-4 space-y-3 rounded-3xl border border-white/10 bg-black/75 p-3 shadow-[0_18px_44px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+              <div className="premium-surface sticky top-3 z-30 -mx-1 mb-4 space-y-3 rounded-[1.8rem] p-3 backdrop-blur-2xl">
                 <div className={`relative flex items-center transition-transform duration-300 ${searchTerm || filterTerm ? 'scale-[1.01]' : 'scale-100'}`}>
                   <input type="text" placeholder={storeTab === 'individual' ? "Busca tu juego..." : "Busca en packs..."} value={searchTerm} onChange={(e) => { const texto = e.target.value; setSearchTerm(texto); if (texto === "") { setFilterTerm(""); setVisibleCount(20); } }} onKeyDown={(e) => { if (e.key === 'Enter') ejecutarBusqueda(); }} className="premium-control w-full rounded-full py-3 pl-5 pr-14 text-base text-white shadow-inner transition-all placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white/15"/>
-                  <button onClick={ejecutarBusqueda} className="absolute right-2 flex items-center justify-center rounded-full bg-white p-2.5 text-black shadow-lg shadow-white/10 transition duration-300 hover:bg-gray-100 active:scale-90"><Search size={18} strokeWidth={3} /></button>
+                  <button onClick={ejecutarBusqueda} className="magnetic absolute right-2 flex items-center justify-center rounded-full bg-white p-2.5 text-black shadow-lg shadow-white/10 hover:bg-gray-100"><Search size={18} strokeWidth={3} /></button>
                 </div>
 
                 <div className="premium-surface relative flex overflow-hidden rounded-full p-1">
                   <span
-                    className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-full bg-white shadow-lg shadow-white/10 transition-transform duration-500 ease-out ${
+                    className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-full bg-white shadow-lg shadow-white/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       storeTab === 'packs' ? 'translate-x-[calc(100%+0.5rem)]' : 'translate-x-0'
                     }`}
                   />
                   <button onClick={() => {setStoreTab('individual'); setSearchTerm(""); setFilterTerm("");}} className={`relative z-10 flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-colors duration-300 ${storeTab === 'individual' ? 'text-black' : 'text-gray-500 hover:text-white'}`}>Juegos Unitarios</button>
-                  <button onClick={() => {setStoreTab('packs'); setSearchTerm(""); setFilterTerm("");}} className={`relative z-10 flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-colors duration-300 ${storeTab === 'packs' ? 'text-black' : 'text-gray-500 hover:text-white'}`}>Pack de Juegos</button>
+                  <button onClick={() => {setStoreTab('packs'); setSearchTerm(""); setFilterTerm(""); setMostrarSoloOfertas(false);}} className={`relative z-10 flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-colors duration-300 ${storeTab === 'packs' ? 'text-black' : 'text-gray-500 hover:text-white'}`}>Pack de Juegos</button>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  {[
+                    { id: 'all', label: 'Todo' },
+                    { id: 'switch', label: 'Switch 1 y 2' },
+                    { id: 'switch2', label: 'Solo Switch 2' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setConsoleFilter(item.id as 'all' | 'switch' | 'switch2')}
+                      className={`magnetic shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
+                        consoleFilter === item.id
+                          ? 'border-[#e5e4e2]/70 bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-white/10'
+                          : 'premium-control text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               
               {cargando ? (
                  <div className="flex flex-col items-center justify-center py-32 space-y-6 animate-pulse">
                     <div className="relative w-20 h-20 opacity-50"><Image src="/logo.png" alt="Loading" fill className="object-contain" /></div>
-                    <div className="flex items-center gap-2 text-blue-400 text-xs font-bold uppercase tracking-[0.2em]"><Loader2 className="animate-spin" size={14} />Cargando...</div>
+                    <div className="flex items-center gap-2 text-blue-400 text-xs font-bold uppercase tracking-[0.2em]"><Loader2 className="animate-spin" size={14} />Cargando catálogo</div>
                  </div>
               ) : (
                 <>
                   <div className="flex justify-between items-center px-2 mb-4 animate-fade-in">
-                    <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-                      {mostrarSoloOfertas ? "🔥 Solo Ofertas" : "Todos los Juegos"}
-                      <span className="text-white ml-2 text-sm">({listaFiltrada.length})</span>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500">
+                      {mostrarSoloOfertas ? "Ofertas" : mostrarGuardados ? "Favoritos" : storeTab === 'packs' ? "Packs" : "Juegos"}
+                      <span className="ml-2 text-xs text-white">({listaFiltrada.length})</span>
                     </p>
-                    {storeTab === 'individual' && (
-                        <button onClick={() => setMostrarSoloOfertas(!mostrarSoloOfertas)} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase transition-all duration-300 ${mostrarSoloOfertas ? "border-red-400/60 bg-red-500 text-white shadow-lg shadow-red-900/30" : "premium-control text-gray-400 hover:text-white"}`}>
-                            <Filter size={12} />{mostrarSoloOfertas ? "Ver Todo" : "Ver Ofertas"}
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setMostrarGuardados(!mostrarGuardados)} className={`magnetic flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase ${mostrarGuardados ? "border-[#e5e4e2]/70 bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-white/10" : "premium-control text-gray-400 hover:text-white"}`}>
+                          <Heart size={12} fill={mostrarGuardados ? "currentColor" : "none"} />{mostrarGuardados ? "Favoritos" : savedIds.length}
+                      </button>
+                      {storeTab === 'individual' && (
+                        <button onClick={() => setMostrarSoloOfertas(!mostrarSoloOfertas)} className={`magnetic flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase ${mostrarSoloOfertas ? "border-red-400/60 bg-red-500 text-white shadow-lg shadow-red-900/30" : "premium-control text-gray-400 hover:text-white"}`}>
+                            <Filter size={12} />{mostrarSoloOfertas ? "Todo" : "Ofertas"}
                         </button>
-                    )}
+                      )}
+                    </div>
                   </div>
                   
                   <div key={`${storeTab}-${filterTerm}-${mostrarSoloOfertas ? 'ofertas' : 'todos'}`} className="grid grid-cols-1 gap-8 animate-fade-in pb-8 px-2">
@@ -588,14 +518,20 @@ export default function MobileAppStore() {
                           <div key={item.id} className="animate-soft-in w-full max-w-[350px] mx-auto" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
                              <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos} storageRequired={item.storageRequired} consoleName={item.consoleName}
                                 onAdd={() => comprarDirecto(item)}
+                                onSave={() => toggleSaved(item)}
+                                saved={savedIds.includes(String(item.id))}
                              />
                           </div>
                         ))
                       ) : (
                           <div className="flex flex-col items-center py-20 text-gray-500">
                               <Search size={40} className="mb-4 opacity-20" />
-                              <p className="text-sm">No encontramos juegos...</p>
-                              <button onClick={() => {setFilterTerm(""); setSearchTerm(""); setVisibleCount(20); setMostrarSoloOfertas(false);}} className="mt-4 text-blue-400 text-xs underline">Ver todo el catálogo</button>
+                              <p className="text-sm font-bold">No encontramos resultados</p>
+                              <p className="mt-1 max-w-[230px] text-center text-xs font-semibold leading-relaxed">Puedes limpiar filtros o preguntarnos por WhatsApp si buscas un juego específico.</p>
+                              <div className="mt-4 flex gap-2">
+                                <button onClick={() => {setFilterTerm(""); setSearchTerm(""); setVisibleCount(20); setMostrarSoloOfertas(false); setMostrarGuardados(false); setConsoleFilter('all');}} className="magnetic rounded-full bg-white px-4 py-2 text-xs font-black uppercase text-black">Ver todo</button>
+                                <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="magnetic rounded-full border border-white/10 px-4 py-2 text-xs font-black uppercase text-white">Consultar</a>
+                              </div>
                           </div>
                       )}
                   </div>
@@ -828,23 +764,23 @@ export default function MobileAppStore() {
           )}
         </main>
 
-{/* MODAL TÉRMINOS Y CONDICIONES - TEXTO GRANDE Y NUMERACIÓN SIMPLE */}
+{/* MODAL TÉRMINOS Y CONDICIONES */}
 {showTerms && (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in">
-        <div className="bg-[#111] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/88 p-4 backdrop-blur-2xl animate-fade-in">
+        <div className="brand-shell flex max-h-[90vh] w-full max-w-md flex-col rounded-[2rem]">
             
             {/* Header del Modal */}
-            <div className="p-5 border-b border-white/5 flex justify-between items-center bg-[#151515] rounded-t-3xl">
+            <div className="flex items-center justify-between border-b border-white/5 p-5">
                 <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
                     <ShieldCheck size={18} className="text-blue-500" /> Términos y Condiciones
                 </h3>
-                <button onClick={() => setShowTerms(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/20 transition text-white">
+                <button onClick={() => setShowTerms(false)} className="magnetic rounded-full bg-white/5 p-2 text-white hover:bg-white/20">
                     <X size={20} />
                 </button>
             </div>
             
             {/* Contenido con Scroll - Texto más grande */}
-            <div className="p-6 overflow-y-auto text-left space-y-8 text-[13px] text-gray-300 leading-relaxed scrollbar-hide">
+            <div className="space-y-8 overflow-y-auto p-6 text-left text-[13px] leading-relaxed text-gray-300 scrollbar-hide">
                 
                 {/* 1. Instalación */}
                 <section className="space-y-3">
@@ -892,7 +828,7 @@ export default function MobileAppStore() {
                     </div>
                     <p>• Cubre fallos del juego no causados por el usuario. Incluye reposición (1 vez) o devolución del 50%.</p>
                     <p className="text-xs text-red-500 font-bold bg-red-500/5 p-3 rounded-lg border border-red-500/20">
-                        ❌ NO APLICA SI: Eliminas el juego/cuenta, juegas con el perfil entregado, se trata de un PACK o interrupciones por corte de luz/apagado.
+                        No aplica si eliminas el juego/cuenta, juegas con el perfil entregado, se trata de un pack o hay interrupciones por corte de luz/apagado.
                     </p>
                 </section>
 
@@ -910,8 +846,8 @@ export default function MobileAppStore() {
             </div>
 
             {/* Botón de Cierre */}
-            <div className="p-4 border-t border-white/5 bg-[#111] rounded-b-3xl">
-                <button onClick={() => setShowTerms(false)} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl uppercase text-xs tracking-[0.2em] hover:bg-blue-500 transition shadow-lg shadow-blue-900/40 active:scale-95">
+            <div className="border-t border-white/5 p-4">
+                <button onClick={() => setShowTerms(false)} className="magnetic w-full rounded-full bg-[#e5e4e2] py-4 text-xs font-black uppercase tracking-[0.2em] text-[#0a0a0a] shadow-lg shadow-white/10 hover:bg-white">
                     Entendido y Acepto
                 </button>
             </div>
@@ -919,8 +855,31 @@ export default function MobileAppStore() {
     </div>
 )}
 
+        {savedToast && (
+          <div className="fixed bottom-24 left-1/2 z-[55] w-[min(360px,calc(100%-2rem))] -translate-x-1/2 animate-soft-in">
+            <div className="brand-shell flex items-center justify-between rounded-[1.7rem] px-5 py-4 text-white backdrop-blur-2xl">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-[#0a0a0a]">
+                  <Heart size={18} fill="currentColor" />
+                </span>
+                <span className="text-sm font-black">Guardado</span>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveSection('catalogo');
+                  setMostrarGuardados(true);
+                  setSavedToast(false);
+                }}
+                className="rounded-full px-3 py-2 text-sm font-black text-white transition hover:bg-white/10 active:scale-95"
+              >
+                Ver todo
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* NAVEGACIÓN INFERIOR */}
-        <nav className={`fixed bottom-5 left-1/2 z-50 flex h-16 w-[min(360px,calc(100%-2rem))] -translate-x-1/2 items-center justify-around overflow-hidden rounded-full border border-white/10 bg-white/10 px-2 shadow-[0_18px_44px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-transform duration-500 ease-out ${showBottomNav ? 'translate-y-0' : 'translate-y-28'}`}>
+        <nav className={`premium-surface fixed bottom-5 left-1/2 z-50 flex h-16 w-[min(360px,calc(100%-2rem))] -translate-x-1/2 items-center justify-around overflow-hidden rounded-full px-2 backdrop-blur-2xl transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${showBottomNav ? 'translate-y-0' : 'translate-y-28'}`}>
           <span
             className="pointer-events-none absolute left-2 top-2 h-12 rounded-full bg-[#e5e4e2] shadow-lg shadow-[#e5e4e2]/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{

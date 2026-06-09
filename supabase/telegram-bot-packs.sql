@@ -1,5 +1,5 @@
 -- Telegram bot support for pack uploads.
--- Run once in the Supabase SQL Editor before switching the bot from Google Sheets.
+-- Run once in the Supabase SQL Editor before using the Telegram bot with Supabase.
 
 alter table public.packs
 add column if not exists bot_pack_number integer unique,
