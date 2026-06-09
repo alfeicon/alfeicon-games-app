@@ -2,7 +2,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react/no-unescaped-entities */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
 import Image from 'next/image';
 import { 
   Home, Gamepad2, BookOpen, Search, Instagram, MessageCircle, 
@@ -12,6 +12,7 @@ import {
 import GameCard from '@/components/GameCard';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase } from '@/lib/catalog';
+import { DEFAULT_APP_SETTINGS, fetchAppSettings } from '@/lib/settings';
 import { ShaderAnimation } from '@/components/ui/shader-animation';
 
 // --- CONFIGURACIÓN ---
@@ -45,9 +46,14 @@ export default function MobileAppStore() {
   const [consoleFilter, setConsoleFilter] = useState<'all' | 'switch' | 'switch2'>('all');
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [savedToast, setSavedToast] = useState(false);
+  const [purchaseTransition, setPurchaseTransition] = useState(false);
+  const [purchaseOrigin, setPurchaseOrigin] = useState({ x: 0, y: 0 });
+  const purchaseTimerRef = useRef<number | null>(null);
+  const purchaseResetTimerRef = useRef<number | null>(null);
 
   const [productos, setProductos] = useState<any[]>([]);
   const [packs, setPacks] = useState<any[]>([]);
+  const [appSettings, setAppSettings] = useState(DEFAULT_APP_SETTINGS);
   const [cargando, setCargando] = useState(true);
   
   const [visibleCount, setVisibleCount] = useState(20); 
@@ -65,10 +71,28 @@ export default function MobileAppStore() {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('alfeicon_saved_items');
-      if (saved) setSavedIds(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const originalLength = Array.isArray(parsed) ? parsed.length : 0;
+        const normalized = Array.isArray(parsed)
+          ? parsed.filter((id) => typeof id === 'string' && (id.startsWith('game:') || id.startsWith('pack:')))
+          : [];
+
+        setSavedIds(normalized);
+        if (normalized.length !== originalLength) {
+          window.localStorage.setItem('alfeicon_saved_items', JSON.stringify(normalized));
+        }
+      }
     } catch {
       setSavedIds([]);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (purchaseTimerRef.current) window.clearTimeout(purchaseTimerRef.current);
+      if (purchaseResetTimerRef.current) window.clearTimeout(purchaseResetTimerRef.current);
+    };
   }, []);
 
   // --- FUNCIONES (HANDLERS) ---
@@ -77,7 +101,33 @@ export default function MobileAppStore() {
     setVisibleCount(20); 
   }, [searchTerm]);
 
-  const comprarDirecto = useCallback((item: any) => {
+  const goToWhatsApp = useCallback((url: string, event?: MouseEvent<HTMLElement>) => {
+    if (purchaseTimerRef.current) window.clearTimeout(purchaseTimerRef.current);
+    if (purchaseResetTimerRef.current) window.clearTimeout(purchaseResetTimerRef.current);
+
+    if (event?.currentTarget) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setPurchaseOrigin({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      });
+    } else {
+      setPurchaseOrigin({
+        x: window.innerWidth / 2,
+        y: window.innerHeight - 128,
+      });
+    }
+
+    setPurchaseTransition(true);
+    purchaseTimerRef.current = window.setTimeout(() => {
+      window.location.href = url;
+    }, 620);
+    purchaseResetTimerRef.current = window.setTimeout(() => {
+      setPurchaseTransition(false);
+    }, 1800);
+  }, []);
+
+  const comprarDirecto = useCallback((item: any, event?: MouseEvent<HTMLElement>) => {
     let mensaje = "";
     const precioFmt = item.precio.toLocaleString('es-CL');
 
@@ -92,11 +142,22 @@ export default function MobileAppStore() {
     }
     
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
-    window.open(url, '_blank');
+    goToWhatsApp(url, event);
+  }, [goToWhatsApp]);
+
+  const comprarNintendoOnline = useCallback((event?: MouseEvent<HTMLElement>) => {
+    const precioFmt = appSettings.nintendoOnlinePrice.toLocaleString('es-CL');
+    const mensaje = `Hola Alfeicon Games! 👋\n\nMe interesa Nintendo Switch Online + Paquete de expansión por 12 meses.\n\n💰 Precio: $${precioFmt}\n\n¿Lo tienes disponible?`;
+    const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
+    goToWhatsApp(url, event);
+  }, [appSettings.nintendoOnlinePrice, goToWhatsApp]);
+
+  const getSavedKey = useCallback((item: any) => {
+    return `${item.esPack ? 'pack' : 'game'}:${String(item.id)}`;
   }, []);
 
   const toggleSaved = useCallback((item: any) => {
-    const itemId = String(item.id);
+    const itemId = getSavedKey(item);
 
     setSavedIds((current) => {
       const next = current.includes(itemId)
@@ -109,7 +170,7 @@ export default function MobileAppStore() {
 
     setSavedToast(true);
     window.setTimeout(() => setSavedToast(false), 2400);
-  }, []);
+  }, [getSavedKey]);
 
   // --- EFECTOS ---
   useEffect(() => {
@@ -149,10 +210,14 @@ export default function MobileAppStore() {
     
     // CARGA DE DATOS
     const cargarDatos = async () => {
-      const supabaseCatalog = await fetchCatalogFromSupabase();
+      const [supabaseCatalog, settings] = await Promise.all([
+        fetchCatalogFromSupabase(),
+        fetchAppSettings(),
+      ]);
 
       setProductos(supabaseCatalog?.productos || []);
       setPacks(supabaseCatalog?.packs || []);
+      setAppSettings(settings);
       setCargando(false);
     };
     cargarDatos();
@@ -181,7 +246,7 @@ export default function MobileAppStore() {
         items = items.filter(item => item.ahorro); 
     }
     if (mostrarGuardados) {
-        items = items.filter(item => savedIds.includes(String(item.id)));
+        items = items.filter(item => savedIds.includes(getSavedKey(item)));
     }
     if (consoleFilter !== 'all') {
         items = items.filter(item => {
@@ -191,9 +256,17 @@ export default function MobileAppStore() {
         });
     }
     return items;
-  }, [storeTab, productos, packs, filterTerm, fuseInstance, mostrarSoloOfertas, mostrarGuardados, savedIds, consoleFilter]);
+  }, [storeTab, productos, packs, filterTerm, fuseInstance, mostrarSoloOfertas, mostrarGuardados, savedIds, consoleFilter, getSavedKey]);
 
   const listaVisual = listaFiltrada.slice(0, visibleCount);
+  const savedCountActual = useMemo(() => {
+    const items = storeTab === 'individual' ? productos : packs;
+    return items.filter((item) => savedIds.includes(getSavedKey(item))).length;
+  }, [storeTab, productos, packs, savedIds, getSavedKey]);
+  const purchaseInkStyle = useMemo(() => ({
+    '--purchase-x': `${purchaseOrigin.x}px`,
+    '--purchase-y': `${purchaseOrigin.y}px`,
+  }) as CSSProperties, [purchaseOrigin]);
   const navIndex = {
     inicio: 0,
     catalogo: 1,
@@ -281,6 +354,45 @@ export default function MobileAppStore() {
                         <p className="relative text-2xl font-black leading-none text-white">{ofertasFlash.length || '-'}</p>
                         <p className="relative mt-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500">Ofertas</p>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="animate-soft-in mx-1 overflow-hidden rounded-[1.7rem] border border-red-300/20 bg-[#e60012] shadow-2xl shadow-red-950/25">
+                <div className="relative min-h-[188px] p-5">
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(105deg,#ef0014_0%,#e60012_49%,#b90010_50%,#cb0012_100%)]" />
+                  <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/12 blur-3xl" />
+                  <div className="pointer-events-none absolute -bottom-14 left-0 h-40 w-40 rounded-full bg-black/16 blur-2xl" />
+
+                  <div className="relative z-10 flex h-full flex-col justify-between gap-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/78">12 meses</p>
+                        <h2 className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[-0.04em] text-white">
+                          Online +<br />
+                          <span className="text-[22px] tracking-[-0.03em]">Paquete expansión</span>
+                        </h2>
+                      </div>
+                      <div className="rounded-full border border-white/30 bg-white/18 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur-xl">
+                        Disponible
+                      </div>
+                    </div>
+
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-white/68">Precio</p>
+                        <p className="text-[30px] font-black leading-none tracking-[-0.05em] text-white">
+                          ${appSettings.nintendoOnlinePrice.toLocaleString('es-CL')}
+                          <span className="ml-1 text-[11px] font-bold tracking-normal text-white/72">CLP</span>
+                        </p>
+                      </div>
+                      <button
+                        onClick={comprarNintendoOnline}
+                        className="magnetic rounded-full bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#e60012] shadow-lg shadow-black/20"
+                      >
+                        Comprar
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -414,9 +526,9 @@ export default function MobileAppStore() {
                       ofertasFlash.map((item) => (
                         <div key={item.id} className="min-w-[280px] snap-center shrink-0">
                              <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} storageRequired={item.storageRequired} consoleName={item.consoleName}
-                                onAdd={() => comprarDirecto(item)} 
+                                onAdd={(event) => comprarDirecto(item, event)} 
                                 onSave={() => toggleSaved(item)}
-                                saved={savedIds.includes(String(item.id))}
+                                saved={savedIds.includes(getSavedKey(item))}
                              />
                         </div>
                       ))
@@ -435,9 +547,9 @@ export default function MobileAppStore() {
                       packsDestacados.map((item) => (
                         <div key={item.id} className="min-w-[280px] snap-center shrink-0">
                              <GameCard titulo={item.titulo} precio={item.precio} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos} consoleName={item.consoleName}
-                                onAdd={() => comprarDirecto(item)} 
+                                onAdd={(event) => comprarDirecto(item, event)} 
                                 onSave={() => toggleSaved(item)}
-                                saved={savedIds.includes(String(item.id))}
+                                saved={savedIds.includes(getSavedKey(item))}
                              />
                         </div>
                       ))
@@ -502,7 +614,7 @@ export default function MobileAppStore() {
                     </p>
                     <div className="flex items-center gap-2">
                       <button onClick={() => setMostrarGuardados(!mostrarGuardados)} className={`magnetic flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase ${mostrarGuardados ? "border-[#e5e4e2]/70 bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-white/10" : "premium-control text-gray-400 hover:text-white"}`}>
-                          <Heart size={12} fill={mostrarGuardados ? "currentColor" : "none"} />{mostrarGuardados ? "Favoritos" : savedIds.length}
+                          <Heart size={12} fill={mostrarGuardados ? "currentColor" : "none"} />{mostrarGuardados ? "Favoritos" : savedCountActual}
                       </button>
                       {storeTab === 'individual' && (
                         <button onClick={() => setMostrarSoloOfertas(!mostrarSoloOfertas)} className={`magnetic flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase ${mostrarSoloOfertas ? "border-red-400/60 bg-red-500 text-white shadow-lg shadow-red-900/30" : "premium-control text-gray-400 hover:text-white"}`}>
@@ -517,9 +629,9 @@ export default function MobileAppStore() {
                         listaVisual.map((item, index) => (
                           <div key={item.id} className="animate-soft-in w-full max-w-[350px] mx-auto" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
                              <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos} storageRequired={item.storageRequired} consoleName={item.consoleName}
-                                onAdd={() => comprarDirecto(item)}
+                                onAdd={(event) => comprarDirecto(item, event)}
                                 onSave={() => toggleSaved(item)}
-                                saved={savedIds.includes(String(item.id))}
+                                saved={savedIds.includes(getSavedKey(item))}
                              />
                           </div>
                         ))
@@ -854,6 +966,26 @@ export default function MobileAppStore() {
         </div>
     </div>
 )}
+
+        {purchaseTransition && (
+          <div className="pointer-events-none fixed inset-0 z-[70] overflow-hidden" style={purchaseInkStyle}>
+            <div className="purchase-ink-blob" />
+            <div className="purchase-ink-blob" />
+            <div className="purchase-ink-blob" />
+
+            <div className="absolute bottom-24 left-1/2 w-[min(330px,calc(100%-2rem))] -translate-x-1/2">
+              <div className="purchase-splash flex items-center gap-3 rounded-full border border-[#25d366]/35 bg-[#101417]/95 px-4 py-3 text-white shadow-2xl shadow-[#25d366]/20 backdrop-blur-2xl">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#25d366] text-white shadow-lg shadow-[#25d366]/35">
+                  <MessageCircle size={20} fill="currentColor" strokeWidth={2.4} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#8ff0ad]">WhatsApp</p>
+                  <p className="truncate text-sm font-black">Abriendo compra</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {savedToast && (
           <div className="fixed bottom-24 left-1/2 z-[55] w-[min(360px,calc(100%-2rem))] -translate-x-1/2 animate-soft-in">

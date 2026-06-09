@@ -5,6 +5,7 @@ import Image from "next/image";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Gamepad2, HardDrive, Loader2, LogOut, Plus, Save, ShieldCheck, Tag } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import GameCard from "@/components/GameCard";
+import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
 
 type AdminGame = {
   id: string;
@@ -29,6 +30,11 @@ type GameForm = {
   is_active: boolean;
 };
 
+type SettingsForm = {
+  nintendoOnlinePrice: string;
+  packPriceIncrease: string;
+};
+
 const emptyForm: GameForm = {
   title: "",
   price: "",
@@ -38,6 +44,11 @@ const emptyForm: GameForm = {
   is_offer: false,
   offer_price: "",
   is_active: true,
+};
+
+const defaultSettingsForm: SettingsForm = {
+  nintendoOnlinePrice: String(DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
+  packPriceIncrease: String(DEFAULT_APP_SETTINGS.packPriceIncrease),
 };
 
 const toPrice = (value: string) => Number(value.replace(/[^0-9]/g, "")) || 0;
@@ -63,6 +74,7 @@ export default function AdminPage() {
   const [games, setGames] = useState<AdminGame[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<GameForm>(emptyForm);
+  const [settingsForm, setSettingsForm] = useState<SettingsForm>(defaultSettingsForm);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -118,6 +130,26 @@ export default function AdminPage() {
     setGames((data || []) as AdminGame[]);
   }, []);
 
+  const loadSettings = useCallback(async () => {
+    if (!supabase) return;
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("key,value")
+      .in("key", Object.values(SETTING_KEYS));
+
+    if (error) {
+      setSettingsForm(defaultSettingsForm);
+      return;
+    }
+
+    const rows = new Map((data || []).map((row) => [row.key, row.value]));
+    setSettingsForm({
+      nintendoOnlinePrice: String(rows.get(SETTING_KEYS.nintendoOnlinePrice) || DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
+      packPriceIncrease: String(rows.get(SETTING_KEYS.packPriceIncrease) || DEFAULT_APP_SETTINGS.packPriceIncrease),
+    });
+  }, []);
+
   useEffect(() => {
     if (!supabase) return;
 
@@ -125,18 +157,24 @@ export default function AdminPage() {
       const hasSession = Boolean(data.session);
       setIsLoggedIn(hasSession);
       setSessionReady(true);
-      if (hasSession) loadGames();
+      if (hasSession) {
+        loadGames();
+        loadSettings();
+      }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const hasSession = Boolean(session);
       setIsLoggedIn(hasSession);
-      if (hasSession) loadGames();
+      if (hasSession) {
+        loadGames();
+        loadSettings();
+      }
       if (!hasSession) setGames([]);
     });
 
     return () => listener.subscription.unsubscribe();
-  }, [loadGames]);
+  }, [loadGames, loadSettings]);
 
   const signIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -212,6 +250,42 @@ export default function AdminPage() {
     showNotice("success", successText);
     startNew(false);
     await loadGames();
+  };
+
+  const saveSettings = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!supabase) return;
+
+    const onlinePrice = toPrice(settingsForm.nintendoOnlinePrice);
+    const packIncrease = toPrice(settingsForm.packPriceIncrease);
+
+    if (onlinePrice <= 0 || packIncrease <= 0) {
+      showNotice("error", "Revisa los precios de ajustes.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.from("app_settings").upsert([
+      {
+        key: SETTING_KEYS.nintendoOnlinePrice,
+        value: onlinePrice,
+        label: "Nintendo Switch Online + Expansion Pack 12 meses",
+      },
+      {
+        key: SETTING_KEYS.packPriceIncrease,
+        value: packIncrease,
+        label: "Aumento automatico para packs del bot",
+      },
+    ]);
+    setLoading(false);
+
+    if (error) {
+      showNotice("error", "No se pudieron guardar los ajustes. Ejecuta supabase/app-settings.sql.");
+      return;
+    }
+
+    showNotice("success", "Ajustes guardados correctamente.");
+    await loadSettings();
   };
 
   if (!isSupabaseConfigured) {
@@ -370,6 +444,38 @@ export default function AdminPage() {
             <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400">Vista previa</p>
             <h2 className="text-lg font-black uppercase tracking-widest text-white">Tienda</h2>
           </div>
+
+          <form onSubmit={saveSettings} className="mb-5 rounded-[1.35rem] border border-white/10 bg-black/28 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-400">Precios rápidos</p>
+                <p className="mt-1 text-xs font-semibold text-gray-500">Online y aumento de packs del bot.</p>
+              </div>
+              <button disabled={loading} className="magnetic rounded-full bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-black disabled:opacity-50">
+                Guardar
+              </button>
+            </div>
+            <div className="grid gap-3">
+              <label>
+                <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Online 12 meses</span>
+                <input
+                  value={settingsForm.nintendoOnlinePrice}
+                  onChange={(event) => setSettingsForm({ ...settingsForm, nintendoOnlinePrice: event.target.value })}
+                  inputMode="numeric"
+                  className="premium-control w-full rounded-2xl px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Aumento packs bot</span>
+                <input
+                  value={settingsForm.packPriceIncrease}
+                  onChange={(event) => setSettingsForm({ ...settingsForm, packPriceIncrease: event.target.value })}
+                  inputMode="numeric"
+                  className="premium-control w-full rounded-2xl px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+            </div>
+          </form>
 
           <div className="mx-auto max-w-[350px]">
             <GameCard

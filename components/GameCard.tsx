@@ -1,7 +1,7 @@
 "use client";
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { Tag, Gift, ChevronDown, ChevronUp, Zap, HardDrive, Gamepad2, Heart, ArrowUpRight } from 'lucide-react'; 
 
 // 1. Definimos los tipos para que TypeScript no se queje en page.tsx
@@ -15,7 +15,7 @@ interface GameCardProps {
   storageRequired?: string | null;
   consoleName?: string | null;
   juegosIncluidos?: string[]; // Lista de juegos para el desplegable
-  onAdd: () => void;
+  onAdd: (event: MouseEvent<HTMLButtonElement>) => void;
   onSave?: () => void;
   saved?: boolean;
 }
@@ -55,13 +55,23 @@ export default function GameCard({
       {/* 1. SECCIÓN DE IMAGEN */}
       <div className="relative h-[236px] w-full shrink-0 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[#101417]/80 shadow-inner shadow-white/5">
         {img ? (
-          <Image 
-            src={img} 
-            alt={titulo} 
-            fill 
-            className="object-cover transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.035] group-hover:brightness-110"
-            sizes="(max-width: 768px) 100vw, 350px"
-          />
+          <>
+            <Image
+              src={img}
+              alt=""
+              fill
+              aria-hidden="true"
+              className="scale-110 object-cover opacity-[0.42] blur-xl"
+              sizes="(max-width: 768px) 100vw, 350px"
+            />
+            <Image 
+              src={img} 
+              alt={titulo} 
+              fill 
+              className="object-contain transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.025] group-hover:brightness-110"
+              sizes="(max-width: 768px) 100vw, 350px"
+            />
+          </>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-700 font-bold text-xs uppercase tracking-widest">
             Sin Imagen

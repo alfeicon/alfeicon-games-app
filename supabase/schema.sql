@@ -46,6 +46,19 @@ create table if not exists public.pack_items (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.app_settings (
+  key text primary key,
+  value integer not null check (value >= 0),
+  label text,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.app_settings (key, value, label)
+values
+  ('nintendo_online_price', 25500, 'Nintendo Switch Online + Expansion Pack 12 meses'),
+  ('pack_price_increase', 15000, 'Aumento automatico para packs del bot')
+on conflict (key) do nothing;
+
 create index if not exists games_active_title_idx on public.games (is_active, title);
 create index if not exists packs_active_created_idx on public.packs (is_active, created_at desc);
 create index if not exists pack_items_pack_sort_idx on public.pack_items (pack_id, sort_order);
@@ -70,6 +83,11 @@ create trigger set_packs_updated_at
 before update on public.packs
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_app_settings_updated_at on public.app_settings;
+create trigger set_app_settings_updated_at
+before update on public.app_settings
+for each row execute function public.set_updated_at();
+
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -88,6 +106,7 @@ alter table public.admin_users enable row level security;
 alter table public.games enable row level security;
 alter table public.packs enable row level security;
 alter table public.pack_items enable row level security;
+alter table public.app_settings enable row level security;
 
 drop policy if exists "Admins can read admins" on public.admin_users;
 create policy "Admins can read admins"
@@ -137,6 +156,19 @@ using (
 drop policy if exists "Admins can manage pack items" on public.pack_items;
 create policy "Admins can manage pack items"
 on public.pack_items for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "Public can read app settings" on public.app_settings;
+create policy "Public can read app settings"
+on public.app_settings for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Admins can manage app settings" on public.app_settings;
+create policy "Admins can manage app settings"
+on public.app_settings for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());

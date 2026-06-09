@@ -11,7 +11,7 @@
 // ⚙️ CONFIGURACIÓN PRINCIPAL
 // ==========================================
 // Configuracion principal
-const AUMENTO_CLP = 15000;
+const DEFAULT_AUMENTO_CLP = 15000;
 // 🔑 TOKEN DE TELEGRAM
 const TELEGRAM_BOT_TOKEN = PropertiesService.getScriptProperties().getProperty("TELEGRAM_BOT_TOKEN");
 
@@ -90,6 +90,17 @@ function supabaseRequest(path, method, body) {
   return text ? JSON.parse(text) : null;
 }
 
+function obtenerAumentoPackCLP() {
+  try {
+    const rows = supabaseRequest("app_settings?select=value&key=eq.pack_price_increase&limit=1", "get");
+    const value = rows && rows.length > 0 ? Number(rows[0].value) : 0;
+    return value > 0 ? value : DEFAULT_AUMENTO_CLP;
+  } catch (error) {
+    Logger.log(`No se pudo leer pack_price_increase, usando default: ${error.message}`);
+    return DEFAULT_AUMENTO_CLP;
+  }
+}
+
 function hashMensaje(texto) {
   const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, texto, Utilities.Charset.UTF_8);
   return bytes.map((byte) => (`0${(byte & 0xff).toString(16)}`).slice(-2)).join("");
@@ -158,7 +169,7 @@ function pareceMensajeDePack(texto) {
   if (!texto) return false;
   const bloqueTexto = extraerTextoLimpio(texto);
   const juegos = limpiarJuegos(bloqueTexto);
-  const precio = extraerPrecioCLP(texto, AUMENTO_CLP);
+  const precio = extraerPrecioCLP(texto, DEFAULT_AUMENTO_CLP);
   return juegos.length >= 2 && Boolean(precio);
 }
 
@@ -648,7 +659,7 @@ function subirPackLogica(mensaje, chatID) {
       return;
     }
 
-    const precioFinal = extraerPrecioCLP(mensajeLimpio, AUMENTO_CLP);
+    const precioFinal = extraerPrecioCLP(mensajeLimpio, obtenerAumentoPackCLP());
 
     if (!precioFinal) {
       enviarMensaje(chatID, "❌ Error: No encontré precio.");
