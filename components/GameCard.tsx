@@ -1,7 +1,7 @@
 "use client";
 
 import Image from 'next/image';
-import { useState, type MouseEvent } from 'react';
+import { useId, useState, type MouseEvent } from 'react';
 import { Tag, Gift, ChevronDown, ChevronUp, Zap, HardDrive, Gamepad2, Heart, ArrowUpRight } from 'lucide-react'; 
 
 // 1. Definimos los tipos para que TypeScript no se queje en page.tsx
@@ -10,7 +10,7 @@ interface GameCardProps {
   precio: number;
   precioOriginal?: number | null;
   img: string | null;
-  ahorro?: string | null;     // Aquí viene "OFERTA 🔥" o "¡NUEVO! 🚀"
+  ahorro?: string | null;
   esPack?: boolean;
   storageRequired?: string | null;
   consoleName?: string | null;
@@ -37,20 +37,19 @@ export default function GameCard({
   
   const [expandido, setExpandido] = useState(false);
 
-  // Función para formatear precio CL (Puntos en vez de comas)
   const formatoCLP = (valor: number) => {
     return valor.toLocaleString('es-CL');
   };
 
-  // Detectamos si es una etiqueta de novedad para cambiarle el color
+  const packListId = useId();
   const esNuevo = ahorro && ahorro.includes('NUEVO');
-  const cleanBadge = ahorro?.replace(/[🔥🚀]/g, '').replace(/[¡!]/g, '').trim();
+  const cleanBadge = ahorro?.replace(/[¡!]/g, '').trim();
   const isSwitch2Only = (consoleName || '').toLowerCase().replace(/\s+/g, '').includes('switch2');
   const consoleLabel = consoleName ? (isSwitch2Only ? 'Solo Switch 2' : 'Switch 1 y 2') : null;
   const hasMeta = Boolean(storageRequired) || Boolean(consoleLabel);
 
   return (
-    <article className="animate-soft-in liquid-glass group relative mx-auto flex h-full w-full max-w-[350px] flex-col rounded-[1.55rem] p-1.5 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:shadow-[0_32px_78px_rgba(83,104,120,0.22)]">
+    <article className="animate-soft-in liquid-glass group relative mx-auto flex h-full w-full max-w-[350px] flex-col rounded-[1.55rem] p-1.5 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg">
       
       {/* 1. SECCIÓN DE IMAGEN */}
       <div className="relative h-[236px] w-full shrink-0 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[#101417]/80 shadow-inner shadow-white/5">
@@ -68,7 +67,7 @@ export default function GameCard({
               src={img} 
               alt={titulo} 
               fill 
-              className="object-contain transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.025] group-hover:brightness-110"
+              className="object-contain transition duration-200 ease-out group-hover:scale-[1.025] group-hover:brightness-110"
               sizes="(max-width: 768px) 100vw, 350px"
             />
           </>
@@ -133,7 +132,7 @@ export default function GameCard({
                     <p className="mb-2 border-b border-white/10 pb-2 text-[10px] font-black uppercase tracking-wider text-[#d5dde1]">
                         Contiene {juegosIncluidos.length} Juegos:
                     </p>
-                    <ul className="space-y-1.5 text-[12px] font-semibold leading-relaxed text-[#e5e4e2]">
+                    <ul id={packListId} className="space-y-1.5 text-[12px] font-semibold leading-relaxed text-[#e5e4e2]">
                         {/* Muestra todos si está expandido, o solo los primeros 4 */}
                         {(expandido ? juegosIncluidos : juegosIncluidos.slice(0, 4)).map((juego: string, i: number) => (
                              <li key={i} className="flex items-start gap-1.5">
@@ -145,13 +144,16 @@ export default function GameCard({
                     {/* Botón Ver más solo si hay más de 4 juegos */}
                     {juegosIncluidos.length > 4 && (
                         <button 
+                            type="button"
+                            aria-expanded={expandido}
+                            aria-controls={packListId}
                             onClick={(e) => {
-                                e.stopPropagation(); // Evita que se active el hover del padre
+                                e.stopPropagation();
                                 setExpandido(!expandido);
                             }}
                             className="magnetic mt-3 flex w-full items-center justify-center gap-1 border-t border-white/10 pt-2.5 text-[10px] font-black uppercase tracking-wide text-[#d5dde1] hover:text-white"
                         >
-                            {expandido ? <>Ver menos <ChevronUp size={12} /></> : <>+ {juegosIncluidos.length - 4} juegos más <ChevronDown size={12} /></>}
+                            {expandido ? <>Ver menos <ChevronUp size={12} aria-hidden="true" /></> : <>+ {juegosIncluidos.length - 4} juegos más <ChevronDown size={12} aria-hidden="true" /></>}
                         </button>
                     )}
                 </div>
@@ -203,10 +205,10 @@ export default function GameCard({
                 onClick={onAdd}
                 className="magnetic group/cta flex h-11 items-center gap-2 rounded-full bg-[#25d366] pl-4 pr-1.5 text-xs font-black uppercase tracking-wide text-[#06130a] shadow-lg shadow-[#25d366]/20 hover:bg-[#36e477]"
             >
-                {esPack ? <Gift size={15} strokeWidth={2.5} /> : <Zap size={15} strokeWidth={2.5} fill="currentColor" className="opacity-55" />}
+                {esPack ? <Gift size={15} strokeWidth={2.5} aria-hidden="true" /> : <Zap size={15} strokeWidth={2.5} fill="currentColor" className="opacity-55" aria-hidden="true" />}
                 Comprar
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#06130a]/10 transition-transform duration-500 group-hover/cta:translate-x-0.5">
-                  <ArrowUpRight size={14} strokeWidth={2.6} />
+                  <ArrowUpRight size={14} strokeWidth={2.6} aria-hidden="true" />
                 </span>
             </button>
         </div>

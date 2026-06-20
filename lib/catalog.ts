@@ -104,12 +104,20 @@ export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
       .order("created_at", { ascending: false }),
   ]);
 
-  if (gamesResult.error || packsResult.error) {
-    console.error("Error Supabase catalog:", gamesResult.error || packsResult.error);
+  if (gamesResult.error && packsResult.error) {
+    console.error("Error Supabase catalog:", { games: gamesResult.error, packs: packsResult.error });
     return null;
   }
 
-  const productos = ((gamesResult.data || []) as GameRow[]).map((game) => {
+  if (gamesResult.error) {
+    console.error("Error Supabase games:", gamesResult.error);
+  }
+
+  if (packsResult.error) {
+    console.error("Error Supabase packs:", packsResult.error);
+  }
+
+  const productos = (gamesResult.error ? [] : ((gamesResult.data || []) as GameRow[])).map((game) => {
     const precioOferta = game.is_offer && game.offer_price ? game.offer_price : null;
 
     return {
@@ -119,13 +127,13 @@ export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
       precio: precioOferta || game.price,
       precioOriginal: precioOferta ? game.price : null,
       esPack: false as const,
-      ahorro: precioOferta ? "OFERTA 🔥" : null,
+      ahorro: precioOferta ? "OFERTA" : null,
       storageRequired: game.storage_required,
       consoleName: game.console,
     };
   });
 
-  const packs = ((packsResult.data || []) as PackRow[]).map((pack) => {
+  const packs = (packsResult.error ? [] : ((packsResult.data || []) as PackRow[])).map((pack) => {
     const juegosIncluidos = [...(pack.pack_items || [])]
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((item) => item.title);
@@ -136,7 +144,7 @@ export async function fetchCatalogFromSupabase(): Promise<CatalogData | null> {
       img: pack.image_url || findPackFallbackImage(juegosIncluidos),
       precio: pack.price,
       esPack: true as const,
-      ahorro: pack.is_new ? "¡NUEVO! 🚀" : null,
+      ahorro: pack.is_new ? "NUEVO" : null,
       juegosIncluidos,
       esNuevo: pack.is_new,
       consoleName: pack.console,

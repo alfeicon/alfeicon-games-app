@@ -4,18 +4,25 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { 
-  Home, Gamepad2, BookOpen, Search, Instagram, MessageCircle, 
-  Loader2, ArrowDownCircle, Zap, Youtube, FileText, 
-  ShieldCheck, AlertTriangle, Facebook, X, Megaphone, Filter, Star, Gift, CheckCircle, ChevronRight, Heart
+  Gamepad2, BookOpen, Instagram, MessageCircle, 
+  Zap, Youtube, FileText, 
+  ShieldCheck, AlertTriangle, Facebook, X, Megaphone, Star, Gift, CheckCircle, ChevronRight, Heart
 } from 'lucide-react';
 import GameCard from '@/components/GameCard';
+import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase } from '@/lib/catalog';
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from '@/lib/settings';
 import { ShaderAnimation } from '@/components/ui/shader-animation';
 
-// --- CONFIGURACIÓN ---
+const CatalogSection = dynamic(() => import('@/components/app-store/CatalogSection'), {
+  ssr: false,
+  loading: () => <div className="min-h-[52vh]" aria-hidden="true" />,
+});
+
+// --- CONFIGURACION ---
 const CONFIG = {
   whatsappNumber: "56926411278",
   emailSoporte: "alfeicon.games@gmail.com",
@@ -28,9 +35,29 @@ const FUSE_OPTIONS = {
   ignoreLocation: true,
 };
 
+type SectionMotionClass =
+  | 'section-idle'
+  | 'section-enter-from-left'
+  | 'section-enter-from-right'
+  | 'section-exit-to-left'
+  | 'section-exit-to-right';
+
+const SECTION_ORDER: Record<SectionId, number> = {
+  inicio: 0,
+  catalogo: 1,
+  instrucciones: 2,
+  perfil: 3,
+};
+const SECTION_EXIT_MS = 140;
+const SECTION_ENTER_MS = 320;
+const CATALOG_INITIAL_COUNT = 8;
+const CATALOG_BATCH_SIZE = 8;
+
 export default function MobileAppStore() {
   // --- ESTADOS ---
-  const [activeSection, setActiveSection] = useState<'inicio' | 'catalogo' | 'instrucciones' | 'perfil'>('inicio');
+  const [activeSection, setActiveSection] = useState<SectionId>('inicio');
+  const [visibleSection, setVisibleSection] = useState<SectionId>('inicio');
+  const [sectionMotion, setSectionMotion] = useState<SectionMotionClass>('section-idle');
   const [storeTab, setStoreTab] = useState<'individual' | 'packs'>('individual');
   const [helpTab, setHelpTab] = useState<'switch2' | 'switch1'>('switch2');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -50,13 +77,19 @@ export default function MobileAppStore() {
   const [purchaseOrigin, setPurchaseOrigin] = useState({ x: 0, y: 0 });
   const purchaseTimerRef = useRef<number | null>(null);
   const purchaseResetTimerRef = useRef<number | null>(null);
+  const sectionSwitchTimerRef = useRef<number | null>(null);
+  const sectionSettleTimerRef = useRef<number | null>(null);
+  const visibleSectionRef = useRef<SectionId>('inicio');
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const [productos, setProductos] = useState<any[]>([]);
   const [packs, setPacks] = useState<any[]>([]);
   const [appSettings, setAppSettings] = useState(DEFAULT_APP_SETTINGS);
   const [cargando, setCargando] = useState(true);
   
-  const [visibleCount, setVisibleCount] = useState(20); 
+  const [visibleCount, setVisibleCount] = useState(CATALOG_INITIAL_COUNT); 
+  const isSectionTransitioning = sectionMotion !== 'section-idle';
+  const shouldDeferCatalogItems = visibleSection === 'catalogo' && isSectionTransitioning;
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
@@ -92,14 +125,44 @@ export default function MobileAppStore() {
     return () => {
       if (purchaseTimerRef.current) window.clearTimeout(purchaseTimerRef.current);
       if (purchaseResetTimerRef.current) window.clearTimeout(purchaseResetTimerRef.current);
+      if (sectionSwitchTimerRef.current) window.clearTimeout(sectionSwitchTimerRef.current);
+      if (sectionSettleTimerRef.current) window.clearTimeout(sectionSettleTimerRef.current);
     };
   }, []);
 
   // --- FUNCIONES (HANDLERS) ---
   const ejecutarBusqueda = useCallback(() => {
     setFilterTerm(searchTerm);
-    setVisibleCount(20); 
+    setVisibleCount(CATALOG_INITIAL_COUNT); 
   }, [searchTerm]);
+
+  const navigateToSection = useCallback((nextSection: SectionId) => {
+    if (nextSection === activeSection) return;
+
+    const currentVisibleSection = visibleSectionRef.current;
+    const movingForward = SECTION_ORDER[nextSection] > SECTION_ORDER[currentVisibleSection];
+
+    if (sectionSwitchTimerRef.current) window.clearTimeout(sectionSwitchTimerRef.current);
+    if (sectionSettleTimerRef.current) window.clearTimeout(sectionSettleTimerRef.current);
+
+    setActiveSection(nextSection);
+    setSectionMotion(movingForward ? 'section-exit-to-left' : 'section-exit-to-right');
+
+    sectionSwitchTimerRef.current = window.setTimeout(() => {
+      const root = document.documentElement;
+      const previousScrollBehavior = root.style.scrollBehavior;
+      root.style.scrollBehavior = 'auto';
+      window.scrollTo(0, 0);
+      root.style.scrollBehavior = previousScrollBehavior;
+      visibleSectionRef.current = nextSection;
+      setVisibleSection(nextSection);
+      setSectionMotion(movingForward ? 'section-enter-from-right' : 'section-enter-from-left');
+
+      sectionSettleTimerRef.current = window.setTimeout(() => {
+        setSectionMotion('section-idle');
+      }, SECTION_ENTER_MS);
+    }, SECTION_EXIT_MS);
+  }, [activeSection]);
 
   const goToWhatsApp = useCallback((url: string, event?: MouseEvent<HTMLElement>) => {
     if (purchaseTimerRef.current) window.clearTimeout(purchaseTimerRef.current);
@@ -133,12 +196,12 @@ export default function MobileAppStore() {
 
     if (item.esPack) {
       const listaJuegosTexto = item.juegosIncluidos 
-          ? item.juegosIncluidos.map((juego: string) => `🔹 ${juego}`).join('\n')
+          ? item.juegosIncluidos.map((juego: string) => `- ${juego}`).join('\n')
           : "Consultar juegos";
 
-      mensaje = `Hola Alfeicon Games! 👋\n\nMe interesa este Pack que vi en la web:\n\n🎁 *${item.titulo}*\n\n📋 *Incluye:*\n${listaJuegosTexto}\n\n💰 Precio: $${precioFmt}\n\n¿Lo tienes disponible ?`;
+      mensaje = `Hola Alfeicon Games!\n\nMe interesa este pack que vi en la web:\n\n*${item.titulo}*\n\nIncluye:\n${listaJuegosTexto}\n\nPrecio: $${precioFmt}\n\n¿Lo tienes disponible?`;
     } else {
-      mensaje = `Hola Alfeicon Games! 🎮\n\nVengo de la web y quiero llevarme este juego:\n\n🔹 *${item.titulo}*\n💰 Precio: $${precioFmt}\n\n¿Que métodos de pago tienes disponible?`;
+      mensaje = `Hola Alfeicon Games!\n\nVengo de la web y quiero llevarme este juego:\n\n*${item.titulo}*\nPrecio: $${precioFmt}\n\n¿Qué métodos de pago tienes disponible?`;
     }
     
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
@@ -147,7 +210,7 @@ export default function MobileAppStore() {
 
   const comprarNintendoOnline = useCallback((event?: MouseEvent<HTMLElement>) => {
     const precioFmt = appSettings.nintendoOnlinePrice.toLocaleString('es-CL');
-    const mensaje = `Hola Alfeicon Games! 👋\n\nMe interesa Nintendo Switch Online + Paquete de expansión por 12 meses.\n\n💰 Precio: $${precioFmt}\n\n¿Lo tienes disponible?`;
+    const mensaje = `Hola Alfeicon Games!\n\nMe interesa Nintendo Switch Online + Paquete de expansión por 12 meses.\n\nPrecio: $${precioFmt}\n\n¿Lo tienes disponible?`;
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
     goToWhatsApp(url, event);
   }, [appSettings.nintendoOnlinePrice, goToWhatsApp]);
@@ -174,16 +237,15 @@ export default function MobileAppStore() {
 
   // --- EFECTOS ---
   useEffect(() => {
-    window.scrollTo(0, 0);
-    if (activeSection !== 'catalogo') {
+    if (visibleSection !== 'catalogo') {
         setSearchTerm("");
         setFilterTerm("");
         setMostrarSoloOfertas(false);
         setMostrarGuardados(false);
         setConsoleFilter('all');
     }
-    setVisibleCount(20);
-  }, [activeSection, storeTab]);
+    setVisibleCount(CATALOG_INITIAL_COUNT);
+  }, [visibleSection, storeTab]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -191,11 +253,20 @@ export default function MobileAppStore() {
 
     const updateNavigation = () => {
       const currentScrollY = window.scrollY;
-      const isScrollingUp = currentScrollY < lastScrollY;
+      const scrollDelta = currentScrollY - lastScrollY;
+      const isScrollingDown = scrollDelta > 8;
+      const isScrollingUp = scrollDelta < -8;
       const isNearTop = currentScrollY < 80;
 
-      setShowBottomNav(isScrollingUp || isNearTop);
-      lastScrollY = currentScrollY;
+      if (isNearTop || isScrollingUp) {
+        setShowBottomNav(true);
+      } else if (isScrollingDown) {
+        setShowBottomNav(false);
+      }
+
+      if (Math.abs(scrollDelta) > 8) {
+        lastScrollY = currentScrollY;
+      }
       ticking = false;
     };
 
@@ -259,6 +330,24 @@ export default function MobileAppStore() {
   }, [storeTab, productos, packs, filterTerm, fuseInstance, mostrarSoloOfertas, mostrarGuardados, savedIds, consoleFilter, getSavedKey]);
 
   const listaVisual = listaFiltrada.slice(0, visibleCount);
+  useEffect(() => {
+    if (visibleSection !== 'catalogo' || cargando || shouldDeferCatalogItems) return;
+
+    const loadMoreTarget = loadMoreRef.current;
+    if (!loadMoreTarget || visibleCount >= listaFiltrada.length) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setVisibleCount((current) => Math.min(current + CATALOG_BATCH_SIZE, listaFiltrada.length));
+      },
+      { root: null, rootMargin: '900px 0px', threshold: 0.01 },
+    );
+
+    observer.observe(loadMoreTarget);
+    return () => observer.disconnect();
+  }, [visibleSection, cargando, shouldDeferCatalogItems, visibleCount, listaFiltrada.length]);
+
   const savedCountActual = useMemo(() => {
     const items = storeTab === 'individual' ? productos : packs;
     return items.filter((item) => savedIds.includes(getSavedKey(item))).length;
@@ -279,18 +368,17 @@ export default function MobileAppStore() {
     <div data-theme={theme} className={`alfeicon-theme ${theme === 'light' ? 'theme-light' : 'theme-dark'} min-h-screen bg-black flex justify-center selection:bg-white selection:text-black`}>
       <div className="noise-overlay" />
       <div className="relative z-10 w-full max-w-md bg-black min-h-screen shadow-2xl border-x border-gray-900 font-sans text-white overflow-hidden">
-        
         {/* MAIN */}
-        <main className="pb-32 px-4 min-h-screen">
+        <main className="min-h-screen overflow-x-hidden px-4 pb-32">
           
 {/* SECCIÓN 1: INICIO */}
-          {activeSection === 'inicio' && (
-            <div className="animate-fade-in space-y-7">
+          {visibleSection === 'inicio' && (
+            <div className={`section-motion ${sectionMotion} space-y-7`}>
               {/* PORTADA DE MARCA */}
               <section className="animate-soft-in -mx-4 overflow-hidden border-b border-white/10 bg-black px-5 pb-7 pt-6">
                 <div className="brand-shell relative mx-auto max-w-[360px] rounded-[2.15rem] p-5">
                   <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[2rem] opacity-25">
-                    <ShaderAnimation />
+                    {!isSectionTransitioning && <ShaderAnimation />}
                   </div>
                   <div className="pointer-events-none absolute inset-x-6 top-0 h-36 rounded-full bg-[#536878]/35 blur-[72px]" />
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-[#e5e4e2]/5 blur-2xl" />
@@ -298,7 +386,7 @@ export default function MobileAppStore() {
                   <div className="relative z-10">
                     <div className="mb-6 flex items-center justify-between">
                       <div className="relative h-14 w-14 rounded-2xl border border-[#536878]/35 bg-[#536878]/15 shadow-xl">
-                        <Image src="/logo.png" alt="Alfeicon Logo" fill className="object-contain p-2" priority />
+                        <Image src="/logo.png" alt="Alfeicon Logo" fill className="object-contain p-2" sizes="56px" priority />
                       </div>
                       <div className="flex items-center gap-2 rounded-full border border-[#536878]/45 bg-[#536878]/18 px-3 py-1.5">
                         <span className="relative flex h-2 w-2">
@@ -320,7 +408,7 @@ export default function MobileAppStore() {
 
                     <div className="mt-6 grid grid-cols-[1fr_auto] gap-3">
                       <button
-                        onClick={() => setActiveSection('catalogo')}
+                        onClick={() => navigateToSection('catalogo')}
                         className="magnetic group flex h-12 items-center justify-center gap-2 rounded-full bg-[#536878] px-5 text-xs font-black uppercase tracking-widest text-[#e5e4e2] shadow-lg shadow-[#536878]/30 hover:bg-[#627988]"
                       >
                         Ver catalogo <ChevronRight size={15} className="transition-transform duration-500 group-hover:translate-x-0.5" />
@@ -422,7 +510,7 @@ export default function MobileAppStore() {
                            <button 
                                onClick={() => {
                                    setStoreTab('packs'); 
-                                   setActiveSection('catalogo');
+                                   navigateToSection('catalogo');
                                }}
                                className="magnetic flex items-center gap-1 rounded-full bg-white px-4 py-2.5 text-[9px] font-black uppercase tracking-widest text-black shadow-lg shadow-white/10 hover:bg-gray-200"
                            >
@@ -499,7 +587,7 @@ export default function MobileAppStore() {
                   <div className="flex overflow-x-auto gap-3 px-2 pb-4 snap-x snap-mandatory scrollbar-hide">
                     {[1, 2, 3, 4].map((num) => (
                       <div key={num} className="liquid-glass min-w-[140px] w-[140px] aspect-[9/16] relative rounded-[1.15rem] shrink-0 snap-center group">
-                        <Image src={`/clientes/${num}.jpg`} alt={`Cliente ${num}`} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
+                        <Image src={`/clientes/${num}.jpg`} alt={`Cliente ${num}`} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500" sizes="140px" />
                         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-3 pt-10">
                            <div className="flex gap-0.5 mb-1">
                               {[1,2,3,4,5].map(star => <Star key={star} size={8} className="text-yellow-400 fill-yellow-400" />)}
@@ -540,7 +628,7 @@ export default function MobileAppStore() {
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-4 px-1">
                    <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2"><Gift size={16} className="text-blue-400" /> Packs imperdibles</h3>
-                   <button onClick={() => {setStoreTab('packs'); setActiveSection('catalogo');}} className="magnetic rounded-full border border-blue-500/30 bg-blue-900/20 px-3 py-1.5 text-[10px] font-bold text-blue-400 hover:bg-blue-900/40">Ver todos</button>
+                   <button onClick={() => {setStoreTab('packs'); navigateToSection('catalogo');}} className="magnetic rounded-full border border-blue-500/30 bg-blue-900/20 px-3 py-1.5 text-[10px] font-bold text-blue-400 hover:bg-blue-900/40">Ver todos</button>
                 </div>
                 <div className="flex overflow-x-auto gap-4 px-2 pb-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                    {cargando ? ([1,2,3].map(i => <div key={i} className="brand-shell min-w-[280px] h-[410px] rounded-[1.55rem] shrink-0 animate-pulse" />)) : (
@@ -561,107 +649,42 @@ export default function MobileAppStore() {
           )}
 
           {/* SECCIÓN 2: CATÁLOGO */}
-          {activeSection === 'catalogo' && (
-            <div className="animate-fade-in">
-              <div className="premium-surface sticky top-3 z-30 -mx-1 mb-4 space-y-3 rounded-[1.8rem] p-3 backdrop-blur-2xl">
-                <div className={`relative flex items-center transition-transform duration-300 ${searchTerm || filterTerm ? 'scale-[1.01]' : 'scale-100'}`}>
-                  <input type="text" placeholder={storeTab === 'individual' ? "Busca tu juego..." : "Busca en packs..."} value={searchTerm} onChange={(e) => { const texto = e.target.value; setSearchTerm(texto); if (texto === "") { setFilterTerm(""); setVisibleCount(20); } }} onKeyDown={(e) => { if (e.key === 'Enter') ejecutarBusqueda(); }} className="premium-control w-full rounded-full py-3 pl-5 pr-14 text-base text-white shadow-inner transition-all placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white/15"/>
-                  <button onClick={ejecutarBusqueda} className="magnetic absolute right-2 flex items-center justify-center rounded-full bg-white p-2.5 text-black shadow-lg shadow-white/10 hover:bg-gray-100"><Search size={18} strokeWidth={3} /></button>
-                </div>
-
-                <div className="premium-surface relative flex overflow-hidden rounded-full p-1">
-                  <span
-                    className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-full bg-white shadow-lg shadow-white/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                      storeTab === 'packs' ? 'translate-x-[calc(100%+0.5rem)]' : 'translate-x-0'
-                    }`}
-                  />
-                  <button onClick={() => {setStoreTab('individual'); setSearchTerm(""); setFilterTerm("");}} className={`relative z-10 flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-colors duration-300 ${storeTab === 'individual' ? 'text-black' : 'text-gray-500 hover:text-white'}`}>Juegos Unitarios</button>
-                  <button onClick={() => {setStoreTab('packs'); setSearchTerm(""); setFilterTerm(""); setMostrarSoloOfertas(false);}} className={`relative z-10 flex-1 rounded-full py-2.5 text-xs font-black uppercase transition-colors duration-300 ${storeTab === 'packs' ? 'text-black' : 'text-gray-500 hover:text-white'}`}>Pack de Juegos</button>
-                </div>
-
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                  {[
-                    { id: 'all', label: 'Todo' },
-                    { id: 'switch', label: 'Switch 1 y 2' },
-                    { id: 'switch2', label: 'Solo Switch 2' },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setConsoleFilter(item.id as 'all' | 'switch' | 'switch2')}
-                      className={`magnetic shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                        consoleFilter === item.id
-                          ? 'border-[#e5e4e2]/70 bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-white/10'
-                          : 'premium-control text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              {cargando ? (
-                 <div className="flex flex-col items-center justify-center py-32 space-y-6 animate-pulse">
-                    <div className="relative w-20 h-20 opacity-50"><Image src="/logo.png" alt="Loading" fill className="object-contain" /></div>
-                    <div className="flex items-center gap-2 text-blue-400 text-xs font-bold uppercase tracking-[0.2em]"><Loader2 className="animate-spin" size={14} />Cargando catálogo</div>
-                 </div>
-              ) : (
-                <>
-                  <div className="flex justify-between items-center px-2 mb-4 animate-fade-in">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500">
-                      {mostrarSoloOfertas ? "Ofertas" : mostrarGuardados ? "Favoritos" : storeTab === 'packs' ? "Packs" : "Juegos"}
-                      <span className="ml-2 text-xs text-white">({listaFiltrada.length})</span>
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setMostrarGuardados(!mostrarGuardados)} className={`magnetic flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase ${mostrarGuardados ? "border-[#e5e4e2]/70 bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-white/10" : "premium-control text-gray-400 hover:text-white"}`}>
-                          <Heart size={12} fill={mostrarGuardados ? "currentColor" : "none"} />{mostrarGuardados ? "Favoritos" : savedCountActual}
-                      </button>
-                      {storeTab === 'individual' && (
-                        <button onClick={() => setMostrarSoloOfertas(!mostrarSoloOfertas)} className={`magnetic flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase ${mostrarSoloOfertas ? "border-red-400/60 bg-red-500 text-white shadow-lg shadow-red-900/30" : "premium-control text-gray-400 hover:text-white"}`}>
-                            <Filter size={12} />{mostrarSoloOfertas ? "Todo" : "Ofertas"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div key={`${storeTab}-${filterTerm}-${mostrarSoloOfertas ? 'ofertas' : 'todos'}`} className="grid grid-cols-1 gap-8 animate-fade-in pb-8 px-2">
-                      {listaVisual.length > 0 ? (
-                        listaVisual.map((item, index) => (
-                          <div key={item.id} className="animate-soft-in w-full max-w-[350px] mx-auto" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
-                             <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos} storageRequired={item.storageRequired} consoleName={item.consoleName}
-                                onAdd={(event) => comprarDirecto(item, event)}
-                                onSave={() => toggleSaved(item)}
-                                saved={savedIds.includes(getSavedKey(item))}
-                             />
-                          </div>
-                        ))
-                      ) : (
-                          <div className="flex flex-col items-center py-20 text-gray-500">
-                              <Search size={40} className="mb-4 opacity-20" />
-                              <p className="text-sm font-bold">No encontramos resultados</p>
-                              <p className="mt-1 max-w-[230px] text-center text-xs font-semibold leading-relaxed">Puedes limpiar filtros o preguntarnos por WhatsApp si buscas un juego específico.</p>
-                              <div className="mt-4 flex gap-2">
-                                <button onClick={() => {setFilterTerm(""); setSearchTerm(""); setVisibleCount(20); setMostrarSoloOfertas(false); setMostrarGuardados(false); setConsoleFilter('all');}} className="magnetic rounded-full bg-white px-4 py-2 text-xs font-black uppercase text-black">Ver todo</button>
-                                <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="magnetic rounded-full border border-white/10 px-4 py-2 text-xs font-black uppercase text-white">Consultar</a>
-                              </div>
-                          </div>
-                      )}
-                  </div>
-                  {visibleCount < listaFiltrada.length && (
-                    <div className="flex justify-center mt-8 pb-4">
-                      <button onClick={() => setVisibleCount(prev => prev + 20)} className="premium-surface flex items-center gap-2 rounded-full px-6 py-3 text-xs font-black uppercase text-white transition-all duration-300 hover:bg-white hover:text-black">
-                        <ArrowDownCircle size={16} /> Ver más
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+          {visibleSection === 'catalogo' && (
+            <CatalogSection
+              sectionMotion={sectionMotion}
+              cargando={cargando}
+              shouldDeferCatalogItems={shouldDeferCatalogItems}
+              storeTab={storeTab}
+              setStoreTab={setStoreTab}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              filterTerm={filterTerm}
+              setFilterTerm={setFilterTerm}
+              ejecutarBusqueda={ejecutarBusqueda}
+              consoleFilter={consoleFilter}
+              setConsoleFilter={setConsoleFilter}
+              mostrarSoloOfertas={mostrarSoloOfertas}
+              setMostrarSoloOfertas={setMostrarSoloOfertas}
+              mostrarGuardados={mostrarGuardados}
+              setMostrarGuardados={setMostrarGuardados}
+              savedCountActual={savedCountActual}
+              listaFiltrada={listaFiltrada}
+              listaVisual={listaVisual}
+              visibleCount={visibleCount}
+              setVisibleCount={setVisibleCount}
+              catalogInitialCount={CATALOG_INITIAL_COUNT}
+              catalogBatchSize={CATALOG_BATCH_SIZE}
+              loadMoreRef={loadMoreRef}
+              whatsappNumber={CONFIG.whatsappNumber}
+              comprarDirecto={comprarDirecto}
+              toggleSaved={toggleSaved}
+              getSavedKey={getSavedKey}
+              savedIds={savedIds}
+            />
           )}
-
           {/* SECCIÓN 3: INSTRUCCIONES */}
-          {activeSection === 'instrucciones' && (
-            <div className="animate-fade-in pb-24 pt-5">
+          {visibleSection === 'instrucciones' && (
+            <div className={`section-motion ${sectionMotion} pb-24 pt-5`}>
                 <section className="premium-surface animate-soft-in relative mx-1 mb-5 overflow-hidden rounded-[2rem] p-5">
                     <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-blue-500/10 blur-3xl" />
                     <div className="pointer-events-none absolute -bottom-12 -left-8 h-32 w-32 rounded-full bg-yellow-500/10 blur-3xl" />
@@ -769,15 +792,15 @@ export default function MobileAppStore() {
           )}
 
 {/* SECCIÓN 4: AYUDA Y CONFIANZA */}
-          {activeSection === 'perfil' && (
-            <div className="animate-fade-in space-y-5 px-1 pb-24 pt-5">
+          {visibleSection === 'perfil' && (
+            <div className={`section-motion ${sectionMotion} space-y-5 px-1 pb-24 pt-5`}>
                 <section className="premium-surface animate-soft-in relative overflow-hidden rounded-[2rem] p-5 text-left">
                     <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-green-500/10 blur-3xl" />
                     <div className="pointer-events-none absolute -bottom-12 -left-8 h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
                     <div className="relative">
                         <div className="mb-5 flex items-center justify-between">
                             <div className="relative h-14 w-14 rounded-2xl border border-white/10 bg-white/10 shadow-xl">
-                                <Image src="/logo.png" alt="Alfeicon Games" fill className="object-contain p-2" />
+                                <Image src="/logo.png" alt="Alfeicon Games" fill className="object-contain p-2" sizes="56px" />
                             </div>
                             <div className="flex items-center gap-2 rounded-full border border-green-400/20 bg-green-500/10 px-3 py-1.5">
                                 <span className="relative flex h-2 w-2">
@@ -988,7 +1011,7 @@ export default function MobileAppStore() {
         )}
 
         {savedToast && (
-          <div className="fixed bottom-24 left-1/2 z-[55] w-[min(360px,calc(100%-2rem))] -translate-x-1/2 animate-soft-in">
+          <div className="fixed bottom-24 left-1/2 z-[55] w-[min(360px,calc(100%-2rem))] -translate-x-1/2 animate-soft-in" role="status" aria-live="polite">
             <div className="brand-shell flex items-center justify-between rounded-[1.7rem] px-5 py-4 text-white backdrop-blur-2xl">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-[#0a0a0a]">
@@ -998,7 +1021,7 @@ export default function MobileAppStore() {
               </div>
               <button
                 onClick={() => {
-                  setActiveSection('catalogo');
+                  navigateToSection('catalogo');
                   setMostrarGuardados(true);
                   setSavedToast(false);
                 }}
@@ -1010,44 +1033,13 @@ export default function MobileAppStore() {
           </div>
         )}
 
-        {/* NAVEGACIÓN INFERIOR */}
-        <nav className={`premium-surface fixed bottom-5 left-1/2 z-50 flex h-16 w-[min(360px,calc(100%-2rem))] -translate-x-1/2 items-center justify-around overflow-hidden rounded-full px-2 backdrop-blur-2xl transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${showBottomNav ? 'translate-y-0' : 'translate-y-28'}`}>
-          <span
-            className="pointer-events-none absolute left-2 top-2 h-12 rounded-full bg-[#e5e4e2] shadow-lg shadow-[#e5e4e2]/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{
-              width: 'calc((100% - 1rem) / 4)',
-              transform: `translateX(${navIndex * 100}%)`,
-            }}
-          />
-          <NavButton active={activeSection === 'inicio'} onClick={() => setActiveSection('inicio')} icon={<Home size={22} />} label="Inicio" />
-          <NavButton active={activeSection === 'catalogo'} onClick={() => setActiveSection('catalogo')} icon={<Gamepad2 size={22} />} label="Tienda" />
-          <NavButton active={activeSection === 'instrucciones'} onClick={() => setActiveSection('instrucciones')} icon={<BookOpen size={22} />} label="Guía" />
-          <NavButton active={activeSection === 'perfil'} onClick={() => setActiveSection('perfil')} icon={<MessageCircle size={22} />} label="Ayuda" />
-        </nav>
+        <AppDock
+          activeSection={activeSection}
+          showBottomNav={showBottomNav}
+          navIndex={navIndex}
+          onNavigate={navigateToSection}
+        />
       </div>
     </div>
-  );
-}
-
-// COMPONENTE AUXILIAR BOTÓN
-function NavButton({ active, onClick, icon, label }: any) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className="group relative flex h-full flex-1 items-center justify-center"
-    >
-      <span className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full transition-all duration-300 ${
-        active
-          ? 'text-black scale-105'
-          : 'text-gray-600 hover:text-white'
-      }`}>
-        <span className={`transition-transform duration-300 ${active ? 'scale-105' : 'scale-95 group-hover:scale-100'}`}>
-          {icon}
-        </span>
-      </span>
-      <span className="sr-only">{label}</span>
-    </button>
   );
 }

@@ -365,7 +365,7 @@ export default function AdminPage() {
             {filteredGames.map((game) => (
               <button key={game.id} onClick={() => selectGame(game)} className={`magnetic group flex w-full items-center gap-3 rounded-2xl border p-2 text-left hover:-translate-y-0.5 ${selectedId === game.id ? "border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-950/30" : "border-white/5 bg-black/30 hover:bg-white/5"}`}>
                 <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-black">
-                  {game.image_url ? <Image src={game.image_url} alt={game.title} fill className="object-cover" /> : <Tag className="m-3 text-gray-600" />}
+                  {game.image_url ? <Image src={game.image_url} alt={game.title} fill className="object-cover" sizes="64px" /> : <Tag className="m-3 text-gray-600" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold">{game.title}</p>

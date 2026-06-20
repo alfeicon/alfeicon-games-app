@@ -34,7 +34,10 @@ export async function fetchAppSettings(): Promise<AppSettings> {
     .in("key", Object.values(SETTING_KEYS));
 
   if (error) {
-    console.warn("Using default app settings:", error.message);
+    if (error.code !== "PGRST205") {
+      console.warn("Using default app settings:", error.message);
+    }
+
     return DEFAULT_APP_SETTINGS;
   }
 
