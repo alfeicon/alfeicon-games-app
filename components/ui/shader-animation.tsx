@@ -12,6 +12,9 @@ export function ShaderAnimation({ className = "" }: ShaderAnimationProps) {
   const sceneRef = useRef<{
     renderer: THREE.WebGLRenderer;
     animationId: number;
+    isVisible: boolean;
+    isInViewport: boolean;
+    isRunning: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -62,8 +65,12 @@ export function ShaderAnimation({ className = "" }: ShaderAnimationProps) {
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      alpha: true,
+      powerPreference: "low-power",
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
     renderer.domElement.style.display = "block";
@@ -82,6 +89,11 @@ export function ShaderAnimation({ className = "" }: ShaderAnimationProps) {
     window.addEventListener("resize", onResize);
 
     const animate = () => {
+      if (!sceneRef.current?.isVisible) {
+        if (sceneRef.current) sceneRef.current.isRunning = false;
+        return;
+      }
+
       uniforms.time.value += 0.05;
       renderer.render(scene, camera);
       const animationId = requestAnimationFrame(animate);
@@ -91,11 +103,48 @@ export function ShaderAnimation({ className = "" }: ShaderAnimationProps) {
       }
     };
 
-    sceneRef.current = { renderer, animationId: 0 };
+    sceneRef.current = { renderer, animationId: 0, isVisible: true, isInViewport: true, isRunning: true };
     animate();
+
+    const startAnimation = () => {
+      if (!sceneRef.current || sceneRef.current.isRunning || !sceneRef.current.isVisible) return;
+      sceneRef.current.isRunning = true;
+      animate();
+    };
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!sceneRef.current) return;
+      sceneRef.current.isInViewport = Boolean(entry?.isIntersecting);
+      sceneRef.current.isVisible = sceneRef.current.isInViewport && !document.hidden;
+
+      if (sceneRef.current.isVisible) {
+        startAnimation();
+      } else {
+        sceneRef.current.isRunning = false;
+        cancelAnimationFrame(sceneRef.current.animationId);
+      }
+    });
+
+    observer.observe(container);
+
+    const handleVisibilityChange = () => {
+      if (!sceneRef.current) return;
+      sceneRef.current.isVisible = sceneRef.current.isInViewport && !document.hidden;
+
+      if (sceneRef.current.isVisible) {
+        startAnimation();
+      } else {
+        sceneRef.current.isRunning = false;
+        cancelAnimationFrame(sceneRef.current.animationId);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      observer.disconnect();
 
       if (sceneRef.current) {
         cancelAnimationFrame(sceneRef.current.animationId);

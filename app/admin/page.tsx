@@ -2,10 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Gamepad2, HardDrive, Loader2, LogOut, Plus, Save, ShieldCheck, Tag } from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Gamepad2, HardDrive, ImagePlus, Loader2, LogOut, Plus, Save, ShieldCheck, Tag } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import GameCard from "@/components/GameCard";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
+import { DATA_IMAGENES } from "@/app/data/imagenes";
 
 type AdminGame = {
   id: string;
@@ -52,6 +53,49 @@ const defaultSettingsForm: SettingsForm = {
 };
 
 const toPrice = (value: string) => Number(value.replace(/[^0-9]/g, "")) || 0;
+
+const normalizeImageTitle = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[™®©]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const imageCandidates = DATA_IMAGENES.map((item) => ({
+  ...item,
+  normalizedName: normalizeImageTitle(item.name),
+}));
+
+const findNintendoImageByTitle = (title: string) => {
+  const normalizedTitle = normalizeImageTitle(title);
+  if (!normalizedTitle) return null;
+
+  const exactMatch = imageCandidates.find((item) => item.normalizedName === normalizedTitle);
+  if (exactMatch) return exactMatch;
+
+  const scoredMatches = imageCandidates
+    .map((item) => {
+      const startsWithTitle = item.normalizedName.startsWith(normalizedTitle);
+      const titleStartsWithItem = normalizedTitle.startsWith(item.normalizedName);
+      const containsTitle = item.normalizedName.includes(normalizedTitle);
+      const containsItem = normalizedTitle.includes(item.normalizedName);
+      const score =
+        (startsWithTitle ? 80 : 0) +
+        (titleStartsWithItem ? 70 : 0) +
+        (containsTitle ? 40 : 0) +
+        (containsItem ? 30 : 0) -
+        Math.abs(item.normalizedName.length - normalizedTitle.length) * 0.5;
+
+      return { item, score };
+    })
+    .filter(({ score }) => score > 25)
+    .sort((a, b) => b.score - a.score);
+
+  return scoredMatches[0]?.item || null;
+};
 
 const toForm = (game: AdminGame): GameForm => ({
   title: game.title,
@@ -208,6 +252,18 @@ export default function AdminPage() {
     setSelectedId(game.id);
     setForm(toForm(game));
     setMessage("");
+  };
+
+  const fillImageFromTitle = () => {
+    const match = findNintendoImageByTitle(form.title);
+
+    if (!match) {
+      showNotice("error", "No encontre una imagen para ese nombre.");
+      return;
+    }
+
+    setForm((current) => ({ ...current, image_url: match.url }));
+    showNotice("success", `Imagen encontrada: ${match.name}`);
   };
 
   const saveGame = async (event: FormEvent) => {
@@ -419,7 +475,18 @@ export default function AdminPage() {
             </div>
             <label className="md:col-span-2">
               <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Imagen URL</span>
-              <input value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} className="premium-control w-full rounded-2xl px-3 py-3 outline-none focus:border-blue-500" />
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <input value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} className="premium-control w-full rounded-2xl px-3 py-3 outline-none focus:border-blue-500" />
+                <button
+                  type="button"
+                  onClick={fillImageFromTitle}
+                  disabled={!form.title.trim()}
+                  className="magnetic inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white px-4 py-3 text-xs font-black uppercase tracking-widest text-black disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <ImagePlus size={15} />
+                  Buscar imagen
+                </button>
+              </div>
             </label>
           </div>
 

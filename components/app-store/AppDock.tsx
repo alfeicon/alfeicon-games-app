@@ -1,6 +1,6 @@
 "use client";
 
-import { cloneElement, isValidElement, type ReactElement } from 'react';
+import { cloneElement, isValidElement, memo, type ReactElement } from 'react';
 import { BookOpen, Gamepad2, Home, MessageCircle } from 'lucide-react';
 
 export type SectionId = 'inicio' | 'catalogo' | 'instrucciones' | 'perfil';
@@ -59,7 +59,7 @@ function NavButton({ active, onClick, icon, label }: NavButtonProps) {
   );
 }
 
-export default function AppDock({ activeSection, showBottomNav, navIndex, onNavigate }: AppDockProps) {
+function AppDock({ activeSection, showBottomNav, navIndex, onNavigate }: AppDockProps) {
   return (
     <div className={`app-dock-wrapper ${showBottomNav ? 'app-dock-wrapper-visible' : 'app-dock-wrapper-hidden'}`}>
       <nav aria-label="Navegación principal" className="app-glass-dock motion-dock relative flex h-[66px] w-full items-center justify-around overflow-hidden rounded-[2rem] px-1.5">
@@ -78,3 +78,5 @@ export default function AppDock({ activeSection, showBottomNav, navIndex, onNavi
     </div>
   );
 }
+
+export default memo(AppDock);

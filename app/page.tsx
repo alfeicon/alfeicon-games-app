@@ -2,7 +2,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react/no-unescaped-entities */
 
-import { useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
+import { startTransition, useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { 
@@ -15,12 +15,16 @@ import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase } from '@/lib/catalog';
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from '@/lib/settings';
-import { ShaderAnimation } from '@/components/ui/shader-animation';
 
 const CatalogSection = dynamic(() => import('@/components/app-store/CatalogSection'), {
   ssr: false,
   loading: () => <div className="min-h-[52vh]" aria-hidden="true" />,
 });
+
+const ShaderAnimation = dynamic(
+  () => import('@/components/ui/shader-animation').then((mod) => mod.ShaderAnimation),
+  { ssr: false, loading: () => null },
+);
 
 // --- CONFIGURACION ---
 const CONFIG = {
@@ -50,8 +54,8 @@ const SECTION_ORDER: Record<SectionId, number> = {
 };
 const SECTION_EXIT_MS = 140;
 const SECTION_ENTER_MS = 320;
-const CATALOG_INITIAL_COUNT = 8;
-const CATALOG_BATCH_SIZE = 8;
+const CATALOG_INITIAL_COUNT = 6;
+const CATALOG_BATCH_SIZE = 6;
 
 export default function MobileAppStore() {
   // --- ESTADOS ---
@@ -63,6 +67,7 @@ export default function MobileAppStore() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
   const [showBottomNav, setShowBottomNav] = useState(true);
+  const showBottomNavRef = useRef(true);
   const [showTerms, setShowTerms] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState(""); 
@@ -155,8 +160,10 @@ export default function MobileAppStore() {
       window.scrollTo(0, 0);
       root.style.scrollBehavior = previousScrollBehavior;
       visibleSectionRef.current = nextSection;
-      setVisibleSection(nextSection);
-      setSectionMotion(movingForward ? 'section-enter-from-right' : 'section-enter-from-left');
+      startTransition(() => {
+        setVisibleSection(nextSection);
+        setSectionMotion(movingForward ? 'section-enter-from-right' : 'section-enter-from-left');
+      });
 
       sectionSettleTimerRef.current = window.setTimeout(() => {
         setSectionMotion('section-idle');
@@ -248,8 +255,30 @@ export default function MobileAppStore() {
   }, [visibleSection, storeTab]);
 
   useEffect(() => {
+    // CARGA DE DATOS
+    const cargarDatos = async () => {
+      const [supabaseCatalog, settings] = await Promise.all([
+        fetchCatalogFromSupabase(),
+        fetchAppSettings(),
+      ]);
+
+      setProductos(supabaseCatalog?.productos || []);
+      setPacks(supabaseCatalog?.packs || []);
+      setAppSettings(settings);
+      setCargando(false);
+    };
+    cargarDatos();
+  }, []);
+
+  useEffect(() => {
     let lastScrollY = window.scrollY;
     let ticking = false;
+
+    const setDockVisible = (visible: boolean) => {
+      if (showBottomNavRef.current === visible) return;
+      showBottomNavRef.current = visible;
+      setShowBottomNav(visible);
+    };
 
     const updateNavigation = () => {
       const currentScrollY = window.scrollY;
@@ -259,9 +288,9 @@ export default function MobileAppStore() {
       const isNearTop = currentScrollY < 80;
 
       if (isNearTop || isScrollingUp) {
-        setShowBottomNav(true);
+        setDockVisible(true);
       } else if (isScrollingDown) {
-        setShowBottomNav(false);
+        setDockVisible(false);
       }
 
       if (Math.abs(scrollDelta) > 8) {
@@ -277,21 +306,7 @@ export default function MobileAppStore() {
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
-    
-    // CARGA DE DATOS
-    const cargarDatos = async () => {
-      const [supabaseCatalog, settings] = await Promise.all([
-        fetchCatalogFromSupabase(),
-        fetchAppSettings(),
-      ]);
-
-      setProductos(supabaseCatalog?.productos || []);
-      setPacks(supabaseCatalog?.packs || []);
-      setAppSettings(settings);
-      setCargando(false);
-    };
-    cargarDatos();
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -329,7 +344,7 @@ export default function MobileAppStore() {
     return items;
   }, [storeTab, productos, packs, filterTerm, fuseInstance, mostrarSoloOfertas, mostrarGuardados, savedIds, consoleFilter, getSavedKey]);
 
-  const listaVisual = listaFiltrada.slice(0, visibleCount);
+  const listaVisual = useMemo(() => listaFiltrada.slice(0, visibleCount), [listaFiltrada, visibleCount]);
   useEffect(() => {
     if (visibleSection !== 'catalogo' || cargando || shouldDeferCatalogItems) return;
 

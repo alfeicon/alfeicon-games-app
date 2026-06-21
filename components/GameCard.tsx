@@ -1,7 +1,7 @@
 "use client";
 
 import Image from 'next/image';
-import { useId, useState, type MouseEvent } from 'react';
+import { memo, useId, useState, type MouseEvent } from 'react';
 import { Tag, Gift, ChevronDown, ChevronUp, Zap, HardDrive, Gamepad2, Heart, ArrowUpRight } from 'lucide-react'; 
 
 // 1. Definimos los tipos para que TypeScript no se queje en page.tsx
@@ -20,7 +20,7 @@ interface GameCardProps {
   saved?: boolean;
 }
 
-export default function GameCard({ 
+function GameCard({ 
   titulo, 
   precio, 
   precioOriginal, 
@@ -49,28 +49,18 @@ export default function GameCard({
   const hasMeta = Boolean(storageRequired) || Boolean(consoleLabel);
 
   return (
-    <article className="animate-soft-in liquid-glass group relative mx-auto flex h-full w-full max-w-[350px] flex-col rounded-[1.55rem] p-1.5 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg">
+    <article className="render-window animate-soft-in liquid-glass group relative mx-auto flex h-full w-full max-w-[350px] flex-col rounded-[1.55rem] p-1.5 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg">
       
       {/* 1. SECCIÓN DE IMAGEN */}
       <div className="relative h-[236px] w-full shrink-0 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[#101417]/80 shadow-inner shadow-white/5">
         {img ? (
-          <>
-            <Image
-              src={img}
-              alt=""
-              fill
-              aria-hidden="true"
-              className="scale-110 object-cover opacity-[0.42] blur-xl"
-              sizes="(max-width: 768px) 100vw, 350px"
-            />
-            <Image 
-              src={img} 
-              alt={titulo} 
-              fill 
-              className="object-contain transition duration-200 ease-out group-hover:scale-[1.025] group-hover:brightness-110"
-              sizes="(max-width: 768px) 100vw, 350px"
-            />
-          </>
+          <Image 
+            src={img} 
+            alt={titulo} 
+            fill 
+            className="object-contain transition duration-200 ease-out group-hover:scale-[1.025] group-hover:brightness-110"
+            sizes="(max-width: 768px) 100vw, 350px"
+          />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-700 font-bold text-xs uppercase tracking-widest">
             Sin Imagen
@@ -216,3 +206,5 @@ export default function GameCard({
     </article>
   );
 }
+
+export default memo(GameCard);

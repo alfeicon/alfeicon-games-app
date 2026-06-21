@@ -1,5 +1,53 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/switzer/switzer-300.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/switzer/switzer-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/switzer/switzer-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/switzer/switzer-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/switzer/switzer-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/switzer/switzer-800.woff2") format("woff2");
+  font-weight: 800 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --background: #0a0a0a;
   --foreground: #e5e4e2;
@@ -17,7 +65,7 @@
 html, body {
   background-color: #0a0a0a !important;
   color: #e5e4e2;
-  font-family: var(--font-geist), system-ui, sans-serif;
+  font-family: "Switzer", var(--font-geist), system-ui, sans-serif;
   overscroll-behavior-y: none;
   font-size: 16px; 
   font-variant-numeric: tabular-nums;
@@ -87,6 +135,361 @@ html {
 .section-idle {
   opacity: 1;
   transform: translate3d(0, 0, 0);
+  will-change: auto;
+}
+
+.render-window {
+  content-visibility: auto;
+  contain-intrinsic-size: 430px;
+}
+
+.nintendo-game-card {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.78rem;
+  font-family: "Switzer", Arial, Helvetica, system-ui, sans-serif;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.028)),
+    rgba(13, 16, 18, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 24px rgba(0, 0, 0, 0.34);
+  transform: translateZ(0);
+}
+
+.nintendo-game-card-header {
+  display: flex;
+  height: 1.05rem;
+  align-items: center;
+  justify-content: center;
+  background: #e60012;
+}
+
+.nintendo-game-card-media {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  min-height: 5.4rem;
+  aspect-ratio: 16 / 9;
+  background: #151515;
+}
+
+.nintendo-game-card-media img {
+  display: block;
+}
+
+.nintendo-game-card-img {
+  object-fit: cover !important;
+}
+
+.nintendo-game-card-body {
+  display: flex;
+  min-height: 4.9rem;
+  flex-direction: column;
+  gap: 0.28rem;
+  padding: 0.48rem 0.42rem 0.42rem;
+  color: #f4f4f3;
+}
+
+.nintendo-game-card-title {
+  display: -webkit-box;
+  min-height: 2.25rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: #f4f4f3;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.18;
+}
+
+.nintendo-game-card-subtitle {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  color: #a8b2b8;
+  font-size: 0.54rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.nintendo-game-card-price {
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #f2f2f0;
+}
+
+.nintendo-game-card-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.nintendo-game-card-badge {
+  position: absolute;
+  left: 0.35rem;
+  top: 1.35rem;
+  z-index: 2;
+  border-radius: 999px;
+  background: rgba(230, 0, 18, 0.92);
+  padding: 0.18rem 0.32rem;
+  color: white;
+  font-size: 0.44rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.game-case {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.62rem;
+  background: #e60012;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -2px 0 rgba(154, 0, 10, 0.2),
+    0 5px 10px rgba(0, 0, 0, 0.18);
+  transform: translateZ(0);
+}
+
+.game-case::before {
+  content: none;
+}
+
+.game-case::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2.4%;
+  z-index: 4;
+  width: 1rem;
+  height: 0.43rem;
+  border: 0;
+  background: rgba(112, 0, 8, 0.86);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.game-case-window {
+  position: absolute;
+  inset: 13.5% 7% 8%;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 0.14rem;
+  background: #151515;
+  box-shadow: none;
+}
+
+.game-case-image {
+  z-index: 1;
+  inset: -1px !important;
+  width: calc(100% + 2px) !important;
+  height: calc(100% + 2px) !important;
+  display: block;
+  border-radius: 0.16rem;
+  object-position: center;
+  filter: saturate(1.05) contrast(1.03);
+}
+
+.game-case-image-bg {
+  z-index: 0;
+  inset: -10% !important;
+  width: 120% !important;
+  height: 120% !important;
+  opacity: 0.56;
+  filter: blur(7px) saturate(1.08) contrast(1.05);
+}
+
+.game-case-image-main {
+  padding: 0.08rem;
+  filter: saturate(1.06) contrast(1.03);
+}
+
+.game-card-label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  left: 50%;
+  top: 3.2%;
+  z-index: 5;
+  width: 1.72rem;
+  height: 0.98rem;
+  transform: translateX(-50%);
+}
+
+.game-case-poster {
+  border-radius: 0.62rem;
+}
+
+.game-case-detail {
+  border-radius: 0.62rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 16px 34px rgba(0, 0, 0, 0.38);
+}
+
+.catalog-poster-grid {
+  position: relative;
+  border-radius: 1.25rem;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.catalog-poster-cell {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0.18rem;
+}
+
+@media (max-width: 640px) {
+  .catalog-poster-grid {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .catalog-poster-cell {
+    padding: 0;
+  }
+
+  .nintendo-game-card {
+    display: grid;
+    min-height: 7.25rem;
+    grid-template-columns: minmax(0, 43%) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 0;
+    border-color: rgba(255, 255, 255, 0.12);
+    border-radius: 0.92rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.028)),
+      rgba(13, 16, 18, 0.94);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 12px 24px rgba(0, 0, 0, 0.34);
+  }
+
+  .nintendo-game-card-media {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    height: auto;
+    min-height: 0;
+    margin: 0.68rem 0.28rem 0.68rem 0.68rem;
+    aspect-ratio: 16 / 9;
+    border-radius: 0.58rem;
+    background: transparent;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 8px 16px rgba(0, 0, 0, 0.28);
+  }
+
+  .nintendo-game-card-img {
+    object-fit: contain !important;
+    padding: 0;
+  }
+
+  .nintendo-game-card-body {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+    gap: 0.16rem;
+    padding: 0.72rem 0.72rem 0.62rem 0.48rem;
+  }
+
+  .nintendo-game-card-title {
+    min-height: 0;
+    -webkit-line-clamp: 2;
+    color: #f4f4f3;
+    font-size: 0.94rem;
+    font-weight: 800;
+    line-height: 1.13;
+  }
+
+  .nintendo-game-card-subtitle {
+    color: #a8b2b8;
+    font-size: 0.66rem;
+  }
+
+  .nintendo-game-card-price {
+    margin-top: 0.22rem;
+    color: #f2f2f0;
+    font-size: 0.9rem;
+  }
+
+  .nintendo-game-card-footer svg:last-child {
+    width: 1.55rem;
+    height: 1.55rem;
+    color: #ff3347;
+  }
+
+  .nintendo-game-card-badge {
+    left: calc(43% + 0.48rem);
+    top: 4.72rem;
+    font-size: 0.52rem;
+  }
+}
+
+.catalog-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1rem;
+  padding-bottom: calc(5.9rem + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.42);
+  animation: catalogDetailBackdropIn 180ms ease-out both;
+}
+
+.catalog-detail-panel {
+  width: min(390px, 100%);
+  max-height: min(76vh, 640px);
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1.7rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.028)),
+    rgba(12, 14, 16, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 24px 70px rgba(0, 0, 0, 0.48);
+  padding: 1rem;
+  -webkit-backdrop-filter: blur(18px) saturate(110%);
+  backdrop-filter: blur(18px) saturate(110%);
+  animation: catalogDetailPanelIn 280ms var(--ease-standard) both;
+}
+
+@keyframes catalogDetailBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes catalogDetailPanelIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 
 @keyframes sectionEnterFromRight {
@@ -592,81 +995,48 @@ html {
 }
 
 .app-dock-wrapper-visible {
-  animation: dockPixelMaterialize 520ms steps(9, end) both;
+  animation: dockMaterialize 340ms var(--ease-standard) both;
 }
 
 .app-dock-wrapper-hidden {
   --dock-opacity: 0;
   pointer-events: none;
-  animation: dockPixelDissolve 360ms steps(7, end) both;
+  animation: dockDissolve 240ms ease-in both;
 }
 
-@keyframes dockPixelMaterialize {
+@keyframes dockMaterialize {
   0% {
     opacity: 0;
-    transform: translate3d(-50%, 0.35rem, 0);
-    filter: contrast(1.25) brightness(1.16);
-    -webkit-mask-size: 22px 22px;
-    mask-size: 22px 22px;
-    -webkit-mask-image: repeating-conic-gradient(#000 0 25%, transparent 0 50%);
-    mask-image: repeating-conic-gradient(#000 0 25%, transparent 0 50%);
-  }
-  38% {
-    opacity: 0.72;
-    -webkit-mask-size: 13px 13px;
-    mask-size: 13px 13px;
-  }
-  70% {
-    opacity: 1;
-    -webkit-mask-size: 6px 6px;
-    mask-size: 6px 6px;
+    transform: translate3d(-50%, 0.55rem, 0) scale(0.985);
   }
   100% {
     opacity: 1;
     transform: translate3d(-50%, 0, 0);
-    filter: none;
-    -webkit-mask-image: linear-gradient(#000, #000);
-    mask-image: linear-gradient(#000, #000);
   }
 }
 
-@keyframes dockPixelDissolve {
+@keyframes dockDissolve {
   0% {
     opacity: 1;
     transform: translate3d(-50%, 0, 0);
-    -webkit-mask-image: linear-gradient(#000, #000);
-    mask-image: linear-gradient(#000, #000);
-  }
-  45% {
-    opacity: 0.48;
-    filter: contrast(1.16) brightness(1.1);
-    -webkit-mask-size: 8px 8px;
-    mask-size: 8px 8px;
-    -webkit-mask-image: repeating-conic-gradient(#000 0 25%, transparent 0 50%);
-    mask-image: repeating-conic-gradient(#000 0 25%, transparent 0 50%);
   }
   100% {
     opacity: 0;
-    transform: translate3d(-50%, 0.4rem, 0);
-    filter: contrast(1.12) brightness(1.08);
-    -webkit-mask-size: 20px 20px;
-    mask-size: 20px 20px;
-    -webkit-mask-image: repeating-conic-gradient(#000 0 25%, transparent 0 50%);
-    mask-image: repeating-conic-gradient(#000 0 25%, transparent 0 50%);
+    transform: translate3d(-50%, 0.55rem, 0) scale(0.985);
   }
 }
 
 .alfeicon-theme .app-glass-dock {
-  -webkit-backdrop-filter: blur(22px) saturate(54%) brightness(0.92) !important;
-  backdrop-filter: blur(22px) saturate(54%) brightness(0.92) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(70%) brightness(0.92) !important;
+  backdrop-filter: blur(22px) saturate(70%) brightness(0.92) !important;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(8, 8, 8, 0.28) 64%, rgba(0, 0, 0, 0.32)),
-    rgba(8, 8, 8, 0.22) !important;
-  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    linear-gradient(180deg, rgba(92, 92, 92, 0.42), rgba(45, 45, 45, 0.44) 58%, rgba(28, 28, 28, 0.52)),
+    rgba(42, 42, 42, 0.42) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -12px 22px rgba(0, 0, 0, 0.2),
-    0 12px 34px rgba(0, 0, 0, 0.22) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    inset 0 -14px 24px rgba(0, 0, 0, 0.24),
+    0 14px 34px rgba(0, 0, 0, 0.28) !important;
   transform-origin: 50% 100%;
 }
 
@@ -677,21 +1047,21 @@ html {
   pointer-events: none;
   border-radius: calc(2rem - 2px);
   border: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.018) 34%, transparent 58%);
-  opacity: 0.72;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.035) 38%, transparent 62%);
+  opacity: 0.78;
 }
 
 .alfeicon-theme .app-glass-dock-indicator {
-  -webkit-backdrop-filter: blur(18px) saturate(62%) brightness(0.88);
-  backdrop-filter: blur(18px) saturate(62%) brightness(0.88);
+  -webkit-backdrop-filter: blur(18px) saturate(72%) brightness(0.82);
+  backdrop-filter: blur(18px) saturate(72%) brightness(0.82);
   background:
-    linear-gradient(180deg, rgba(112, 112, 112, 0.28), rgba(18, 18, 18, 0.34)),
-    rgba(20, 20, 20, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+    linear-gradient(180deg, rgba(35, 35, 35, 0.86), rgba(9, 9, 9, 0.9)),
+    rgba(10, 10, 10, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    inset 0 -10px 18px rgba(0, 0, 0, 0.22),
-    0 8px 20px rgba(0, 0, 0, 0.2);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -10px 18px rgba(0, 0, 0, 0.34),
+    0 10px 22px rgba(0, 0, 0, 0.26);
 }
 
 .alfeicon-theme .dock-label {
@@ -873,6 +1243,8 @@ html {
   .animate-ping,
   .animate-spin,
   .section-motion,
+  .catalog-detail-backdrop,
+  .catalog-detail-panel,
   .app-dock-wrapper-visible,
   .app-dock-wrapper-hidden {
     animation: none !important;
@@ -920,4 +1292,36 @@ html {
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Dock glass final override */
+.app-glass-dock {
+  -webkit-backdrop-filter: blur(24px) saturate(76%) brightness(0.9) !important;
+  backdrop-filter: blur(24px) saturate(76%) brightness(0.9) !important;
+  background:
+    linear-gradient(180deg, rgba(76, 76, 76, 0.7), rgba(42, 42, 42, 0.74) 58%, rgba(28, 28, 28, 0.78)),
+    rgba(48, 48, 48, 0.72) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -14px 24px rgba(0, 0, 0, 0.28),
+    0 16px 36px rgba(0, 0, 0, 0.34) !important;
+}
+
+.app-glass-dock::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.045) 38%, transparent 62%) !important;
+  opacity: 0.85 !important;
+}
+
+.app-glass-dock-indicator {
+  -webkit-backdrop-filter: blur(18px) saturate(80%) brightness(0.8) !important;
+  backdrop-filter: blur(18px) saturate(80%) brightness(0.8) !important;
+  background:
+    linear-gradient(180deg, rgba(28, 28, 28, 0.96), rgba(6, 6, 6, 0.98)),
+    rgba(8, 8, 8, 0.94) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -10px 18px rgba(0, 0, 0, 0.42),
+    0 10px 24px rgba(0, 0, 0, 0.34) !important;
 }

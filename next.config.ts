@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**', // <--- ESTO ES EL COMODÍN. Autoriza cualquier sitio web.
+        hostname: '**', // Autoriza cualquier sitio web.
       },
     ],
   },

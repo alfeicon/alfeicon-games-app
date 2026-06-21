@@ -1,9 +1,8 @@
 "use client";
 
-import type { MouseEvent, RefObject } from 'react';
+import { memo, useEffect, useState, type MouseEvent, type RefObject } from 'react';
 import Image from 'next/image';
-import { ArrowDownCircle, Filter, Heart, Loader2, Search } from 'lucide-react';
-import GameCard from '@/components/GameCard';
+import { ArrowDownCircle, ArrowUpRight, Filter, Gamepad2, Gift, HardDrive, Heart, Loader2, Search, Tag, X } from 'lucide-react';
 
 type CatalogSectionProps = {
   sectionMotion: string;
@@ -50,7 +49,204 @@ type CatalogItem = {
   consoleName?: string | null;
 };
 
-export default function CatalogSection({
+type CatalogPosterProps = {
+  item: CatalogItem;
+  saved: boolean;
+  onOpen: (item: CatalogItem) => void;
+};
+
+const formatPrice = (value: number) => value.toLocaleString('es-CL');
+
+const getConsoleLabel = (consoleName?: string | null) => {
+  if (!consoleName) return null;
+  const isSwitch2Only = consoleName.toLowerCase().replace(/\s+/g, '').includes('switch2');
+  return isSwitch2Only ? 'Solo Switch 2' : 'Switch 1 y 2';
+};
+
+const CatalogPoster = memo(function CatalogPoster({
+  item,
+  saved,
+  onOpen,
+}: CatalogPosterProps) {
+  const consoleLabel = getConsoleLabel(item.consoleName) || 'Juego digital';
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      className="catalog-poster-cell render-window motion-press group min-w-0 text-left"
+      aria-label={`Ver detalles de ${item.titulo}`}
+    >
+      <span className="nintendo-game-card">
+        {item.img ? (
+          <span className="nintendo-game-card-media">
+            <Image
+              src={item.img}
+              alt={item.titulo}
+              fill
+              className="nintendo-game-card-img object-center transition duration-300 ease-out group-active:scale-[0.985]"
+              sizes="(max-width: 640px) 42vw, (max-width: 768px) 31vw, 128px"
+            />
+          </span>
+        ) : (
+          <span className="nintendo-game-card-media flex items-center justify-center px-2 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">
+            Sin imagen
+          </span>
+        )}
+        <span className="nintendo-game-card-body">
+          <span className="nintendo-game-card-title">{item.titulo}</span>
+          <span className="nintendo-game-card-subtitle">{consoleLabel}</span>
+          <span className="nintendo-game-card-price">${formatPrice(item.precio)}</span>
+          <span className="nintendo-game-card-footer">
+            <Heart
+              size={18}
+              strokeWidth={2.8}
+              className={saved ? 'fill-red-600 text-red-600' : 'text-red-600'}
+            />
+          </span>
+        </span>
+        {item.ahorro && (
+          <span className="nintendo-game-card-badge">
+            {item.ahorro.replace(/[¡!]/g, '')}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+});
+
+type CatalogDetailModalProps = {
+  item: CatalogItem;
+  saved: boolean;
+  onClose: () => void;
+  onBuy: (item: CatalogItem, event?: MouseEvent<HTMLButtonElement>) => void;
+  onToggleSaved: (item: CatalogItem) => void;
+};
+
+const CatalogDetailModal = memo(function CatalogDetailModal({
+  item,
+  saved,
+  onClose,
+  onBuy,
+  onToggleSaved,
+}: CatalogDetailModalProps) {
+  const consoleLabel = getConsoleLabel(item.consoleName);
+  const hasOldPrice = Boolean(item.precioOriginal && item.precioOriginal > item.precio);
+  const includedGames = item.juegosIncluidos || [];
+
+  return (
+    <div className="catalog-detail-backdrop" role="dialog" aria-modal="true" aria-label={`Detalles de ${item.titulo}`} onClick={onClose}>
+      <div className="catalog-detail-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black">
+              {item.esPack ? <Gift size={15} /> : <Tag size={15} />}
+            </span>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-400">
+              {item.esPack ? 'Pack de juegos' : 'Juego digital'}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar detalles" className="motion-press flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-[112px_1fr] gap-4">
+          <div className="game-case game-case-detail relative aspect-[0.58]">
+            <span className="game-card-label" aria-hidden="true">
+              <Image
+                src="/nintendo-switch-logo-white.png"
+                alt=""
+                width={34}
+                height={22}
+                className="h-full w-full object-contain"
+              />
+            </span>
+            {item.img ? (
+              <span className="game-case-window">
+                <Image src={item.img} alt="" aria-hidden="true" fill className="game-case-image-bg object-cover" sizes="112px" priority />
+                <Image src={item.img} alt={item.titulo} fill className="game-case-image game-case-image-main object-contain" sizes="112px" priority />
+              </span>
+            ) : (
+              <div className="game-case-window flex items-center justify-center px-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-700">Sin imagen</div>
+            )}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          </div>
+
+          <div className="min-w-0">
+            <h3 className="line-clamp-4 text-[19px] font-black leading-[1.05] tracking-[-0.02em] text-white">
+              {item.titulo}
+            </h3>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {consoleLabel && (
+                <span className="brand-chip px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#a9bac5]">
+                  <Gamepad2 size={11} /> {consoleLabel}
+                </span>
+              )}
+              {item.storageRequired && (
+                <span className="brand-chip px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-gray-400">
+                  <HardDrive size={11} /> {item.storageRequired}
+                </span>
+              )}
+              {item.ahorro && (
+                <span className="rounded-full bg-red-500 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-white">
+                  {item.ahorro.replace(/[¡!]/g, '')}
+                </span>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Precio</p>
+              {hasOldPrice && (
+                <p className="text-[11px] font-semibold text-gray-500 line-through decoration-red-500 decoration-2">
+                  ${formatPrice(item.precioOriginal || 0)}
+                </p>
+              )}
+              <p className="text-[26px] font-black leading-none tracking-[-0.04em] text-white">
+                ${formatPrice(item.precio)}
+                <span className="ml-1 text-[10px] font-bold tracking-normal text-gray-400">CLP</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {item.esPack && includedGames.length > 0 && (
+          <div className="mt-4 rounded-[1.2rem] border border-white/10 bg-white/[0.045] p-3">
+            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-gray-400">Incluye {includedGames.length} juegos</p>
+            <div className="max-h-28 space-y-1 overflow-y-auto pr-1 text-[11px] font-semibold leading-relaxed text-[#d5dde1] scrollbar-hide">
+              {includedGames.map((game) => (
+                <p key={game} className="line-clamp-1">- {game}</p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-[auto_1fr] gap-3">
+          <button
+            type="button"
+            onClick={() => onToggleSaved(item)}
+            aria-label={saved ? 'Quitar de favoritos' : 'Guardar favorito'}
+            className={`motion-press flex h-12 w-12 items-center justify-center rounded-full border ${
+              saved ? 'border-[#e5e4e2]/70 bg-[#e5e4e2] text-black' : 'border-white/10 bg-white/[0.08] text-white'
+            }`}
+          >
+            <Heart size={18} fill={saved ? 'currentColor' : 'none'} />
+          </button>
+          <button
+            type="button"
+            onClick={(event) => onBuy(item, event)}
+            className="motion-press flex h-12 items-center justify-center gap-2 rounded-full bg-[#25d366] px-5 text-xs font-black uppercase tracking-wide text-[#06130a] shadow-lg shadow-[#25d366]/20"
+          >
+            Comprar por WhatsApp <ArrowUpRight size={15} strokeWidth={2.8} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+function CatalogSection({
   sectionMotion,
   cargando,
   shouldDeferCatalogItems,
@@ -80,6 +276,21 @@ export default function CatalogSection({
   getSavedKey,
   savedIds,
 }: CatalogSectionProps) {
+  const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
+
+  useEffect(() => {
+    if (!selectedItem) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedItem(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedItem]);
+
   return (
     <div className={`section-motion ${sectionMotion}`}>
       <div className="premium-surface sticky top-3 z-30 -mx-1 mb-4 space-y-3 rounded-[1.8rem] p-3 backdrop-blur-2xl">
@@ -166,25 +377,15 @@ export default function CatalogSection({
             </div>
           </div>
 
-          <div key={`${storeTab}-${mostrarSoloOfertas ? 'ofertas' : 'todos'}`} className="grid grid-cols-1 gap-8 animate-fade-in pb-8 px-2">
+          <div key={`${storeTab}-${mostrarSoloOfertas ? 'ofertas' : 'todos'}`} className="catalog-poster-grid grid grid-cols-1 gap-4 animate-fade-in pb-8 sm:grid-cols-3 sm:gap-x-2">
             {listaVisual.length > 0 ? (
-              listaVisual.map((item, index) => (
-                <div key={item.id} className="animate-soft-in w-full max-w-[350px] mx-auto" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
-                  <GameCard
-                    titulo={item.titulo}
-                    precio={item.precio}
-                    precioOriginal={item.precioOriginal}
-                    img={item.img}
-                    ahorro={item.ahorro}
-                    esPack={item.esPack}
-                    juegosIncluidos={item.juegosIncluidos}
-                    storageRequired={item.storageRequired}
-                    consoleName={item.consoleName}
-                    onAdd={(event) => comprarDirecto(item, event)}
-                    onSave={() => toggleSaved(item)}
-                    saved={savedIds.includes(getSavedKey(item))}
-                  />
-                </div>
+              listaVisual.map((item) => (
+                <CatalogPoster
+                  key={item.id}
+                  item={item}
+                  saved={savedIds.includes(getSavedKey(item))}
+                  onOpen={setSelectedItem}
+                />
               ))
             ) : (
               <div className="flex flex-col items-center py-20 text-gray-500">
@@ -206,8 +407,20 @@ export default function CatalogSection({
               </button>
             </div>
           )}
+
+          {selectedItem && (
+            <CatalogDetailModal
+              item={selectedItem}
+              saved={savedIds.includes(getSavedKey(selectedItem))}
+              onClose={() => setSelectedItem(null)}
+              onBuy={comprarDirecto}
+              onToggleSaved={toggleSaved}
+            />
+          )}
         </>
       )}
     </div>
   );
 }
+
+export default memo(CatalogSection);
