@@ -478,7 +478,7 @@ export default function MobileAppStore() {
         {[
           { value: '+500', label: 'Clientes' },
           { value: '99.3%', label: 'Sin problemas' },
-          { value: '3 meses', label: 'Garantía' },
+          { value: '1-3 meses', label: 'Garantía' },
         ].map(s => (
           <div key={s.label} className="support-stat">
             <span className="support-stat__value">{s.value}</span>
@@ -510,7 +510,7 @@ export default function MobileAppStore() {
         {[
           { q: '¿Necesito mi consola desbloqueada?', a: 'No. Los juegos son digitales y se descargan desde la eShop oficial de Nintendo.' },
           { q: '¿Existe riesgo de baneo?', a: 'Existe un riesgo mínimo del 0.7%. El cliente acepta este punto al comprar.' },
-          { q: '¿Cuánto dura la garantía?', a: 'Clientes nuevos: 2 meses. Clientes frecuentes (5+ compras): 4 meses.' },
+          { q: '¿Cuánto dura la garantía?', a: 'Compradores nuevos: 1 mes. Compradores antiguos: 3 meses.' },
           { q: '¿Cuánto tiempo durará el juego?', a: 'Indefinido si sigues las instrucciones: no borres el juego ni la cuenta, ni modifiques datos.' },
         ].map(({ q, a }, i) => (
           <div key={i} className="support-faq__item">
@@ -586,12 +586,12 @@ export default function MobileAppStore() {
                     <h4 className="text-white text-sm font-black uppercase tracking-wide border-b border-white/5 pb-1">5. Garantía Técnica</h4>
                     <div className="grid grid-cols-2 gap-3 text-center">
                         <div className="bg-white/5 p-3 rounded-xl">
-                            <p className="text-gray-400 text-[10px] uppercase font-bold">Clientes Nuevos</p>
-                            <p className="text-lg text-blue-400 font-black">2 Meses</p>
+                            <p className="text-gray-400 text-[10px] uppercase font-bold">Compradores Nuevos</p>
+                            <p className="text-lg text-blue-400 font-black">1 Mes</p>
                         </div>
                         <div className="bg-white/5 p-3 rounded-xl border border-blue-500/30">
-                            <p className="text-gray-400 text-[10px] uppercase font-bold">Frecuentes (5+)</p>
-                            <p className="text-lg text-green-400 font-black">4 Meses</p>
+                            <p className="text-gray-400 text-[10px] uppercase font-bold">Compradores Antiguos</p>
+                            <p className="text-lg text-green-400 font-black">3 Meses</p>
                         </div>
                     </div>
                     <p>• Cubre fallos del juego no causados por el usuario. Incluye reposición (1 vez) o devolución del 50%.</p>
