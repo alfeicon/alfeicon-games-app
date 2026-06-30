@@ -21,19 +21,25 @@ const geistMono = Geist_Mono({
 });
 
 // 2. AQUÍ ESTÁ LO NUEVO: CONFIGURACIÓN DE LA TARJETA (BANNER)
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://alfeicon-games.vercel.app';
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://alfeicon-games.vercel.app'), // Esto permite que Vercel encuentre la imagen
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Alfeicon Games | Juegos Digitales",
     template: "%s | Alfeicon Games"
   },
   description: "Compra tus juegos favoritos de Nintendo Switch a precios increíbles. Entrega inmediata y seguridad garantizada.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
   
   // Configuración para WhatsApp, Facebook, Instagram (Open Graph)
   openGraph: {
     title: "Alfeicon Games 🎮 | Ofertas Nintendo Switch",
     description: "🔥 Packs y Juegos a precios bajos. ¡Entra y revisa nuestro catálogo con entrega inmediata!",
-    url: 'https://alfeicon-games.vercel.app',
+    url: siteUrl,
     siteName: 'Alfeicon Games',
     images: [
       {
@@ -61,6 +67,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isProduction = process.env.NODE_ENV === "production";
+
   return (
     <html lang="es" suppressHydrationWarning>
       <body 
@@ -72,9 +80,12 @@ export default function RootLayout({
 
         {children}
         
-        {/* 4. HERRAMIENTAS DE MONITOREO AL FINAL */}
-        <Analytics />
-        <SpeedInsights />
+        {isProduction && (
+          <>
+            <Analytics />
+            <SpeedInsights />
+          </>
+        )}
       </body>
     </html>
   );

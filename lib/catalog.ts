@@ -25,6 +25,8 @@ export type CatalogPack = {
   consoleName: string | null;
 };
 
+export type CatalogItem = CatalogGame | CatalogPack;
+
 export type CatalogData = {
   productos: CatalogGame[];
   packs: CatalogPack[];
@@ -62,6 +64,27 @@ const normalizeGameName = (value: string) =>
 const imageByGameName = new Map(
   DATA_IMAGENES.map((item) => [normalizeGameName(item.name), item.url]),
 );
+
+export function getImageForGame(titulo: string): string | null {
+  return imageByGameName.get(normalizeGameName(titulo)) ?? null;
+}
+
+// Reescribe URLs de assets.nintendo.com a un thumbnail más liviano en vez de
+// cargar la imagen full-size (w_1240) para huecos pequeños.
+export function getNintendoThumb(
+  url: string | null | undefined,
+  w = 272,
+  h = 153,
+): string | undefined {
+  if (!url) return undefined;
+  if (url.includes('assets.nintendo.com/image/upload/')) {
+    const m = url.match(/((?:ncom|store)\/.+)/);
+    if (m) {
+      return `https://assets.nintendo.com/image/upload/c_fill,g_auto,w_${w},h_${h},f_auto,q_auto/${m[1]}`;
+    }
+  }
+  return url;
+}
 
 const findPackFallbackImage = (titles: string[]) => {
   for (const title of titles) {

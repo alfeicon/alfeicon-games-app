@@ -1,0 +1,411 @@
+/* ════════════════════════════════════════════════════
+   Estilos del Catálogo (App-Store) — clases cat2-* y pack3-*
+   Extraído de globals.css para modularizar por componente.
+   Usado solo por CatalogSection.tsx
+   Nota: los estilos .catalog-detail-* (modal) siguen en
+   globals.css porque están entrelazados con media queries globales.
+   ════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════
+   CAT2  –  Catalog card redesign
+   ════════════════════════════════════════════════════ */
+
+.cat2-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(255,255,255,0.048);
+  border: 1px solid rgba(255,255,255,0.075);
+  border-radius: 20px;
+  padding: 12px 14px 12px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.16s cubic-bezier(0.22,1,0.36,1),
+              background 0.15s ease;
+  will-change: transform;
+}
+
+.cat2-card:active {
+  transform: scale(0.982);
+  background: rgba(255,255,255,0.07);
+}
+
+/* Thumbnail — 16:9 to show the full game cover */
+.cat2-img {
+  position: relative;
+  width: 136px;
+  height: 77px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.055);
+  flex-shrink: 0;
+}
+
+/* Offer badge on image */
+.cat2-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #e60012;
+  color: #fff;
+  border-radius: 7px;
+  padding: 2px 7px;
+  z-index: 1;
+  line-height: 1.5;
+}
+
+/* Content column */
+.cat2-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Game title – big and readable */
+.cat2-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin-bottom: 4px;
+}
+
+/* Platform chip */
+.cat2-platform {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.32);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+/* Price row */
+.cat2-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cat2-price-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Crossed-out original price */
+.cat2-old-price {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.28);
+  text-decoration: line-through;
+  text-decoration-color: rgba(230,0,18,0.6);
+  line-height: 1;
+}
+
+/* Current price – the hero of the card */
+.cat2-price {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  color: #ffffff;
+  line-height: 1;
+}
+
+/* Price on sale → green */
+.cat2-price.cat2-price-sale {
+  color: #4ade80;
+}
+
+/* CLP superscript */
+.cat2-clp {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.35);
+  margin-left: 3px;
+  vertical-align: super;
+  letter-spacing: 0.03em;
+  font-style: normal;
+}
+
+.cat2-price.cat2-price-sale .cat2-clp {
+  color: rgba(74,222,128,0.55);
+}
+
+/* Heart button */
+.cat2-heart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.055);
+  border: 1px solid rgba(255,255,255,0.09);
+  color: rgba(255,255,255,0.4);
+  flex-shrink: 0;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.cat2-heart.cat2-heart-saved {
+  background: rgba(220,38,38,0.14);
+  border-color: rgba(220,38,38,0.28);
+  color: #ef4444;
+}
+
+/* ── Light theme ── */
+.theme-light .cat2-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.07);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.05);
+}
+.theme-light .cat2-card:active {
+  background: rgba(124,58,237,0.04);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.theme-light .cat2-img { background: rgba(0,0,0,0.04); }
+.theme-light .cat2-title { color: #0a0a0a; }
+.theme-light .cat2-platform { color: rgba(0,0,0,0.36); }
+.theme-light .cat2-price { color: #0a0a0a; }
+.theme-light .cat2-old-price { color: rgba(0,0,0,0.28); }
+.theme-light .cat2-clp { color: rgba(0,0,0,0.32); }
+.theme-light .cat2-heart {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.09);
+  color: rgba(0,0,0,0.35);
+}
+
+/* ── cat2 entrance + micro-interactions ── */
+@keyframes cat2In {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.cat2-card {
+  animation: cat2In 0.44s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+.cat2-card:nth-child(1) { animation-delay: 0ms; }
+.cat2-card:nth-child(2) { animation-delay: 55ms; }
+.cat2-card:nth-child(3) { animation-delay: 110ms; }
+.cat2-card:nth-child(4) { animation-delay: 165ms; }
+.cat2-card:nth-child(5) { animation-delay: 220ms; }
+.cat2-card:nth-child(6) { animation-delay: 275ms; }
+.cat2-card:nth-child(7) { animation-delay: 330ms; }
+.cat2-card:nth-child(8) { animation-delay: 385ms; }
+
+.cat2-img img {
+  transition: transform 0.32s cubic-bezier(0.22,1,0.36,1);
+}
+
+/* ══════════════════════════════════════════════
+   PACK BUNDLE CARDS (pack3) – Redesigned
+   ══════════════════════════════════════════════ */
+.pack3-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(124,58,237,0.08);
+  border: 1px solid rgba(139,92,246,0.22);
+  border-radius: 20px;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.18s cubic-bezier(0.22,1,0.36,1),
+              background 0.15s ease,
+              box-shadow 0.18s cubic-bezier(0.22,1,0.36,1);
+  will-change: transform;
+  animation: cat2In 0.44s cubic-bezier(0.22,1,0.36,1) both;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.1);
+}
+.pack3-card:active {
+  transform: scale(0.982);
+  background: rgba(124,58,237,0.14);
+}
+
+/* Stagger for pack cards */
+.pack3-card:nth-child(1) { animation-delay: 0ms; }
+.pack3-card:nth-child(2) { animation-delay: 65ms; }
+.pack3-card:nth-child(3) { animation-delay: 130ms; }
+.pack3-card:nth-child(4) { animation-delay: 195ms; }
+.pack3-card:nth-child(5) { animation-delay: 260ms; }
+.pack3-card:nth-child(6) { animation-delay: 325ms; }
+
+/* Top visual: full-width 16:9 image */
+.pack3-visual {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(135deg, rgba(124,58,237,0.28) 0%, rgba(79,42,163,0.18) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.pack3-visual img {
+  transition: transform 0.34s cubic-bezier(0.22,1,0.36,1);
+}
+
+/* Bottom gradient for badge readability */
+.pack3-visual::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 35%, rgba(0,0,0,0.52) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.pack3-placeholder-ico {
+  color: rgba(167,139,250,0.55);
+}
+
+.pack3-count-badge {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 2;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(196,181,253,0.95);
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(167,139,250,0.24);
+}
+
+/* Content area below image */
+.pack3-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 13px 15px 15px;
+  gap: 4px;
+}
+.pack3-header-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 2px;
+}
+.pack3-label {
+  font-size: 9.5px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(167,139,250,0.85);
+}
+.pack3-new {
+  font-size: 8px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: #e60012;
+  color: #fff;
+  border-radius: 6px;
+  padding: 2px 7px;
+  line-height: 1.5;
+}
+.pack3-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+.pack3-games-list {
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.42);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.45;
+  margin-bottom: 2px;
+}
+.pack3-footer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+}
+.pack3-price {
+  font-size: 21px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.035em;
+}
+.pack3-clp {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.45);
+  vertical-align: super;
+  margin-left: 2px;
+  letter-spacing: 0;
+}
+.pack3-per {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(74,222,128,0.9);
+  white-space: nowrap;
+}
+.pack3-heart {
+  margin-left: auto;
+  color: rgba(255,255,255,0.28);
+  flex-shrink: 0;
+  transition: color 0.2s ease, transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
+}
+.pack3-heart.pack3-heart-saved {
+  color: #e60012;
+  transform: scale(1.15);
+}
+
+/* Light theme overrides */
+.theme-light .pack3-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.07);
+  box-shadow: 0 2px 14px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05);
+}
+.theme-light .pack3-card:active {
+  background: rgba(124,58,237,0.04);
+  box-shadow: 0 1px 5px rgba(0,0,0,0.06);
+}
+.theme-light .pack3-title { color: #111; }
+.theme-light .pack3-games-list { color: rgba(0,0,0,0.45); }
+.theme-light .pack3-price { color: #111; }
+.theme-light .pack3-clp { color: rgba(0,0,0,0.38); }
+.theme-light .pack3-per { color: #15803d; }
+.theme-light .pack3-heart { color: rgba(0,0,0,0.32); }
+.theme-light .pack3-label { color: rgba(109,40,217,0.8); }
+.theme-light .pack3-visual {
+  background: linear-gradient(135deg, rgba(124,58,237,0.14) 0%, rgba(79,42,163,0.08) 100%);
+}

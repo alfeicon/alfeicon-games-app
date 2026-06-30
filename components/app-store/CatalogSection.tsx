@@ -1,8 +1,12 @@
 "use client";
 
 import { memo, useEffect, useState, type MouseEvent, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { ArrowDownCircle, ArrowUpRight, Filter, Gamepad2, Gift, HardDrive, Heart, Loader2, Search, Tag, X } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpRight, Filter, Gamepad2, Gift, HardDrive, Heart, Loader2, Package2, Search, Tag, X } from 'lucide-react';
+import type { CatalogItem, CatalogPack } from '@/lib/catalog';
+import { getImageForGame, getNintendoThumb } from '@/lib/catalog';
+import './CatalogSection.css';
 
 type CatalogSectionProps = {
   sectionMotion: string;
@@ -12,7 +16,6 @@ type CatalogSectionProps = {
   setStoreTab: (tab: 'individual' | 'packs') => void;
   searchTerm: string;
   setSearchTerm: (value: string) => void;
-  filterTerm: string;
   setFilterTerm: (value: string) => void;
   ejecutarBusqueda: () => void;
   consoleFilter: 'all' | 'switch' | 'switch2';
@@ -36,27 +39,22 @@ type CatalogSectionProps = {
   savedIds: string[];
 };
 
-type CatalogItem = {
-  id: string | number;
-  titulo: string;
-  precio: number;
-  precioOriginal?: number | null;
-  img: string | null;
-  ahorro?: string | null;
-  esPack?: boolean;
-  juegosIncluidos?: string[];
-  storageRequired?: string | null;
-  consoleName?: string | null;
-};
-
 type CatalogPosterProps = {
   item: CatalogItem;
   saved: boolean;
   onOpen: (item: CatalogItem) => void;
+  priority?: boolean;
 };
+
+const BLUR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3Crect fill='%23181a1e' width='1' height='1'/%3E%3C/svg%3E";
 
 const formatPrice = (value: number) => value.toLocaleString('es-CL');
 
+/**
+ * Nintendo assets use Cloudinary. Extracts the raw content path
+ * (ncom/... or store/...) and rebuilds the URL preserving the native
+ * 16:9 aspect ratio so nothing gets cropped out.
+ */
 const getConsoleLabel = (consoleName?: string | null) => {
   if (!consoleName) return null;
   const isSwitch2Only = consoleName.toLowerCase().replace(/\s+/g, '').includes('switch2');
@@ -67,51 +65,178 @@ const CatalogPoster = memo(function CatalogPoster({
   item,
   saved,
   onOpen,
+  priority = false,
 }: CatalogPosterProps) {
   const consoleLabel = getConsoleLabel(item.consoleName) || 'Juego digital';
+  const hasDiscount = !item.esPack && Boolean(item.precioOriginal && item.precioOriginal > item.precio);
 
   return (
     <button
       type="button"
       onClick={() => onOpen(item)}
-      className="catalog-poster-cell render-window motion-press group min-w-0 text-left"
+      className="cat2-card w-full"
       aria-label={`Ver detalles de ${item.titulo}`}
     >
-      <span className="nintendo-game-card">
+      {/* Thumbnail — native 16:9 crop via Cloudinary */}
+      <span className="cat2-img">
         {item.img ? (
-          <span className="nintendo-game-card-media">
-            <Image
-              src={item.img}
-              alt={item.titulo}
-              fill
-              className="nintendo-game-card-img object-center transition duration-300 ease-out group-active:scale-[0.985]"
-              sizes="(max-width: 640px) 42vw, (max-width: 768px) 31vw, 128px"
-            />
-          </span>
+          <Image
+            src={getNintendoThumb(item.img) ?? item.img}
+            alt={item.titulo}
+            fill
+            className="object-cover"
+            sizes="136px"
+            placeholder="blur"
+            blurDataURL={BLUR_PLACEHOLDER}
+            priority={priority}
+          />
         ) : (
-          <span className="nintendo-game-card-media flex items-center justify-center px-2 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">
-            Sin imagen
+          <span className="flex h-full w-full items-center justify-center">
+            <Gamepad2 size={26} strokeWidth={1.4} className="text-gray-600" />
           </span>
         )}
-        <span className="nintendo-game-card-body">
-          <span className="nintendo-game-card-title">{item.titulo}</span>
-          <span className="nintendo-game-card-subtitle">{consoleLabel}</span>
-          <span className="nintendo-game-card-price">${formatPrice(item.precio)}</span>
-          <span className="nintendo-game-card-footer">
-            <Heart
-              size={18}
-              strokeWidth={2.8}
-              className={saved ? 'fill-red-600 text-red-600' : 'text-red-600'}
-            />
-          </span>
-        </span>
         {item.ahorro && (
-          <span className="nintendo-game-card-badge">
-            {item.ahorro.replace(/[¡!]/g, '')}
-          </span>
+          <span className="cat2-badge">{item.ahorro.replace(/[¡!]/g, '')}</span>
         )}
       </span>
+
+      {/* Content */}
+      <span className="cat2-body">
+        <span className="cat2-title">{item.titulo}</span>
+        <span className="cat2-platform">{consoleLabel}</span>
+
+        <span className="cat2-bottom">
+          <span className="cat2-price-wrap">
+            {hasDiscount && !item.esPack && (
+              <span className="cat2-old-price">${formatPrice(item.precioOriginal ?? 0)}</span>
+            )}
+            <span className={`cat2-price${hasDiscount ? ' cat2-price-sale' : ''}`}>
+              ${formatPrice(item.precio)}
+              <sup className="cat2-clp">CLP</sup>
+            </span>
+          </span>
+          <span className={`cat2-heart${saved ? ' cat2-heart-saved' : ''}`}>
+            <Heart size={15} strokeWidth={2.5} fill={saved ? 'currentColor' : 'none'} />
+          </span>
+        </span>
+      </span>
     </button>
+  );
+});
+
+const PackCard = memo(function PackCard({
+  item,
+  saved,
+  onOpen,
+}: {
+  item: CatalogPack;
+  saved: boolean;
+  onOpen: (item: CatalogItem) => void;
+}) {
+  const perGame = item.juegosIncluidos.length > 0
+    ? Math.round(item.precio / item.juegosIncluidos.length)
+    : null;
+  const shown = item.juegosIncluidos.slice(0, 4);
+  const extra = item.juegosIncluidos.length - shown.length;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      className="pack3-card w-full"
+      aria-label={`Ver detalles de ${item.titulo}`}
+    >
+      {/* Top: full-width 16:9 image */}
+      <span className="pack3-visual">
+        {item.img ? (
+          <Image
+            src={getNintendoThumb(item.img, 400, 225) ?? item.img}
+            alt=""
+            fill
+            className="object-cover"
+            sizes="(max-width: 480px) 100vw, 400px"
+            placeholder="blur"
+            blurDataURL={BLUR_PLACEHOLDER}
+          />
+        ) : (
+          <Package2 size={32} strokeWidth={1.2} className="pack3-placeholder-ico" />
+        )}
+        <span className="pack3-count-badge">{item.juegosIncluidos.length} juegos</span>
+      </span>
+
+      {/* Right: content */}
+      <span className="pack3-body">
+        <span className="pack3-header-row">
+          <span className="pack3-label">Pack de juegos</span>
+          {item.esNuevo && <span className="pack3-new">NUEVO</span>}
+        </span>
+        <span className="pack3-title">{item.titulo}</span>
+        <span className="pack3-games-list">
+          {shown.join(' · ')}{extra > 0 ? ` +${extra} más` : ''}
+        </span>
+        <span className="pack3-footer">
+          <span className="pack3-price">
+            ${formatPrice(item.precio)}<sup className="pack3-clp">CLP</sup>
+          </span>
+          {perGame && (
+            <span className="pack3-per">~${formatPrice(perGame)} c/u</span>
+          )}
+          <span className={`pack3-heart${saved ? ' pack3-heart-saved' : ''}`}>
+            <Heart size={14} strokeWidth={2.5} fill={saved ? 'currentColor' : 'none'} />
+          </span>
+        </span>
+      </span>
+    </button>
+  );
+});
+
+const PackImageMosaic = memo(function PackImageMosaic({
+  games,
+  totalCount,
+}: {
+  games: string[];
+  totalCount: number;
+}) {
+  const withImages = games
+    .map(name => ({ name, url: getImageForGame(name) }))
+    .filter((g): g is { name: string; url: string } => g.url !== null)
+    .slice(0, 4);
+
+  const shown = withImages.length > 0 ? withImages : null;
+  const extraCount = totalCount - (shown?.length ?? 0);
+
+  return (
+    <div className="relative aspect-[0.58] overflow-hidden rounded-xl border border-white/10 bg-white/5">
+      {shown ? (
+        <div className={`grid h-full gap-0.5 ${shown.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {shown.map((g, i) => {
+            const isLast = i === shown.length - 1;
+            return (
+              <div key={g.name} className="relative overflow-hidden bg-black/20">
+                <Image
+                  src={getNintendoThumb(g.url, 120, 90) ?? g.url}
+                  alt={g.name}
+                  fill
+                  className="object-cover"
+                  sizes="56px"
+                  placeholder="blur"
+                  blurDataURL={BLUR_PLACEHOLDER}
+                />
+                {isLast && extraCount > 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <span className="text-lg font-black text-white">+{extraCount}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex h-full items-center justify-center">
+          <Package2 size={36} strokeWidth={1.2} className="text-gray-600" />
+        </div>
+      )}
+    </div>
   );
 });
 
@@ -131,8 +256,8 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
   onToggleSaved,
 }: CatalogDetailModalProps) {
   const consoleLabel = getConsoleLabel(item.consoleName);
-  const hasOldPrice = Boolean(item.precioOriginal && item.precioOriginal > item.precio);
-  const includedGames = item.juegosIncluidos || [];
+  const hasOldPrice = !item.esPack && Boolean(item.precioOriginal && item.precioOriginal > item.precio);
+  const includedGames = item.esPack ? item.juegosIncluidos : [];
 
   return (
     <div className="catalog-detail-backdrop" role="dialog" aria-modal="true" aria-label={`Detalles de ${item.titulo}`} onClick={onClose}>
@@ -152,6 +277,10 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
         </div>
 
         <div className="grid grid-cols-[112px_1fr] gap-4">
+          {/* Pack: mosaic of game covers; Game: Nintendo Switch case */}
+          {item.esPack ? (
+            <PackImageMosaic games={item.juegosIncluidos} totalCount={item.juegosIncluidos.length} />
+          ) : (
           <div className="game-case game-case-detail relative aspect-[0.58]">
             <span className="game-card-label" aria-hidden="true">
               <Image
@@ -172,6 +301,7 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
             )}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           </div>
+          )}
 
           <div className="min-w-0">
             <h3 className="line-clamp-4 text-[19px] font-black leading-[1.05] tracking-[-0.02em] text-white">
@@ -184,7 +314,7 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
                   <Gamepad2 size={11} /> {consoleLabel}
                 </span>
               )}
-              {item.storageRequired && (
+              {!item.esPack && item.storageRequired && (
                 <span className="brand-chip px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-gray-400">
                   <HardDrive size={11} /> {item.storageRequired}
                 </span>
@@ -198,9 +328,9 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
 
             <div className="mt-4">
               <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Precio</p>
-              {hasOldPrice && (
+              {hasOldPrice && !item.esPack && (
                 <p className="text-[11px] font-semibold text-gray-500 line-through decoration-red-500 decoration-2">
-                  ${formatPrice(item.precioOriginal || 0)}
+                  ${formatPrice(item.precioOriginal ?? 0)}
                 </p>
               )}
               <p className="text-[26px] font-black leading-none tracking-[-0.04em] text-white">
@@ -377,16 +507,26 @@ function CatalogSection({
             </div>
           </div>
 
-          <div key={`${storeTab}-${mostrarSoloOfertas ? 'ofertas' : 'todos'}`} className="catalog-poster-grid grid grid-cols-1 gap-4 animate-fade-in pb-8 sm:grid-cols-3 sm:gap-x-2">
+          <div key={`${storeTab}-${mostrarSoloOfertas ? 'ofertas' : 'todos'}`} className="flex flex-col gap-3 animate-fade-in pb-8">
             {listaVisual.length > 0 ? (
-              listaVisual.map((item) => (
-                <CatalogPoster
-                  key={item.id}
-                  item={item}
-                  saved={savedIds.includes(getSavedKey(item))}
-                  onOpen={setSelectedItem}
-                />
-              ))
+              listaVisual.map((item, idx) =>
+                item.esPack ? (
+                  <PackCard
+                    key={item.id}
+                    item={item}
+                    saved={savedIds.includes(getSavedKey(item))}
+                    onOpen={setSelectedItem}
+                  />
+                ) : (
+                  <CatalogPoster
+                    key={item.id}
+                    item={item}
+                    saved={savedIds.includes(getSavedKey(item))}
+                    onOpen={setSelectedItem}
+                    priority={idx < 3}
+                  />
+                )
+              )
             ) : (
               <div className="flex flex-col items-center py-20 text-gray-500">
                 <Search size={40} className="mb-4 opacity-20" />
@@ -408,14 +548,15 @@ function CatalogSection({
             </div>
           )}
 
-          {selectedItem && (
+          {selectedItem && createPortal(
             <CatalogDetailModal
               item={selectedItem}
               saved={savedIds.includes(getSavedKey(selectedItem))}
               onClose={() => setSelectedItem(null)}
               onBuy={comprarDirecto}
               onToggleSaved={toggleSaved}
-            />
+            />,
+            document.querySelector('.alfeicon-theme') ?? document.body
           )}
         </>
       )}

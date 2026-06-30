@@ -1,30 +1,26 @@
 // app/page.tsx
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react/no-unescaped-entities */
+/* eslint-disable react/no-unescaped-entities */
 
 import { startTransition, useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { 
-  Gamepad2, BookOpen, Instagram, MessageCircle, 
-  Zap, Youtube, FileText, 
-  ShieldCheck, AlertTriangle, Facebook, X, Megaphone, Star, Gift, CheckCircle, ChevronRight, Heart
+import {
+  Instagram, MessageCircle,
+  Zap, Youtube, FileText,
+  ShieldCheck, AlertTriangle, Facebook, X, ChevronRight, Heart,
 } from 'lucide-react';
-import GameCard from '@/components/GameCard';
 import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
-import { fetchCatalogFromSupabase } from '@/lib/catalog';
+import { fetchCatalogFromSupabase, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from '@/lib/settings';
+
+import HomeSectionV2 from '@/components/app-store/HomeSectionV2';
 
 const CatalogSection = dynamic(() => import('@/components/app-store/CatalogSection'), {
   ssr: false,
   loading: () => <div className="min-h-[52vh]" aria-hidden="true" />,
 });
-
-const ShaderAnimation = dynamic(
-  () => import('@/components/ui/shader-animation').then((mod) => mod.ShaderAnimation),
-  { ssr: false, loading: () => null },
-);
 
 // --- CONFIGURACION ---
 const CONFIG = {
@@ -64,11 +60,38 @@ export default function MobileAppStore() {
   const [sectionMotion, setSectionMotion] = useState<SectionMotionClass>('section-idle');
   const [storeTab, setStoreTab] = useState<'individual' | 'packs'>('individual');
   const [helpTab, setHelpTab] = useState<'switch2' | 'switch1'>('switch2');
+  const [helpSelected, setHelpSelected] = useState<'switch2' | 'switch1' | null>(null);
+  const [pickerExiting, setPickerExiting] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
   const [showBottomNav, setShowBottomNav] = useState(true);
-  const showBottomNavRef = useRef(true);
+  const [dockCollapsed, setDockCollapsed] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+
+  // Colapsa el dock al hacer scroll hacia abajo, lo expande al subir
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        if (y < 80) {
+          setShowBottomNav(true);
+          setDockCollapsed(false);
+        } else if (Math.abs(y - lastY) > 8) {
+          const goingDown = y > lastY;
+          setShowBottomNav(!goingDown);
+          setDockCollapsed(goingDown);
+        }
+        lastY = y;
+        ticking = false;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
   
   const [searchTerm, setSearchTerm] = useState(""); 
   const [filterTerm, setFilterTerm] = useState(""); 
@@ -84,11 +107,12 @@ export default function MobileAppStore() {
   const purchaseResetTimerRef = useRef<number | null>(null);
   const sectionSwitchTimerRef = useRef<number | null>(null);
   const sectionSettleTimerRef = useRef<number | null>(null);
+  const savedToastTimerRef = useRef<number | null>(null);
   const visibleSectionRef = useRef<SectionId>('inicio');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const [productos, setProductos] = useState<any[]>([]);
-  const [packs, setPacks] = useState<any[]>([]);
+  const [productos, setProductos] = useState<CatalogGame[]>([]);
+  const [packs, setPacks] = useState<CatalogPack[]>([]);
   const [appSettings, setAppSettings] = useState(DEFAULT_APP_SETTINGS);
   const [cargando, setCargando] = useState(true);
   
@@ -132,6 +156,7 @@ export default function MobileAppStore() {
       if (purchaseResetTimerRef.current) window.clearTimeout(purchaseResetTimerRef.current);
       if (sectionSwitchTimerRef.current) window.clearTimeout(sectionSwitchTimerRef.current);
       if (sectionSettleTimerRef.current) window.clearTimeout(sectionSettleTimerRef.current);
+      if (savedToastTimerRef.current) window.clearTimeout(savedToastTimerRef.current);
     };
   }, []);
 
@@ -142,6 +167,8 @@ export default function MobileAppStore() {
   }, [searchTerm]);
 
   const navigateToSection = useCallback((nextSection: SectionId) => {
+    setDockCollapsed(false);
+    setShowBottomNav(true);
     if (nextSection === activeSection) return;
 
     const currentVisibleSection = visibleSectionRef.current;
@@ -197,13 +224,13 @@ export default function MobileAppStore() {
     }, 1800);
   }, []);
 
-  const comprarDirecto = useCallback((item: any, event?: MouseEvent<HTMLElement>) => {
+  const comprarDirecto = useCallback((item: CatalogItem, event?: MouseEvent<HTMLElement>) => {
     let mensaje = "";
     const precioFmt = item.precio.toLocaleString('es-CL');
 
     if (item.esPack) {
-      const listaJuegosTexto = item.juegosIncluidos 
-          ? item.juegosIncluidos.map((juego: string) => `- ${juego}`).join('\n')
+      const listaJuegosTexto = item.juegosIncluidos.length > 0
+          ? item.juegosIncluidos.map((juego) => `- ${juego}`).join('\n')
           : "Consultar juegos";
 
       mensaje = `Hola Alfeicon Games!\n\nMe interesa este pack que vi en la web:\n\n*${item.titulo}*\n\nIncluye:\n${listaJuegosTexto}\n\nPrecio: $${precioFmt}\n\n¿Lo tienes disponible?`;
@@ -222,11 +249,11 @@ export default function MobileAppStore() {
     goToWhatsApp(url, event);
   }, [appSettings.nintendoOnlinePrice, goToWhatsApp]);
 
-  const getSavedKey = useCallback((item: any) => {
+  const getSavedKey = useCallback((item: CatalogItem) => {
     return `${item.esPack ? 'pack' : 'game'}:${String(item.id)}`;
   }, []);
 
-  const toggleSaved = useCallback((item: any) => {
+  const toggleSaved = useCallback((item: CatalogItem) => {
     const itemId = getSavedKey(item);
 
     setSavedIds((current) => {
@@ -238,8 +265,9 @@ export default function MobileAppStore() {
       return next;
     });
 
+    if (savedToastTimerRef.current) window.clearTimeout(savedToastTimerRef.current);
     setSavedToast(true);
-    window.setTimeout(() => setSavedToast(false), 2400);
+    savedToastTimerRef.current = window.setTimeout(() => setSavedToast(false), 2400);
   }, [getSavedKey]);
 
   // --- EFECTOS ---
@@ -250,6 +278,10 @@ export default function MobileAppStore() {
         setMostrarSoloOfertas(false);
         setMostrarGuardados(false);
         setConsoleFilter('all');
+    }
+    if (visibleSection === 'instrucciones') {
+        setHelpSelected(null);
+        setPickerExiting(false);
     }
     setVisibleCount(CATALOG_INITIAL_COUNT);
   }, [visibleSection, storeTab]);
@@ -270,61 +302,16 @@ export default function MobileAppStore() {
     cargarDatos();
   }, []);
 
-  useEffect(() => {
-    let lastScrollY = window.scrollY;
-    let ticking = false;
-
-    const setDockVisible = (visible: boolean) => {
-      if (showBottomNavRef.current === visible) return;
-      showBottomNavRef.current = visible;
-      setShowBottomNav(visible);
-    };
-
-    const updateNavigation = () => {
-      const currentScrollY = window.scrollY;
-      const scrollDelta = currentScrollY - lastScrollY;
-      const isScrollingDown = scrollDelta > 8;
-      const isScrollingUp = scrollDelta < -8;
-      const isNearTop = currentScrollY < 80;
-
-      if (isNearTop || isScrollingUp) {
-        setDockVisible(true);
-      } else if (isScrollingDown) {
-        setDockVisible(false);
-      }
-
-      if (Math.abs(scrollDelta) > 8) {
-        lastScrollY = currentScrollY;
-      }
-      ticking = false;
-    };
-
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(updateNavigation);
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   // --- MEMOS ---
   const ofertasFlash = useMemo(() => productos.filter(p => p.ahorro).slice(0, 8), [productos]);
-  
-  // Filtramos solo los que son nuevos para contar cuántos hay
-  const nuevosLanzamientos = useMemo(() => packs.filter(p => p.esNuevo), [packs]);
-  
-  const packsDestacados = useMemo(() => packs.slice(0, 6), [packs]);
 
   const fuseInstance = useMemo(() => {
-    const items = storeTab === 'individual' ? productos : packs;
+    const items: CatalogItem[] = storeTab === 'individual' ? productos : packs;
     return new Fuse(items, FUSE_OPTIONS);
   }, [storeTab, productos, packs]);
 
   const listaFiltrada = useMemo(() => {
-    let items = storeTab === 'individual' ? productos : packs;
+    let items: CatalogItem[] = storeTab === 'individual' ? productos : packs;
     if (filterTerm !== "") {
         items = fuseInstance.search(filterTerm).map(result => result.item);
     }
@@ -364,7 +351,7 @@ export default function MobileAppStore() {
   }, [visibleSection, cargando, shouldDeferCatalogItems, visibleCount, listaFiltrada.length]);
 
   const savedCountActual = useMemo(() => {
-    const items = storeTab === 'individual' ? productos : packs;
+    const items: CatalogItem[] = storeTab === 'individual' ? productos : packs;
     return items.filter((item) => savedIds.includes(getSavedKey(item))).length;
   }, [storeTab, productos, packs, savedIds, getSavedKey]);
   const purchaseInkStyle = useMemo(() => ({
@@ -380,287 +367,27 @@ export default function MobileAppStore() {
 
   // --- RENDER ---
   return (
-    <div data-theme={theme} className={`alfeicon-theme ${theme === 'light' ? 'theme-light' : 'theme-dark'} min-h-screen bg-black flex justify-center selection:bg-white selection:text-black`}>
+    <div data-theme={theme} className={`alfeicon-theme ${theme === 'light' ? 'theme-light' : 'theme-dark'} flex min-h-[100dvh] justify-center bg-black selection:bg-white selection:text-black`}>
       <div className="noise-overlay" />
-      <div className="relative z-10 w-full max-w-md bg-black min-h-screen shadow-2xl border-x border-gray-900 font-sans text-white overflow-hidden">
+      <div className="relative z-10 min-h-[100dvh] w-full max-w-md overflow-hidden border-x border-gray-900 bg-black font-sans text-white shadow-2xl">
         {/* MAIN */}
-        <main className="min-h-screen overflow-x-hidden px-4 pb-32">
+        <main className="min-h-[100dvh] overflow-x-hidden px-4 pb-32">
           
 {/* SECCIÓN 1: INICIO */}
           {visibleSection === 'inicio' && (
-            <div className={`section-motion ${sectionMotion} space-y-7`}>
-              {/* PORTADA DE MARCA */}
-              <section className="animate-soft-in -mx-4 overflow-hidden border-b border-white/10 bg-black px-5 pb-7 pt-6">
-                <div className="brand-shell relative mx-auto max-w-[360px] rounded-[2.15rem] p-5">
-                  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[2rem] opacity-25">
-                    {!isSectionTransitioning && <ShaderAnimation />}
-                  </div>
-                  <div className="pointer-events-none absolute inset-x-6 top-0 h-36 rounded-full bg-[#536878]/35 blur-[72px]" />
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-[#e5e4e2]/5 blur-2xl" />
-                  <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-gradient-to-b from-[#536878]/12 via-[#0a0a0a]/40 to-[#0a0a0a]/85" />
-                  <div className="relative z-10">
-                    <div className="mb-6 flex items-center justify-between">
-                      <div className="relative h-14 w-14 rounded-2xl border border-[#536878]/35 bg-[#536878]/15 shadow-xl">
-                        <Image src="/logo.png" alt="Alfeicon Logo" fill className="object-contain p-2" sizes="56px" priority />
-                      </div>
-                      <div className="flex items-center gap-2 rounded-full border border-[#536878]/45 bg-[#536878]/18 px-3 py-1.5">
-                        <span className="relative flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3de26f] opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#3de26f] shadow-[0_0_12px_rgba(61,226,111,0.85)]" />
-                        </span>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[#d5dde1]">Online</span>
-                      </div>
-                    </div>
-
-                    <p className="brand-kicker mb-3">Nintendo Switch</p>
-                    <h1 className="brand-title text-[38px] font-black uppercase text-white">
-                      Alfeicon<br />
-                      <span className="font-light tracking-[0.18em]">Games</span>
-                    </h1>
-                    <p className="mt-4 max-w-[270px] text-sm font-semibold leading-relaxed text-gray-400">
-                      Juegos digitales, packs y ofertas con compra directa por WhatsApp.
-                    </p>
-
-                    <div className="mt-6 grid grid-cols-[1fr_auto] gap-3">
-                      <button
-                        onClick={() => navigateToSection('catalogo')}
-                        className="magnetic group flex h-12 items-center justify-center gap-2 rounded-full bg-[#536878] px-5 text-xs font-black uppercase tracking-widest text-[#e5e4e2] shadow-lg shadow-[#536878]/30 hover:bg-[#627988]"
-                      >
-                        Ver catalogo <ChevronRight size={15} className="transition-transform duration-500 group-hover:translate-x-0.5" />
-                      </button>
-                      <a
-                        href={CONFIG.canalWhatsapp}
-                        target="_blank"
-                        className="magnetic flex h-12 w-12 items-center justify-center rounded-full bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-[#e5e4e2]/10"
-                        aria-label="Canal de WhatsApp"
-                      >
-                        <Megaphone size={19} fill="currentColor" />
-                      </a>
-                    </div>
-
-                    <div className="mt-5 grid grid-cols-3 gap-2.5">
-                      <div className="liquid-glass group min-h-[78px] rounded-[1.1rem] px-3 py-3 transition duration-500">
-                        <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/10 to-transparent" />
-                        <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#9fb3c0]/12 blur-2xl" />
-                        <p className="relative text-2xl font-black leading-none text-white">{productos.length || '-'}</p>
-                        <p className="relative mt-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500">Juegos</p>
-                      </div>
-                      <div className="liquid-glass group min-h-[78px] rounded-[1.1rem] px-3 py-3 transition duration-500">
-                        <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/10 to-transparent" />
-                        <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#b8c3ca]/12 blur-2xl" />
-                        <p className="relative text-2xl font-black leading-none text-white">{packs.length || '-'}</p>
-                        <p className="relative mt-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500">Packs</p>
-                      </div>
-                      <div className="liquid-glass group min-h-[78px] rounded-[1.1rem] px-3 py-3 transition duration-500">
-                        <div className="pointer-events-none absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-[#e5e4e2]/12 to-transparent" />
-                        <div className="pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full bg-[#e5e4e2]/10 blur-2xl" />
-                        <p className="relative text-2xl font-black leading-none text-white">{ofertasFlash.length || '-'}</p>
-                        <p className="relative mt-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500">Ofertas</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="animate-soft-in mx-1 overflow-hidden rounded-[1.7rem] border border-red-300/20 bg-[#e60012] shadow-2xl shadow-red-950/25">
-                <div className="relative min-h-[188px] p-5">
-                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(105deg,#ef0014_0%,#e60012_49%,#b90010_50%,#cb0012_100%)]" />
-                  <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/12 blur-3xl" />
-                  <div className="pointer-events-none absolute -bottom-14 left-0 h-40 w-40 rounded-full bg-black/16 blur-2xl" />
-
-                  <div className="relative z-10 flex h-full flex-col justify-between gap-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/78">12 meses</p>
-                        <h2 className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[-0.04em] text-white">
-                          Online +<br />
-                          <span className="text-[22px] tracking-[-0.03em]">Paquete expansión</span>
-                        </h2>
-                      </div>
-                      <div className="rounded-full border border-white/30 bg-white/18 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur-xl">
-                        Disponible
-                      </div>
-                    </div>
-
-                    <div className="flex items-end justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-white/68">Precio</p>
-                        <p className="text-[30px] font-black leading-none tracking-[-0.05em] text-white">
-                          ${appSettings.nintendoOnlinePrice.toLocaleString('es-CL')}
-                          <span className="ml-1 text-[11px] font-bold tracking-normal text-white/72">CLP</span>
-                        </p>
-                      </div>
-                      <button
-                        onClick={comprarNintendoOnline}
-                        className="magnetic rounded-full bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#e60012] shadow-lg shadow-black/20"
-                      >
-                        Comprar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* AVISO DE NOVEDADES (BANNER ELEGANTE) */}
-              {nuevosLanzamientos.length > 0 && (
-                <div className="animate-fade-in mx-1">
-                   <div className="liquid-glass group rounded-[1.45rem] p-4">
-                       <div className="absolute right-0 top-0 h-28 w-28 translate-x-10 -translate-y-10 rounded-full bg-[#536878]/20 blur-[40px]"></div>
-                       
-                       <div className="flex items-center justify-between relative z-10">
-                           <div className="flex items-center gap-3">
-                               <div className="rounded-full border border-[#536878]/30 bg-[#536878]/20 p-2.5">
-                                   <Megaphone size={18} className="text-blue-400" />
-                               </div>
-                               <div className="flex flex-col">
-                                   <h3 className="text-sm font-black uppercase tracking-wide text-white">
-                                       Packs recientes
-                                   </h3>
-                                   <p className="text-[10px] text-gray-400 font-medium">
-                                       Hemos agregado <span className="text-blue-400 font-bold">{nuevosLanzamientos.length} packs</span> al catálogo.
-                                   </p>
-                               </div>
-                           </div>
-                           
-                           <button 
-                               onClick={() => {
-                                   setStoreTab('packs'); 
-                                   navigateToSection('catalogo');
-                               }}
-                               className="magnetic flex items-center gap-1 rounded-full bg-white px-4 py-2.5 text-[9px] font-black uppercase tracking-widest text-black shadow-lg shadow-white/10 hover:bg-gray-200"
-                           >
-                               Ver ahora <ChevronRight size={12} />
-                           </button>
-                       </div>
-                   </div>
-                </div>
-              )}
-
-              {/* RECUADRO CÓMO COMPRAR */}
-              <div className="brand-shell mx-1 rounded-[2rem] p-5">
-                  <div className="mb-5 flex items-center justify-between gap-3">
-                    <h3 className="brand-kicker flex items-center gap-2">
-                        <CheckCircle size={14} /> Compra en 4 pasos
-                    </h3>
-                    <span className="brand-chip px-2.5 py-1 text-[9px] font-black uppercase tracking-widest">Desliza</span>
-                  </div>
-
-                  <div className="-mx-2 flex snap-x snap-mandatory gap-3 overflow-x-auto px-2 pb-3 scrollbar-hide">
-                      {[
-                        {
-                          step: '1',
-                          title: 'Elige',
-                          copy: 'Busca tu juego favorito en el catálogo.',
-                          image: '/steps/step-choose.png',
-                        },
-                        {
-                          step: '2',
-                          title: 'Chatea',
-                          copy: 'Escríbenos para confirmar disponibilidad.',
-                          image: '/steps/step-chat.png',
-                        },
-                        {
-                          step: '3',
-                          title: 'Paga',
-                          copy: 'Realiza el pago del juego.',
-                          image: '/steps/step-pay.png',
-                        },
-                        {
-                          step: '4',
-                          title: 'Juega',
-                          copy: 'Recibe los datos y comienza a jugar.',
-                          image: '/steps/step-play.png',
-                        },
-                      ].map((item, index) => (
-                        <article
-                          key={item.step}
-                          className="liquid-glass animate-soft-in min-w-[82%] snap-center rounded-[1.35rem]"
-                          style={{ animationDelay: `${index * 90}ms` }}
-                        >
-                          <div className="relative aspect-[16/9] overflow-hidden bg-[#0a0a0a]">
-                            <Image src={item.image} alt={`${item.title}: ${item.copy}`} fill className="object-cover transition duration-700 hover:scale-[1.03]" sizes="(max-width: 768px) 82vw, 320px" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent" />
-                            <div className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#e5e4e2] text-sm font-black text-[#0a0a0a] shadow-lg shadow-black/30">
-                              {item.step}
-                            </div>
-                          </div>
-                          <div className="p-4">
-                            <p className="text-sm font-black uppercase tracking-widest text-white">{item.title}</p>
-                            <p className="mt-1 text-xs font-semibold leading-relaxed text-gray-500">{item.copy}</p>
-                          </div>
-                        </article>
-                      ))}
-                  </div>
-              </div>
-
-              {/* CLIENTES FELICES */}
-              <div className="mb-4 mt-6">
-                  <div className="flex items-center justify-between mb-4 px-2">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2"><ShieldCheck size={16} className="text-blue-400" /> Clientes felices</h3>
-                    <a href="https://instagram.com/alfeicon_games" target="_blank" className="magnetic flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold text-blue-400 hover:bg-white/5 hover:text-white">Ver historias <Instagram size={10} /></a>
-                  </div>
-                  <div className="flex overflow-x-auto gap-3 px-2 pb-4 snap-x snap-mandatory scrollbar-hide">
-                    {[1, 2, 3, 4].map((num) => (
-                      <div key={num} className="liquid-glass min-w-[140px] w-[140px] aspect-[9/16] relative rounded-[1.15rem] shrink-0 snap-center group">
-                        <Image src={`/clientes/${num}.jpg`} alt={`Cliente ${num}`} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500" sizes="140px" />
-                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-3 pt-10">
-                           <div className="flex gap-0.5 mb-1">
-                              {[1,2,3,4,5].map(star => <Star key={star} size={8} className="text-yellow-400 fill-yellow-400" />)}
-                           </div>
-                           <p className="text-[9px] text-gray-300 font-medium">Compra verificada</p>
-                        </div>
-                      </div>
-                    ))}
-                    <a href="https://instagram.com/alfeicon_games" target="_blank" className="min-w-[140px] w-[140px] aspect-[9/16] relative rounded-xl overflow-hidden border border-white/10 shrink-0 snap-center bg-[#111] flex flex-col items-center justify-center gap-3 group hover:bg-[#1a1a1a] transition-colors">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 flex items-center justify-center group-hover:scale-110 transition-transform"><Instagram size={24} className="text-white" /></div>
-                        <div className="text-center px-2"><p className="text-white text-xs font-bold mb-1">Ver Más</p><p className="text-[9px] text-gray-500 leading-tight">Revisa nuestras Historias Destacadas</p></div>
-                    </a>
-                  </div>
-              </div>
-
-              {/* OFERTAS FLASH */}
-              <div>
-                <div className="flex items-center justify-between mb-4 px-1">
-                   <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2"><Zap size={15} className="text-blue-400" /> Ofertas destacadas</h3>
-                   <span className="brand-chip px-2 py-1 text-[10px] font-bold">Desliza</span>
-                </div>
-                <div className="flex overflow-x-auto gap-4 px-2 pb-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                   {cargando ? ([1,2,3].map(i => <div key={i} className="brand-shell min-w-[280px] h-[410px] rounded-[1.55rem] shrink-0 animate-pulse" />)) : (
-                      ofertasFlash.map((item) => (
-                        <div key={item.id} className="min-w-[280px] snap-center shrink-0">
-                             <GameCard titulo={item.titulo} precio={item.precio} precioOriginal={item.precioOriginal} img={item.img} ahorro={item.ahorro} esPack={item.esPack} storageRequired={item.storageRequired} consoleName={item.consoleName}
-                                onAdd={(event) => comprarDirecto(item, event)} 
-                                onSave={() => toggleSaved(item)}
-                                saved={savedIds.includes(getSavedKey(item))}
-                             />
-                        </div>
-                      ))
-                   )}
-                </div>
-              </div>
-
-              {/* PACKS DESTACADOS */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-4 px-1">
-                   <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2"><Gift size={16} className="text-blue-400" /> Packs imperdibles</h3>
-                   <button onClick={() => {setStoreTab('packs'); navigateToSection('catalogo');}} className="magnetic rounded-full border border-blue-500/30 bg-blue-900/20 px-3 py-1.5 text-[10px] font-bold text-blue-400 hover:bg-blue-900/40">Ver todos</button>
-                </div>
-                <div className="flex overflow-x-auto gap-4 px-2 pb-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                   {cargando ? ([1,2,3].map(i => <div key={i} className="brand-shell min-w-[280px] h-[410px] rounded-[1.55rem] shrink-0 animate-pulse" />)) : (
-                      packsDestacados.map((item) => (
-                        <div key={item.id} className="min-w-[280px] snap-center shrink-0">
-                             <GameCard titulo={item.titulo} precio={item.precio} img={item.img} ahorro={item.ahorro} esPack={item.esPack} juegosIncluidos={item.juegosIncluidos} consoleName={item.consoleName}
-                                onAdd={(event) => comprarDirecto(item, event)} 
-                                onSave={() => toggleSaved(item)}
-                                saved={savedIds.includes(getSavedKey(item))}
-                             />
-                        </div>
-                      ))
-                   )}
-                </div>
-              </div>
-
-            </div>
+            <HomeSectionV2
+              sectionMotion={sectionMotion}
+              productos={productos}
+              packs={packs}
+              ofertasFlash={ofertasFlash}
+              cargando={cargando}
+              nintendoOnlinePrice={appSettings.nintendoOnlinePrice}
+              canalWhatsapp={CONFIG.canalWhatsapp}
+              navigateToSection={navigateToSection}
+              setStoreTab={setStoreTab}
+              comprarDirecto={comprarDirecto}
+              comprarNintendoOnline={comprarNintendoOnline}
+            />
           )}
 
           {/* SECCIÓN 2: CATÁLOGO */}
@@ -673,7 +400,6 @@ export default function MobileAppStore() {
               setStoreTab={setStoreTab}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
-              filterTerm={filterTerm}
               setFilterTerm={setFilterTerm}
               ejecutarBusqueda={ejecutarBusqueda}
               consoleFilter={consoleFilter}
@@ -699,218 +425,294 @@ export default function MobileAppStore() {
           )}
           {/* SECCIÓN 3: INSTRUCCIONES */}
           {visibleSection === 'instrucciones' && (
-            <div className={`section-motion ${sectionMotion} pb-24 pt-5`}>
-                <section className="premium-surface animate-soft-in relative mx-1 mb-5 overflow-hidden rounded-[2rem] p-5">
-                    <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-blue-500/10 blur-3xl" />
-                    <div className="pointer-events-none absolute -bottom-12 -left-8 h-32 w-32 rounded-full bg-yellow-500/10 blur-3xl" />
-                    <div className="relative">
-                        <div className="mb-5 flex items-center justify-between">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
-                                <BookOpen size={22} className="text-blue-400" />
-                            </div>
-                            <span className="rounded-full border border-green-400/20 bg-green-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-green-400">Soporte activo</span>
-                        </div>
-                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-400">Centro de ayuda</p>
-                        <h2 className="text-3xl font-black uppercase leading-none tracking-tight text-white">Instala sin dudas</h2>
-                        <p className="mt-3 max-w-[290px] text-xs font-semibold leading-relaxed text-gray-500">
-                            Elige tu consola y revisa las instrucciones antes de descargar. Todo está pensado para que no pierdas garantía por errores simples.
-                        </p>
-                    </div>
-                </section>
+            <div className={`section-motion ${sectionMotion}`}>
 
-                {/* CAJA DE ADVERTENCIA */}
-                <div className="premium-surface animate-soft-in mx-1 mb-5 overflow-hidden rounded-[1.75rem] p-4" style={{ animationDelay: '80ms' }}>
-                    <h3 className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-500">
-                        <AlertTriangle size={16} /> Antes de comprar
-                    </h3>
-                    <div className="grid grid-cols-2 gap-2">
-                        {[
-                            ['Espacio', 'Revisa memoria/SD disponible.'],
-                            ['Cuenta principal', 'Instala siguiendo el método indicado.'],
-                            ['Descarga inmediata', 'Si son varios, baja todos al recibirlos.'],
-                            ['No archivar', 'Archivar cuenta como eliminar y anula garantía.'],
-                        ].map(([title, copy], index) => (
-                            <div key={title} className="animate-soft-in rounded-2xl border border-white/10 bg-white/5 p-3 text-left" style={{ animationDelay: `${120 + index * 45}ms` }}>
-                                <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-yellow-500/10 text-[10px] font-black text-yellow-500">{index + 1}</div>
-                                <p className="text-[10px] font-black uppercase tracking-wider text-white">{title}</p>
-                                <p className="mt-1 text-[10px] font-semibold leading-snug text-gray-500">{copy}</p>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="mt-3 flex items-start gap-2 rounded-2xl border border-blue-400/10 bg-blue-500/10 p-3">
-                        <Zap size={14} className="mt-0.5 shrink-0 text-blue-400" />
-                        <p className="text-[10px] font-semibold leading-relaxed text-blue-200">Tip: jugar sin conexión disminuye el riesgo de caídas y evita errores durante el uso.</p>
-                    </div>
-                </div>
+              {/* ── PANTALLA: SELECTOR ── */}
+              {helpSelected === null && (
+                <div className={`guide-picker-screen${pickerExiting ? ' guide-picker-screen--exit' : ''}`}>
+                  {/* Hero top */}
+                  <div className="guide-picker-hero">
+                    <div className="guide-picker-hero-bg" />
+                    <p className="guide-picker-eyebrow">Centro de instalación</p>
+                    <h1 className="guide-picker-title">¿Qué consola<br/>tienes?</h1>
+                    <p className="guide-picker-sub">Selecciona la opción que corresponde a tu consola</p>
+                  </div>
 
-                {/* TABS AYUDA */}
-                <div className="premium-surface relative mx-1 mb-5 flex overflow-hidden rounded-full p-1">
-                    <span className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-full bg-white shadow-lg shadow-white/10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${helpTab === 'switch1' ? 'translate-x-[calc(100%+0.5rem)]' : 'translate-x-0'}`} />
-                    <button onClick={() => setHelpTab('switch2')} className={`relative z-10 flex-1 rounded-full py-3 text-[10px] font-black uppercase tracking-wider transition-colors duration-300 ${helpTab === 'switch2' ? 'text-black' : 'text-gray-500 hover:text-white'}`}><span className="flex items-center justify-center gap-2"><Zap size={14} /> Switch 2</span></button>
-                    <button onClick={() => setHelpTab('switch1')} className={`relative z-10 flex-1 rounded-full py-3 text-[10px] font-black uppercase tracking-wider transition-colors duration-300 ${helpTab === 'switch1' ? 'text-black' : 'text-gray-500 hover:text-white'}`}><span className="flex items-center justify-center gap-2"><Gamepad2 size={14} /> Switch 1 / Lite</span></button>
-                </div>
+                  {/* Cards */}
+                  <div className="guide-picker-cards">
+                    {/* Switch 2 */}
+                    <button
+                      onClick={() => { setPickerExiting(true); setTimeout(() => { setHelpSelected('switch2'); setHelpTab('switch2'); }, 320); }}
+                      className="guide-console-card guide-console-card--s2"
+                    >
+                      <div className="guide-console-card__bg" />
+                      <div className="guide-console-card__logo-zone">
+                        <Image src="/nintendo-switch2-logo.png" alt="Nintendo Switch 2" width={110} height={110} className="guide-console-card__logo-img" />
+                      </div>
+                      <div className="guide-console-card__info-zone">
+                        <div className="guide-console-card__shimmer" />
+                        <p className="guide-console-card__name">Nintendo<br/>Switch 2</p>
+                        <p className="guide-console-card__hint">Instrucciones específicas + video tutorial obligatorio</p>
+                        <span className="guide-console-card__cta">Ver guía <ChevronRight size={11} className="inline" /></span>
+                      </div>
+                    </button>
 
-                <div className="px-1">
-                    {helpTab === 'switch2' && (
-                        <div key="switch2-help" className="premium-surface animate-soft-in overflow-hidden rounded-[1.75rem]">
-                            <div className="relative aspect-video w-full overflow-hidden rounded-t-[1.75rem] bg-black group">
-                                <iframe src="https://www.youtube.com/embed/Tl5A7OeRbh0" title="Tutorial Switch 2" className="absolute left-0 top-0 h-full w-full opacity-90 transition duration-500 group-hover:scale-[1.02] group-hover:opacity-100" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                            </div>
-                            <div className="space-y-3 p-5">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-xs font-black text-red-500">01</div>
-                                    <div className="text-left">
-                                        <p className="text-xs font-black uppercase tracking-wider text-white">Video obligatorio</p>
-                                        <p className="mt-1 text-xs font-semibold leading-relaxed text-gray-500">Mira el tutorial completo antes de empezar. Switch 2 requiere pasos específicos y conviene seguirlos en orden.</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2 rounded-2xl border border-red-500/10 bg-red-900/10 p-3">
-                                    <Youtube size={16} className="shrink-0 text-red-500" />
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-red-200">Tutorial oficial Alfeicon Games</span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    {helpTab === 'switch1' && (
-                        <div key="switch1-help" className="premium-surface animate-soft-in relative overflow-hidden rounded-[1.75rem] p-6 text-center">
-                            <div className="pointer-events-none absolute inset-x-8 top-0 h-28 rounded-full bg-blue-500/10 blur-3xl" />
-                            <div className="relative">
-                                <div className="animate-gentle-float mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[1.75rem] border border-blue-400/20 bg-blue-500/10">
-                                    <FileText size={32} className="text-blue-400" />
-                                </div>
-                                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-blue-400">Guía ilustrada</p>
-                                <h3 className="text-xl font-black text-white">Manual PDF</h3>
-                                <p className="mx-auto mt-3 max-w-[260px] text-xs font-semibold leading-relaxed text-gray-500">
-                                    Paso a paso para modelos estándar, OLED y Lite. Ideal para tenerlo abierto mientras instalas.
-                                </p>
-                                <a href="/guia.pdf" target="_blank" className="mt-7 flex w-full items-center justify-center gap-2 rounded-full bg-white py-4 text-xs font-black uppercase tracking-widest text-black shadow-lg shadow-white/10 transition active:scale-95">
-                                    <FileText size={15} /> Descargar guía
-                                </a>
-                                <p className="mt-4 text-[9px] font-bold uppercase tracking-widest text-gray-600">Formato PDF • 2.5 MB</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="premium-surface mx-1 mt-5 rounded-[1.75rem] p-4 text-left">
-                    <div className="flex items-center justify-between gap-3">
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">¿Aún tienes dudas?</p>
-                            <p className="mt-1 text-sm font-black text-white">Te ayudamos por WhatsApp</p>
-                        </div>
-                        <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-500 text-white shadow-lg shadow-green-900/30 transition active:scale-95" aria-label="Soporte WhatsApp">
-                            <MessageCircle size={20} />
-                        </a>
+                    {/* Separador entre opciones */}
+                    <div className="guide-picker-divider" aria-hidden="true">
+                      <span className="guide-picker-divider__node" />
                     </div>
+
+                    {/* Switch 1 / OLED / Lite */}
+                    <button
+                      onClick={() => { setPickerExiting(true); setTimeout(() => { setHelpSelected('switch1'); setHelpTab('switch1'); }, 320); }}
+                      className="guide-console-card guide-console-card--s1"
+                    >
+                      <div className="guide-console-card__bg" />
+                      <div className="guide-console-card__logo-zone">
+                        <Image src="/nintendo-switch1-logo.png" alt="Nintendo Switch" width={110} height={110} className="guide-console-card__logo-img" />
+                      </div>
+                      <div className="guide-console-card__info-zone">
+                        <div className="guide-console-card__shimmer" />
+                        <p className="guide-console-card__name">Switch 1<br/>OLED · Lite · V1 · V2</p>
+                        <p className="guide-console-card__hint">Guía PDF paso a paso para todos los modelos</p>
+                        <span className="guide-console-card__cta">Ver guía <ChevronRight size={11} className="inline" /></span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Warning strip */}
+                  <div className="guide-picker-warning">
+                    <AlertTriangle size={14} className="shrink-0 text-yellow-500" />
+                    <p>Usar la guía incorrecta puede generar errores. Si tienes dudas escríbenos por WhatsApp.</p>
+                  </div>
                 </div>
+              )}
+
+              {/* ── PANTALLA: GUÍA SWITCH 2 ── */}
+              {helpSelected === 'switch2' && (
+                <div className="guide-detail-screen">
+                  {/* Hero con logo */}
+                  <div className="guide-detail-hero guide-detail-hero--s2">
+                    <div className="guide-detail-hero__bg" />
+                    <button onClick={() => { setHelpSelected(null); setPickerExiting(false); }} className="guide-back-btn">
+                      <ChevronRight size={14} className="rotate-180" /> Cambiar consola
+                    </button>
+                    <div className="guide-detail-hero__logo">
+                      <Image src="/nintendo-switch2-logo.png" alt="Nintendo Switch 2" fill className="object-contain drop-shadow-2xl" sizes="180px" />
+                    </div>
+                    <p className="guide-detail-hero__label">Guía de instalación</p>
+                  </div>
+
+                  {/* Checklist antes de empezar */}
+                  <div className="guide-detail-body">
+                    <p className="guide-section-label"><AlertTriangle size={13} /> Antes de empezar</p>
+                    <div className="guide-checklist">
+                      {[
+                        ['Espacio libre', 'Revisa que tengas memoria disponible antes de descargar.'],
+                        ['Cuenta principal', 'Instala estrictamente siguiendo el método indicado.'],
+                        ['Descarga inmediata', 'Si compraste varios juegos, descárgalos todos apenas los recibas.'],
+                        ['No archivar', 'Archivar la cuenta equivale a eliminar el juego y anula la garantía.'],
+                      ].map(([t, d], i) => (
+                        <div key={t} className="guide-checklist-item">
+                          <span className="guide-checklist-num">{i + 1}</span>
+                          <div>
+                            <p className="guide-checklist-title">{t}</p>
+                            <p className="guide-checklist-desc">{d}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="guide-tip">
+                      <Zap size={13} className="shrink-0 text-white" />
+                      <p>Jugar sin conexión a internet reduce riesgos y evita errores durante el uso.</p>
+                    </div>
+
+                    {/* Video */}
+                    <p className="guide-section-label mt-2"><Youtube size={13} /> Tutorial en video</p>
+                    <div className="guide-video-wrap">
+                      <iframe src="https://www.youtube.com/embed/Tl5A7OeRbh0" title="Tutorial Switch 2" className="absolute inset-0 h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                    </div>
+                    <div className="guide-video-note">
+                      <div className="guide-video-note__dot" />
+                      <p>Mira el tutorial completo <strong>antes de empezar</strong>. Switch 2 requiere pasos específicos que conviene seguir en orden.</p>
+                    </div>
+
+                    {/* WhatsApp */}
+                    <div className="guide-wa-bar">
+                      <div>
+                        <p className="guide-wa-bar__label">¿Aún tienes dudas?</p>
+                        <p className="guide-wa-bar__title">Te ayudamos por WhatsApp</p>
+                      </div>
+                      <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="guide-wa-btn" aria-label="Soporte WhatsApp">
+                        <MessageCircle size={20} />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── PANTALLA: GUÍA SWITCH 1 / OLED / LITE ── */}
+              {helpSelected === 'switch1' && (
+                <div className="guide-detail-screen">
+                  {/* Hero con logo */}
+                  <div className="guide-detail-hero guide-detail-hero--s1">
+                    <div className="guide-detail-hero__bg" />
+                    <button onClick={() => { setHelpSelected(null); setPickerExiting(false); }} className="guide-back-btn">
+                      <ChevronRight size={14} className="rotate-180" /> Cambiar consola
+                    </button>
+                    <div className="guide-detail-hero__logo">
+                      <Image src="/nintendo-switch1-logo.png" alt="Nintendo Switch" fill className="object-contain drop-shadow-2xl" sizes="180px" />
+                    </div>
+                    <p className="guide-detail-hero__label">Guía de instalación</p>
+                  </div>
+
+                  {/* Checklist antes de empezar */}
+                  <div className="guide-detail-body">
+                    <p className="guide-section-label"><AlertTriangle size={13} /> Antes de empezar</p>
+                    <div className="guide-checklist">
+                      {[
+                        ['Espacio libre', 'Revisa que tengas memoria/SD disponible antes de descargar.'],
+                        ['Cuenta principal', 'Instala estrictamente siguiendo el método indicado.'],
+                        ['Descarga inmediata', 'Si compraste varios juegos, descárgalos todos apenas los recibas.'],
+                        ['No archivar', 'Archivar la cuenta equivale a eliminar el juego y anula la garantía.'],
+                      ].map(([t, d], i) => (
+                        <div key={t} className="guide-checklist-item">
+                          <span className="guide-checklist-num">{i + 1}</span>
+                          <div>
+                            <p className="guide-checklist-title">{t}</p>
+                            <p className="guide-checklist-desc">{d}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="guide-tip">
+                      <Zap size={13} className="shrink-0 text-white" />
+                      <p>Jugar sin conexión a internet reduce riesgos y evita errores durante el uso.</p>
+                    </div>
+
+                    {/* PDF */}
+                    <p className="guide-section-label mt-2"><FileText size={13} /> Manual de instalación</p>
+                    <a href="/guia.pdf" target="_blank" className="guide-pdf-preview">
+                      <div className="guide-pdf-preview__thumb">
+                        <Image src="/guide-hero.png" alt="Vista previa guía" width={493} height={269} className="guide-pdf-preview__img" />
+                        <div className="guide-pdf-preview__thumb-overlay">
+                          <div className="guide-pdf-preview__badge">
+                            <FileText size={14} />
+                            <span>PDF</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="guide-pdf-preview__footer">
+                        <div className="guide-pdf-preview__info">
+                          <p className="guide-pdf-preview__title">Instrucciones para instalar los juegos</p>
+                          <p className="guide-pdf-preview__meta">Switch 1 · OLED · Lite · 2.5 MB</p>
+                        </div>
+                        <div className="guide-pdf-preview__dl">
+                          <FileText size={15} />
+                          <span>Descargar</span>
+                        </div>
+                      </div>
+                    </a>
+
+                    {/* WhatsApp */}
+                    <div className="guide-wa-bar">
+                      <div>
+                        <p className="guide-wa-bar__label">¿Aún tienes dudas?</p>
+                        <p className="guide-wa-bar__title">Te ayudamos por WhatsApp</p>
+                      </div>
+                      <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="guide-wa-btn" aria-label="Soporte WhatsApp">
+                        <MessageCircle size={20} />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
 
 {/* SECCIÓN 4: AYUDA Y CONFIANZA */}
           {visibleSection === 'perfil' && (
-            <div className={`section-motion ${sectionMotion} space-y-5 px-1 pb-24 pt-5`}>
-                <section className="premium-surface animate-soft-in relative overflow-hidden rounded-[2rem] p-5 text-left">
-                    <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-green-500/10 blur-3xl" />
-                    <div className="pointer-events-none absolute -bottom-12 -left-8 h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
-                    <div className="relative">
-                        <div className="mb-5 flex items-center justify-between">
-                            <div className="relative h-14 w-14 rounded-2xl border border-white/10 bg-white/10 shadow-xl">
-                                <Image src="/logo.png" alt="Alfeicon Games" fill className="object-contain p-2" sizes="56px" />
-                            </div>
-                            <div className="flex items-center gap-2 rounded-full border border-green-400/20 bg-green-500/10 px-3 py-1.5">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                                    <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
-                                </span>
-                                <span className="text-[9px] font-black uppercase tracking-widest text-green-400">Online</span>
-                            </div>
-                        </div>
-                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.28em] text-blue-400">Alfeicon Games</p>
-                        <h2 className="text-3xl font-black uppercase leading-none tracking-tight text-white">Soporte y confianza</h2>
-                        <p className="mt-3 max-w-[300px] text-xs font-semibold leading-relaxed text-gray-500">
-                            Canales oficiales, dudas frecuentes y condiciones importantes antes de comprar.
-                        </p>
-                    </div>
-                </section>
+  <div className={`section-motion ${sectionMotion} pb-28 pt-0`}>
 
-                <section className="premium-surface animate-soft-in rounded-[1.75rem] p-5 text-left" style={{ animationDelay: '70ms' }}>
-                    <div className="mb-4 flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
-                            <ShieldCheck size={18} />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Mensaje oficial</p>
-                            <p className="text-sm font-black text-white">Estamos para ayudarte</p>
-                        </div>
-                    </div>
-                    <p className="text-sm font-semibold leading-relaxed text-gray-300">
-                        Gracias por visitar Alfeicon Games. Si tienes dudas antes de comprar, escríbenos por nuestros canales oficiales y te guiamos durante el proceso.
-                    </p>
-                    <p className="mt-4 text-[10px] font-black uppercase tracking-[0.22em] text-blue-400">Alfeicon Games</p>
-                </section>
+    {/* ── HERO ── */}
+    <div className="support-hero">
+      <div className="support-hero__bg" />
+      <div className="support-hero__content">
+        <div className="support-hero__logo-wrap">
+          <Image src="/logo.png" alt="Alfeicon Games" width={52} height={52} className="support-hero__logo" />
+        </div>
+        <div className="support-hero__badge">
+          <span className="support-hero__dot" />
+          <span>Respondemos en minutos</span>
+        </div>
+        <h1 className="support-hero__title">¿En qué te<br/>ayudamos?</h1>
+        <p className="support-hero__sub">Escríbenos por WhatsApp o revisa las dudas frecuentes abajo.</p>
+        <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="support-wa-btn" aria-label="Abrir WhatsApp">
+          <MessageCircle size={20} />
+          <span>Chatear por WhatsApp</span>
+        </a>
+      </div>
+    </div>
 
-                <section className="grid grid-cols-2 gap-3">
-                    {[
-                        { href: `https://wa.me/${CONFIG.whatsappNumber}`, label: 'WhatsApp', meta: 'Compra y soporte', icon: <MessageCircle size={20} />, color: 'text-green-400', delay: 110 },
-                        { href: 'https://instagram.com/alfeicon_games', label: 'Instagram', meta: '+2.800 seguidores', icon: <Instagram size={20} />, color: 'text-pink-500', delay: 155 },
-                        { href: 'https://web.facebook.com/alfeicon.games', label: 'Facebook', meta: 'Página oficial', icon: <Facebook size={20} />, color: 'text-blue-500', delay: 200 },
-                        { href: 'https://www.youtube.com/@alfeicon_games', label: 'YouTube', meta: 'Tutoriales', icon: <Youtube size={20} />, color: 'text-red-500', delay: 245 },
-                    ].map((channel) => (
-                        <a
-                            key={channel.label}
-                            href={channel.href}
-                            target="_blank"
-                            className="premium-surface animate-soft-in group rounded-[1.5rem] p-4 text-left transition duration-300 hover:-translate-y-1 active:scale-[0.98]"
-                            style={{ animationDelay: `${channel.delay}ms` }}
-                        >
-                            <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 ${channel.color}`}>
-                                {channel.icon}
-                            </div>
-                            <p className="text-sm font-black uppercase tracking-wide text-white">{channel.label}</p>
-                            <div className="mt-1 flex items-center justify-between gap-2">
-                                <p className="text-[10px] font-semibold text-gray-500">{channel.meta}</p>
-                                <span className="text-gray-600 transition-transform group-hover:translate-x-1">↗</span>
-                            </div>
-                        </a>
-                    ))}
-                </section>
+    <div className="support-body">
 
-                <section className="premium-surface rounded-[1.75rem] p-5 text-left">
-                    <div className="mb-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-400">FAQ</p>
-                            <h3 className="mt-1 text-xl font-black uppercase tracking-tight text-white">Dudas frecuentes</h3>
-                        </div>
-                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-blue-400">
-                            <BookOpen size={20} />
-                        </div>
-                    </div>
+      {/* ── TRUST STATS ── */}
+      <div className="support-stats">
+        {[
+          { value: '+500', label: 'Clientes' },
+          { value: '99.3%', label: 'Sin problemas' },
+          { value: '3 meses', label: 'Garantía' },
+        ].map(s => (
+          <div key={s.label} className="support-stat">
+            <span className="support-stat__value">{s.value}</span>
+            <span className="support-stat__label">{s.label}</span>
+          </div>
+        ))}
+      </div>
 
-                    <div className="space-y-3">
-                        {[
-                            ['¿Necesito mi consola desbloqueada?', 'No. Los juegos son digitales y se descargan desde la eShop oficial de Nintendo.'],
-                            ['¿Existe riesgo de baneo?', 'Existe un riesgo mínimo asociado a normas externas de Nintendo. El cliente acepta este punto al comprar.'],
-                            ['¿Tienen garantía y soporte?', 'Ofrecemos 3 meses de garantía técnica y ayuda por WhatsApp durante la instalación.'],
-                            ['¿Cuánto tiempo durará el juego?', 'La duración es indefinida si sigues las instrucciones: no borrar juego/cuenta ni modificar datos.'],
-                        ].map(([question, answer], index) => (
-                            <div key={question} className="animate-soft-in rounded-2xl border border-white/10 bg-white/5 p-4" style={{ animationDelay: `${280 + index * 45}ms` }}>
-                                <div className="mb-2 flex items-center gap-3">
-                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-black text-black">{index + 1}</span>
-                                    <p className="text-xs font-black uppercase tracking-wide text-white">{question}</p>
-                                </div>
-                                <p className="pl-10 text-xs font-semibold leading-relaxed text-gray-500">{answer}</p>
-                            </div>
-                        ))}
-                    </div>
-                </section>
+      {/* ── REDES SOCIALES ── */}
+      <div className="support-section-label">Síguenos</div>
+      <div className="support-channels">
+        {[
+          { href: 'https://instagram.com/alfeicon_games', label: 'Instagram', meta: '+2.800 seguidores', icon: <Instagram size={18} />, cls: 'support-channel--ig' },
+          { href: 'https://web.facebook.com/alfeicon.games', label: 'Facebook', meta: 'Página oficial', icon: <Facebook size={18} />, cls: 'support-channel--fb' },
+          { href: 'https://www.youtube.com/@alfeicon_games', label: 'YouTube', meta: 'Tutoriales en video', icon: <Youtube size={18} />, cls: 'support-channel--yt' },
+        ].map(ch => (
+          <a key={ch.label} href={ch.href} target="_blank" className={`support-channel ${ch.cls}`}>
+            <span className="support-channel__icon">{ch.icon}</span>
+            <span className="support-channel__label">{ch.label}</span>
+            <span className="support-channel__meta">{ch.meta}</span>
+            <ChevronRight size={14} className="support-channel__arrow" />
+          </a>
+        ))}
+      </div>
 
-                <button onClick={() => setShowTerms(true)} className="premium-surface flex w-full items-center justify-between rounded-full px-5 py-4 text-left transition active:scale-[0.98]">
-                    <span className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-gray-500">
-                        <ShieldCheck size={15} className="text-blue-400" /> Términos y condiciones
-                    </span>
-                    <ChevronRight size={16} className="text-gray-500" />
-                </button>
-            </div>
+      {/* ── FAQ ── */}
+      <div className="support-section-label">Preguntas frecuentes</div>
+      <div className="support-faq">
+        {[
+          { q: '¿Necesito mi consola desbloqueada?', a: 'No. Los juegos son digitales y se descargan desde la eShop oficial de Nintendo.' },
+          { q: '¿Existe riesgo de baneo?', a: 'Existe un riesgo mínimo del 0.7%. El cliente acepta este punto al comprar.' },
+          { q: '¿Cuánto dura la garantía?', a: 'Clientes nuevos: 2 meses. Clientes frecuentes (5+ compras): 4 meses.' },
+          { q: '¿Cuánto tiempo durará el juego?', a: 'Indefinido si sigues las instrucciones: no borres el juego ni la cuenta, ni modifiques datos.' },
+        ].map(({ q, a }, i) => (
+          <div key={i} className="support-faq__item">
+            <p className="support-faq__q">{q}</p>
+            <p className="support-faq__a">{a}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── TÉRMINOS ── */}
+      <button onClick={() => setShowTerms(true)} className="support-terms-btn">
+        <ShieldCheck size={16} />
+        <span>Términos y condiciones</span>
+        <ChevronRight size={15} className="ml-auto" />
+      </button>
+
+    </div>
+  </div>
           )}
         </main>
 
@@ -1051,6 +853,7 @@ export default function MobileAppStore() {
         <AppDock
           activeSection={activeSection}
           showBottomNav={showBottomNav}
+          dockCollapsed={dockCollapsed}
           navIndex={navIndex}
           onNavigate={navigateToSection}
         />
