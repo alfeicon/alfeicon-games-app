@@ -58,14 +58,6 @@ export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTe
       <div className="support-hero">
         <div className="support-hero__bg" />
         <div className="support-hero__content">
-          <button
-            type="button"
-            onClick={handleLogoTap}
-            className="support-hero__logo-wrap"
-            aria-label="Alfeicon Games"
-          >
-            <Image src="/logo.png" alt="Alfeicon Games" width={52} height={52} className="support-hero__logo" />
-          </button>
           <div className="support-hero__badge">
             <span className="support-hero__dot" />
             <span>Respondemos en minutos</span>
@@ -120,6 +112,16 @@ export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTe
           <ShieldCheck size={16} />
           <span>Términos y condiciones</span>
           <ChevronRight size={15} className="ml-auto" />
+        </button>
+
+        {/* ── LOGO (marca + acceso admin oculto: 5 toques) ── */}
+        <button
+          type="button"
+          onClick={handleLogoTap}
+          className="support-footer-logo"
+          aria-label="Alfeicon Games"
+        >
+          <Image src="/logo.png" alt="Alfeicon Games" width={44} height={44} />
         </button>
 
       </div>
