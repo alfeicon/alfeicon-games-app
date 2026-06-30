@@ -1,15 +1,9 @@
 // app/page.tsx
 "use client";
-/* eslint-disable react/no-unescaped-entities */
 
 import { startTransition, useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
-import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import {
-  Instagram, MessageCircle,
-  Youtube,
-  ShieldCheck, Facebook, X, ChevronRight, Heart,
-} from 'lucide-react';
+import { MessageCircle, Heart } from 'lucide-react';
 import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
@@ -17,6 +11,8 @@ import { DEFAULT_APP_SETTINGS, fetchAppSettings } from '@/lib/settings';
 
 import HomeSectionV2 from '@/components/app-store/HomeSectionV2';
 import GuideSection, { type GuideConsole } from '@/components/app-store/GuideSection';
+import SupportSection from '@/components/app-store/SupportSection';
+import TermsModal from '@/components/app-store/TermsModal';
 
 const CatalogSection = dynamic(() => import('@/components/app-store/CatalogSection'), {
   ssr: false,
@@ -447,181 +443,18 @@ export default function MobileAppStore() {
             />
           )}
 
-{/* SECCIÓN 4: AYUDA Y CONFIANZA */}
+          {/* SECCIÓN 4: AYUDA Y CONFIANZA */}
           {visibleSection === 'perfil' && (
-  <div className={`section-motion ${sectionMotion} pb-28 pt-0`}>
-
-    {/* ── HERO ── */}
-    <div className="support-hero">
-      <div className="support-hero__bg" />
-      <div className="support-hero__content">
-        <div className="support-hero__logo-wrap">
-          <Image src="/logo.png" alt="Alfeicon Games" width={52} height={52} className="support-hero__logo" />
-        </div>
-        <div className="support-hero__badge">
-          <span className="support-hero__dot" />
-          <span>Respondemos en minutos</span>
-        </div>
-        <h1 className="support-hero__title">¿En qué te<br/>ayudamos?</h1>
-        <p className="support-hero__sub">Escríbenos por WhatsApp o revisa las dudas frecuentes abajo.</p>
-        <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="support-wa-btn" aria-label="Abrir WhatsApp">
-          <MessageCircle size={20} />
-          <span>Chatear por WhatsApp</span>
-        </a>
-      </div>
-    </div>
-
-    <div className="support-body">
-
-      {/* ── TRUST STATS ── */}
-      <div className="support-stats">
-        {[
-          { value: '+500', label: 'Clientes' },
-          { value: '99.3%', label: 'Sin problemas' },
-          { value: '1-3 meses', label: 'Garantía' },
-        ].map(s => (
-          <div key={s.label} className="support-stat">
-            <span className="support-stat__value">{s.value}</span>
-            <span className="support-stat__label">{s.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── REDES SOCIALES ── */}
-      <div className="support-section-label">Síguenos</div>
-      <div className="support-channels">
-        {[
-          { href: 'https://instagram.com/alfeicon_games', label: 'Instagram', meta: '+2.800 seguidores', icon: <Instagram size={18} />, cls: 'support-channel--ig' },
-          { href: 'https://web.facebook.com/alfeicon.games', label: 'Facebook', meta: 'Página oficial', icon: <Facebook size={18} />, cls: 'support-channel--fb' },
-          { href: 'https://www.youtube.com/@alfeicon_games', label: 'YouTube', meta: 'Tutoriales en video', icon: <Youtube size={18} />, cls: 'support-channel--yt' },
-        ].map(ch => (
-          <a key={ch.label} href={ch.href} target="_blank" className={`support-channel ${ch.cls}`}>
-            <span className="support-channel__icon">{ch.icon}</span>
-            <span className="support-channel__label">{ch.label}</span>
-            <span className="support-channel__meta">{ch.meta}</span>
-            <ChevronRight size={14} className="support-channel__arrow" />
-          </a>
-        ))}
-      </div>
-
-      {/* ── FAQ ── */}
-      <div className="support-section-label">Preguntas frecuentes</div>
-      <div className="support-faq">
-        {[
-          { q: '¿Necesito mi consola desbloqueada?', a: 'No. Los juegos son digitales y se descargan desde la eShop oficial de Nintendo.' },
-          { q: '¿Existe riesgo de baneo?', a: 'Existe un riesgo mínimo del 0.7%. El cliente acepta este punto al comprar.' },
-          { q: '¿Cuánto dura la garantía?', a: 'Compradores nuevos: 1 mes. Compradores antiguos: 3 meses.' },
-          { q: '¿Cuánto tiempo durará el juego?', a: 'Indefinido si sigues las instrucciones: no borres el juego ni la cuenta, ni modifiques datos.' },
-        ].map(({ q, a }, i) => (
-          <div key={i} className="support-faq__item">
-            <p className="support-faq__q">{q}</p>
-            <p className="support-faq__a">{a}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* ── TÉRMINOS ── */}
-      <button onClick={() => setShowTerms(true)} className="support-terms-btn">
-        <ShieldCheck size={16} />
-        <span>Términos y condiciones</span>
-        <ChevronRight size={15} className="ml-auto" />
-      </button>
-
-    </div>
-  </div>
+            <SupportSection
+              sectionMotion={sectionMotion}
+              whatsappNumber={CONFIG.whatsappNumber}
+              onOpenTerms={() => setShowTerms(true)}
+            />
           )}
         </main>
 
 {/* MODAL TÉRMINOS Y CONDICIONES */}
-{showTerms && (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/88 p-4 backdrop-blur-2xl animate-fade-in">
-        <div className="brand-shell flex max-h-[90vh] w-full max-w-md flex-col rounded-[2rem]">
-            
-            {/* Header del Modal */}
-            <div className="flex items-center justify-between border-b border-white/5 p-5">
-                <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
-                    <ShieldCheck size={18} className="text-blue-500" /> Términos y Condiciones
-                </h3>
-                <button onClick={() => setShowTerms(false)} className="magnetic rounded-full bg-white/5 p-2 text-white hover:bg-white/20">
-                    <X size={20} />
-                </button>
-            </div>
-            
-            {/* Contenido con Scroll - Texto más grande */}
-            <div className="space-y-8 overflow-y-auto p-6 text-left text-[13px] leading-relaxed text-gray-300 scrollbar-hide">
-                
-                {/* 1. Instalación */}
-                <section className="space-y-3">
-                    <h4 className="text-white text-sm font-black uppercase tracking-wide border-b border-white/5 pb-1">1. Proceso de Instalación</h4>
-                    <p>• Entrega estimada: <span className="text-white font-bold">10 a 120 min</span> (según distribuidor).</p>
-                    <p>• <span className="text-blue-400 font-bold">Descarga inmediata:</span> Es obligatorio iniciar las descargas apenas recibas los datos. Si compras varios juegos, aplica la misma regla.</p>
-                    <p className="bg-white/5 p-4 rounded-xl border-l-4 border-yellow-500 italic text-gray-200">
-                        "Recuerda contar con tiempo para la instalación. Si no estás seguro, es mejor esperar. Evitemos errores por apuro."
-                    </p>
-                </section>
-
-                {/* 2. Cuentas y Juegos */}
-                <section className="space-y-3">
-                    <h4 className="text-white text-sm font-black uppercase tracking-wide border-b border-white/5 pb-1">2. Cuentas y Juegos</h4>
-                    <p>• Cuentas tipo <span className="text-white font-bold">PRINCIPAL</span>: Juegas con tu usuario personal.</p>
-                    <p>• <span className="text-red-400 font-bold uppercase">Prohibido:</span> No juegues con la cuenta entregada ni modifiques su información. Es solo para descargar. Mantén la cuenta en la consola sin tocarla.</p>
-                    <p>• Cambiar datos de la cuenta <span className="text-white font-bold text-red-500">anula la garantía</span> de inmediato.</p>
-                </section>
-
-                {/* 3. Riesgo de Baneo */}
-                <section className="space-y-3 bg-red-900/10 p-5 rounded-2xl border border-red-500/20">
-                    <h4 className="text-red-400 text-sm font-black uppercase tracking-wide">3. Riesgo de Baneo</h4>
-                    <p>Existe una posibilidad de restricciones online del <span className="text-white font-bold">0,6%</span> (99,3% de éxito). De ocurrir un baneo, <span className="text-white font-bold underline">Alfeicon Games no asume responsabilidad</span>, ya que depende de normas externas de Nintendo.</p>
-                </section>
-
-                {/* 4. Sospechas y Pruebas */}
-                <section className="space-y-3">
-                    <h4 className="text-white text-sm font-black uppercase tracking-wide border-b border-white/5 pb-1">4. Sospechas y Pruebas</h4>
-                    <p>Tenemos registro de acciones en la cuenta. Para evaluar reposición o garantía, se requieren pruebas claras de que el fallo no fue causado por el usuario.</p>
-                    <p>Si las evidencias son insuficientes, se podrá negar la reposición o devolución.</p>
-                </section>
-
-                {/* 5. Garantía Técnica */}
-                <section className="space-y-4">
-                    <h4 className="text-white text-sm font-black uppercase tracking-wide border-b border-white/5 pb-1">5. Garantía Técnica</h4>
-                    <div className="grid grid-cols-2 gap-3 text-center">
-                        <div className="bg-white/5 p-3 rounded-xl">
-                            <p className="text-gray-400 text-[10px] uppercase font-bold">Compradores Nuevos</p>
-                            <p className="text-lg text-blue-400 font-black">1 Mes</p>
-                        </div>
-                        <div className="bg-white/5 p-3 rounded-xl border border-blue-500/30">
-                            <p className="text-gray-400 text-[10px] uppercase font-bold">Compradores Antiguos</p>
-                            <p className="text-lg text-green-400 font-black">3 Meses</p>
-                        </div>
-                    </div>
-                    <p>• Cubre fallos del juego no causados por el usuario. Incluye reposición (1 vez) o devolución del 50%.</p>
-                    <p className="text-xs text-red-500 font-bold bg-red-500/5 p-3 rounded-lg border border-red-500/20">
-                        No aplica si eliminas el juego/cuenta, juegas con el perfil entregado, se trata de un pack o hay interrupciones por corte de luz/apagado.
-                    </p>
-                </section>
-
-                {/* 6. Devoluciones y Pagos */}
-                <section className="space-y-3">
-                    <h4 className="text-white text-sm font-black uppercase tracking-wide border-b border-white/5 pb-1">6. Devoluciones y Pagos</h4>
-                    <p>• Si no hay stock tras tu pago o la entrega supera el tiempo razonable, puedes pedir reembolso total.</p>
-                    <p>• El pago debe ir a la cuenta oficial proporcionada; de lo contrario, no asumimos responsabilidad.</p>
-                </section>
-
-                {/* Cierre */}
-                <p className="text-center font-bold text-white text-[10px] uppercase pt-6 border-t border-white/5 tracking-widest">
-                    Al comprar aceptas estos términos y las instrucciones del vendedor.
-                </p>
-            </div>
-
-            {/* Botón de Cierre */}
-            <div className="border-t border-white/5 p-4">
-                <button onClick={() => setShowTerms(false)} className="magnetic w-full rounded-full bg-[#e5e4e2] py-4 text-xs font-black uppercase tracking-[0.2em] text-[#0a0a0a] shadow-lg shadow-white/10 hover:bg-white">
-                    Entendido y Acepto
-                </button>
-            </div>
-        </div>
-    </div>
-)}
+{showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
 
         {purchaseTransition && (
           <div className="pointer-events-none fixed inset-0 z-[70] overflow-hidden" style={purchaseInkStyle}>
