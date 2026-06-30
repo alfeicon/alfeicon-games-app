@@ -130,6 +130,11 @@ export default function MobileAppStore() {
     return () => mediaQuery.removeEventListener('change', syncTheme);
   }, []);
 
+  // Hidrata los favoritos desde localStorage al montar. Debe ir en un efecto
+  // (no en un inicializador lazy de useState) porque el render del servidor no
+  // tiene localStorage y produce []; leerlo en el primer render del cliente
+  // causaría un mismatch de hidratación. El setState al montar es intencional.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('alfeicon_saved_items');
@@ -149,6 +154,7 @@ export default function MobileAppStore() {
       setSavedIds([]);
     }
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     return () => {
@@ -190,6 +196,20 @@ export default function MobileAppStore() {
       startTransition(() => {
         setVisibleSection(nextSection);
         setSectionMotion(movingForward ? 'section-enter-from-right' : 'section-enter-from-left');
+
+        // Resets antes manejados por un efecto sobre [visibleSection].
+        if (nextSection !== 'catalogo') {
+          setSearchTerm('');
+          setFilterTerm('');
+          setMostrarSoloOfertas(false);
+          setMostrarGuardados(false);
+          setConsoleFilter('all');
+        }
+        if (nextSection === 'instrucciones') {
+          setHelpSelected(null);
+          setPickerExiting(false);
+        }
+        setVisibleCount(CATALOG_INITIAL_COUNT);
       });
 
       sectionSettleTimerRef.current = window.setTimeout(() => {
@@ -270,22 +290,14 @@ export default function MobileAppStore() {
     savedToastTimerRef.current = window.setTimeout(() => setSavedToast(false), 2400);
   }, [getSavedKey]);
 
-  // --- EFECTOS ---
-  useEffect(() => {
-    if (visibleSection !== 'catalogo') {
-        setSearchTerm("");
-        setFilterTerm("");
-        setMostrarSoloOfertas(false);
-        setMostrarGuardados(false);
-        setConsoleFilter('all');
-    }
-    if (visibleSection === 'instrucciones') {
-        setHelpSelected(null);
-        setPickerExiting(false);
-    }
+  // Cambia de pestaña del catálogo y reinicia la paginación (antes lo hacía
+  // el efecto sobre [storeTab]).
+  const changeStoreTab = useCallback((tab: 'individual' | 'packs') => {
+    setStoreTab(tab);
     setVisibleCount(CATALOG_INITIAL_COUNT);
-  }, [visibleSection, storeTab]);
+  }, []);
 
+  // --- EFECTOS ---
   useEffect(() => {
     // CARGA DE DATOS
     const cargarDatos = async () => {
@@ -384,7 +396,7 @@ export default function MobileAppStore() {
               nintendoOnlinePrice={appSettings.nintendoOnlinePrice}
               canalWhatsapp={CONFIG.canalWhatsapp}
               navigateToSection={navigateToSection}
-              setStoreTab={setStoreTab}
+              setStoreTab={changeStoreTab}
               comprarDirecto={comprarDirecto}
               comprarNintendoOnline={comprarNintendoOnline}
             />
@@ -397,7 +409,7 @@ export default function MobileAppStore() {
               cargando={cargando}
               shouldDeferCatalogItems={shouldDeferCatalogItems}
               storeTab={storeTab}
-              setStoreTab={setStoreTab}
+              setStoreTab={changeStoreTab}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               setFilterTerm={setFilterTerm}
