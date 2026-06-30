@@ -2,7 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Gamepad2, HardDrive, ImagePlus, Loader2, LogOut, Plus, Save, ShieldCheck, Tag } from "lucide-react";
+import Link from "next/link";
+import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, Gamepad2, HardDrive, ImagePlus, Loader2, LogOut, Plus, Save, ShieldCheck, Tag } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import GameCard from "@/components/GameCard";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -111,6 +112,8 @@ const toForm = (game: AdminGame): GameForm => ({
 export default function AdminPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsOn, setCapsOn] = useState(false);
   const [sessionReady, setSessionReady] = useState(!isSupabaseConfigured);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -376,14 +379,43 @@ export default function AdminPage() {
             <input value={email} onChange={(event) => setEmail(event.target.value)} className="premium-control w-full rounded-2xl px-3 py-3 text-white outline-none focus:border-blue-500" type="email" />
           </label>
           <label className="mb-5 block">
-            <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Clave</span>
-            <input value={password} onChange={(event) => setPassword(event.target.value)} className="premium-control w-full rounded-2xl px-3 py-3 text-white outline-none focus:border-blue-500" type="password" />
+            <span className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-500">
+              Clave
+              {capsOn && (
+                <span className="flex items-center gap-1 normal-case tracking-normal text-green-400">
+                  <span className="inline-block h-2 w-2 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.9)]" />
+                  Mayúsculas activadas
+                </span>
+              )}
+            </span>
+            <div className="relative">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                onKeyUp={(event) => setCapsOn(event.getModifierState("CapsLock"))}
+                onKeyDown={(event) => setCapsOn(event.getModifierState("CapsLock"))}
+                className="premium-control w-full rounded-2xl px-3 py-3 pr-12 text-white outline-none focus:border-blue-500"
+                type={showPassword ? "text" : "password"}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </label>
           {message && <p className="mb-4 text-sm text-red-300">{message}</p>}
           <button disabled={loading} className="magnetic flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-black uppercase tracking-widest text-black disabled:opacity-60">
             {loading && <Loader2 size={16} className="animate-spin" />}
             Entrar
           </button>
+          <Link href="/" className="mt-3 flex items-center justify-center gap-2 rounded-full border border-white/10 px-4 py-3 text-xs font-bold uppercase tracking-widest text-gray-400 transition-colors hover:text-white">
+            <ArrowLeft size={15} />
+            Volver al inicio
+          </Link>
         </form>
       </main>
     );
