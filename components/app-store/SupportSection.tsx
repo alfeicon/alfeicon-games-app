@@ -1,7 +1,13 @@
 "use client";
 
+import { useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ChevronRight, Facebook, Instagram, MessageCircle, ShieldCheck, Youtube } from 'lucide-react';
+
+// Toques sobre el logo necesarios para abrir el modo admin (atajo oculto).
+const ADMIN_TAPS = 5;
+const ADMIN_TAP_WINDOW_MS = 1200;
 
 type SupportSectionProps = {
   sectionMotion: string;
@@ -29,6 +35,22 @@ const FAQ = [
 ];
 
 export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTerms }: SupportSectionProps) {
+  const router = useRouter();
+  const tapCount = useRef(0);
+  const tapTimer = useRef<number | null>(null);
+
+  // Atajo oculto: ADMIN_TAPS toques seguidos sobre el logo abren /admin.
+  const handleLogoTap = () => {
+    if (tapTimer.current) window.clearTimeout(tapTimer.current);
+    tapCount.current += 1;
+    if (tapCount.current >= ADMIN_TAPS) {
+      tapCount.current = 0;
+      router.push('/admin');
+      return;
+    }
+    tapTimer.current = window.setTimeout(() => { tapCount.current = 0; }, ADMIN_TAP_WINDOW_MS);
+  };
+
   return (
     <div className={`section-motion ${sectionMotion} pb-28 pt-0`}>
 
@@ -36,9 +58,14 @@ export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTe
       <div className="support-hero">
         <div className="support-hero__bg" />
         <div className="support-hero__content">
-          <div className="support-hero__logo-wrap">
+          <button
+            type="button"
+            onClick={handleLogoTap}
+            className="support-hero__logo-wrap"
+            aria-label="Alfeicon Games"
+          >
             <Image src="/logo.png" alt="Alfeicon Games" width={52} height={52} className="support-hero__logo" />
-          </div>
+          </button>
           <div className="support-hero__badge">
             <span className="support-hero__dot" />
             <span>Respondemos en minutos</span>
