@@ -3646,6 +3646,13 @@ html {
   border: 1px solid rgba(255,255,255,0.12);
   margin-bottom: 1.25rem;
   cursor: pointer;
+  appearance: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.support-hero__logo-wrap:focus,
+.support-hero__logo-wrap:focus-visible {
+  outline: none;
 }
 .support-hero__logo { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
 .support-hero__badge {
