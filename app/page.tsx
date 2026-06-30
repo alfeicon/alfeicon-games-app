@@ -7,8 +7,8 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import {
   Instagram, MessageCircle,
-  Zap, Youtube, FileText,
-  ShieldCheck, AlertTriangle, Facebook, X, ChevronRight, Heart,
+  Youtube,
+  ShieldCheck, Facebook, X, ChevronRight, Heart,
 } from 'lucide-react';
 import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
@@ -16,6 +16,7 @@ import { fetchCatalogFromSupabase, type CatalogGame, type CatalogPack, type Cata
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from '@/lib/settings';
 
 import HomeSectionV2 from '@/components/app-store/HomeSectionV2';
+import GuideSection, { type GuideConsole } from '@/components/app-store/GuideSection';
 
 const CatalogSection = dynamic(() => import('@/components/app-store/CatalogSection'), {
   ssr: false,
@@ -59,8 +60,7 @@ export default function MobileAppStore() {
   const [visibleSection, setVisibleSection] = useState<SectionId>('inicio');
   const [sectionMotion, setSectionMotion] = useState<SectionMotionClass>('section-idle');
   const [storeTab, setStoreTab] = useState<'individual' | 'packs'>('individual');
-  const [helpTab, setHelpTab] = useState<'switch2' | 'switch1'>('switch2');
-  const [helpSelected, setHelpSelected] = useState<'switch2' | 'switch1' | null>(null);
+  const [helpSelected, setHelpSelected] = useState<GuideConsole | null>(null);
   const [pickerExiting, setPickerExiting] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
@@ -425,210 +425,14 @@ export default function MobileAppStore() {
           )}
           {/* SECCIÓN 3: INSTRUCCIONES */}
           {visibleSection === 'instrucciones' && (
-            <div className={`section-motion ${sectionMotion}`}>
-
-              {/* ── PANTALLA: SELECTOR ── */}
-              {helpSelected === null && (
-                <div className={`guide-picker-screen${pickerExiting ? ' guide-picker-screen--exit' : ''}`}>
-                  {/* Hero top */}
-                  <div className="guide-picker-hero">
-                    <div className="guide-picker-hero-bg" />
-                    <p className="guide-picker-eyebrow">Centro de instalación</p>
-                    <h1 className="guide-picker-title">¿Qué consola<br/>tienes?</h1>
-                    <p className="guide-picker-sub">Selecciona la opción que corresponde a tu consola</p>
-                  </div>
-
-                  {/* Cards */}
-                  <div className="guide-picker-cards">
-                    {/* Switch 2 */}
-                    <button
-                      onClick={() => { setPickerExiting(true); setTimeout(() => { setHelpSelected('switch2'); setHelpTab('switch2'); }, 320); }}
-                      className="guide-console-card guide-console-card--s2"
-                    >
-                      <div className="guide-console-card__bg" />
-                      <div className="guide-console-card__logo-zone">
-                        <Image src="/nintendo-switch2-logo.png" alt="Nintendo Switch 2" width={110} height={110} className="guide-console-card__logo-img" />
-                      </div>
-                      <div className="guide-console-card__info-zone">
-                        <div className="guide-console-card__shimmer" />
-                        <p className="guide-console-card__name">Nintendo<br/>Switch 2</p>
-                        <p className="guide-console-card__hint">Instrucciones específicas + video tutorial obligatorio</p>
-                        <span className="guide-console-card__cta">Ver guía <ChevronRight size={11} className="inline" /></span>
-                      </div>
-                    </button>
-
-                    {/* Separador entre opciones */}
-                    <div className="guide-picker-divider" aria-hidden="true">
-                      <span className="guide-picker-divider__node" />
-                    </div>
-
-                    {/* Switch 1 / OLED / Lite */}
-                    <button
-                      onClick={() => { setPickerExiting(true); setTimeout(() => { setHelpSelected('switch1'); setHelpTab('switch1'); }, 320); }}
-                      className="guide-console-card guide-console-card--s1"
-                    >
-                      <div className="guide-console-card__bg" />
-                      <div className="guide-console-card__logo-zone">
-                        <Image src="/nintendo-switch1-logo.png" alt="Nintendo Switch" width={110} height={110} className="guide-console-card__logo-img" />
-                      </div>
-                      <div className="guide-console-card__info-zone">
-                        <div className="guide-console-card__shimmer" />
-                        <p className="guide-console-card__name">Switch 1<br/>OLED · Lite · V1 · V2</p>
-                        <p className="guide-console-card__hint">Guía PDF paso a paso para todos los modelos</p>
-                        <span className="guide-console-card__cta">Ver guía <ChevronRight size={11} className="inline" /></span>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* Warning strip */}
-                  <div className="guide-picker-warning">
-                    <AlertTriangle size={14} className="shrink-0 text-yellow-500" />
-                    <p>Usar la guía incorrecta puede generar errores. Si tienes dudas escríbenos por WhatsApp.</p>
-                  </div>
-                </div>
-              )}
-
-              {/* ── PANTALLA: GUÍA SWITCH 2 ── */}
-              {helpSelected === 'switch2' && (
-                <div className="guide-detail-screen">
-                  {/* Hero con logo */}
-                  <div className="guide-detail-hero guide-detail-hero--s2">
-                    <div className="guide-detail-hero__bg" />
-                    <button onClick={() => { setHelpSelected(null); setPickerExiting(false); }} className="guide-back-btn">
-                      <ChevronRight size={14} className="rotate-180" /> Cambiar consola
-                    </button>
-                    <div className="guide-detail-hero__logo">
-                      <Image src="/nintendo-switch2-logo.png" alt="Nintendo Switch 2" fill className="object-contain drop-shadow-2xl" sizes="180px" />
-                    </div>
-                    <p className="guide-detail-hero__label">Guía de instalación</p>
-                  </div>
-
-                  {/* Checklist antes de empezar */}
-                  <div className="guide-detail-body">
-                    <p className="guide-section-label"><AlertTriangle size={13} /> Antes de empezar</p>
-                    <div className="guide-checklist">
-                      {[
-                        ['Espacio libre', 'Revisa que tengas memoria disponible antes de descargar.'],
-                        ['Cuenta principal', 'Instala estrictamente siguiendo el método indicado.'],
-                        ['Descarga inmediata', 'Si compraste varios juegos, descárgalos todos apenas los recibas.'],
-                        ['No archivar', 'Archivar la cuenta equivale a eliminar el juego y anula la garantía.'],
-                      ].map(([t, d], i) => (
-                        <div key={t} className="guide-checklist-item">
-                          <span className="guide-checklist-num">{i + 1}</span>
-                          <div>
-                            <p className="guide-checklist-title">{t}</p>
-                            <p className="guide-checklist-desc">{d}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="guide-tip">
-                      <Zap size={13} className="shrink-0 text-white" />
-                      <p>Jugar sin conexión a internet reduce riesgos y evita errores durante el uso.</p>
-                    </div>
-
-                    {/* Video */}
-                    <p className="guide-section-label mt-2"><Youtube size={13} /> Tutorial en video</p>
-                    <div className="guide-video-wrap">
-                      <iframe src="https://www.youtube.com/embed/Tl5A7OeRbh0" title="Tutorial Switch 2" className="absolute inset-0 h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                    </div>
-                    <div className="guide-video-note">
-                      <div className="guide-video-note__dot" />
-                      <p>Mira el tutorial completo <strong>antes de empezar</strong>. Switch 2 requiere pasos específicos que conviene seguir en orden.</p>
-                    </div>
-
-                    {/* WhatsApp */}
-                    <div className="guide-wa-bar">
-                      <div>
-                        <p className="guide-wa-bar__label">¿Aún tienes dudas?</p>
-                        <p className="guide-wa-bar__title">Te ayudamos por WhatsApp</p>
-                      </div>
-                      <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="guide-wa-btn" aria-label="Soporte WhatsApp">
-                        <MessageCircle size={20} />
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── PANTALLA: GUÍA SWITCH 1 / OLED / LITE ── */}
-              {helpSelected === 'switch1' && (
-                <div className="guide-detail-screen">
-                  {/* Hero con logo */}
-                  <div className="guide-detail-hero guide-detail-hero--s1">
-                    <div className="guide-detail-hero__bg" />
-                    <button onClick={() => { setHelpSelected(null); setPickerExiting(false); }} className="guide-back-btn">
-                      <ChevronRight size={14} className="rotate-180" /> Cambiar consola
-                    </button>
-                    <div className="guide-detail-hero__logo">
-                      <Image src="/nintendo-switch1-logo.png" alt="Nintendo Switch" fill className="object-contain drop-shadow-2xl" sizes="180px" />
-                    </div>
-                    <p className="guide-detail-hero__label">Guía de instalación</p>
-                  </div>
-
-                  {/* Checklist antes de empezar */}
-                  <div className="guide-detail-body">
-                    <p className="guide-section-label"><AlertTriangle size={13} /> Antes de empezar</p>
-                    <div className="guide-checklist">
-                      {[
-                        ['Espacio libre', 'Revisa que tengas memoria/SD disponible antes de descargar.'],
-                        ['Cuenta principal', 'Instala estrictamente siguiendo el método indicado.'],
-                        ['Descarga inmediata', 'Si compraste varios juegos, descárgalos todos apenas los recibas.'],
-                        ['No archivar', 'Archivar la cuenta equivale a eliminar el juego y anula la garantía.'],
-                      ].map(([t, d], i) => (
-                        <div key={t} className="guide-checklist-item">
-                          <span className="guide-checklist-num">{i + 1}</span>
-                          <div>
-                            <p className="guide-checklist-title">{t}</p>
-                            <p className="guide-checklist-desc">{d}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="guide-tip">
-                      <Zap size={13} className="shrink-0 text-white" />
-                      <p>Jugar sin conexión a internet reduce riesgos y evita errores durante el uso.</p>
-                    </div>
-
-                    {/* PDF */}
-                    <p className="guide-section-label mt-2"><FileText size={13} /> Manual de instalación</p>
-                    <a href="/guia.pdf" target="_blank" className="guide-pdf-preview">
-                      <div className="guide-pdf-preview__thumb">
-                        <Image src="/guide-hero.png" alt="Vista previa guía" width={493} height={269} className="guide-pdf-preview__img" />
-                        <div className="guide-pdf-preview__thumb-overlay">
-                          <div className="guide-pdf-preview__badge">
-                            <FileText size={14} />
-                            <span>PDF</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="guide-pdf-preview__footer">
-                        <div className="guide-pdf-preview__info">
-                          <p className="guide-pdf-preview__title">Instrucciones para instalar los juegos</p>
-                          <p className="guide-pdf-preview__meta">Switch 1 · OLED · Lite · 2.5 MB</p>
-                        </div>
-                        <div className="guide-pdf-preview__dl">
-                          <FileText size={15} />
-                          <span>Descargar</span>
-                        </div>
-                      </div>
-                    </a>
-
-                    {/* WhatsApp */}
-                    <div className="guide-wa-bar">
-                      <div>
-                        <p className="guide-wa-bar__label">¿Aún tienes dudas?</p>
-                        <p className="guide-wa-bar__title">Te ayudamos por WhatsApp</p>
-                      </div>
-                      <a href={`https://wa.me/${CONFIG.whatsappNumber}`} target="_blank" className="guide-wa-btn" aria-label="Soporte WhatsApp">
-                        <MessageCircle size={20} />
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-            </div>
+            <GuideSection
+              sectionMotion={sectionMotion}
+              helpSelected={helpSelected}
+              setHelpSelected={setHelpSelected}
+              pickerExiting={pickerExiting}
+              setPickerExiting={setPickerExiting}
+              whatsappNumber={CONFIG.whatsappNumber}
+            />
           )}
 
 {/* SECCIÓN 4: AYUDA Y CONFIANZA */}
