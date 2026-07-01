@@ -199,39 +199,15 @@ function doPost(e) {
     return;
   }
 
-  // 2. ACTIVAR/DESACTIVAR SUBIDA (Prioridad sobre Ventas)
-  if (mensajeCrudo.includes("Activar Subida")) { 
-    props.deleteProperty("venta_estado"); // Borra cualquier venta trabada
-    setModoSubir("on"); 
-    enviarMensaje(chatID, "✅ MODO SUBIDA ACTIVADO\nReenvía los mensajes de los proveedores."); 
-    return; 
-  }
-  if (mensajeCrudo.includes("Desactivar Subida")) { 
-    setModoSubir("off"); 
-    enviarMensaje(chatID, "🔕 MODO SUBIDA OFF\nBot listo para ventas."); 
-    return; 
-  }
-  
-  // SI ESTÁ EN MODO SUBIDA, INTERCEPTA TODO AQUÍ
-  if (getModoSubir()) {
-    subirPackLogica(mensajeCrudo, chatID);
-    return;
-  }
-
-  // 3. REPORTES (Usamos includes para ignorar diferencias de emojis)
+  // 2. REPORTES (Usamos includes para ignorar diferencias de emojis)
   if (mensajeCrudo.includes("Estadísticas")) { mostrarMenuEstadisticas(chatID); return; }
-  if (mensajeCrudo.includes("Finanzas Globales")) { calcularFinanzas(chatID); return; }
   if (mensajeCrudo.includes("Historial Ventas")) { verUltimasVentas(chatID); return; }
-  if (mensajeCrudo.includes("Top Proveedores")) { verTopProveedores(chatID); return; }
-  if (mensajeCrudo.includes("Top Productos")) { verTopProductos(chatID); return; } 
-  if (mensajeCrudo.includes("Top Clientes")) { verTopClientes(chatID); return; } 
-  if (mensajeCrudo.includes("Top Plataformas")) { verTopPlataformas(chatID); return; } 
 
-  // 4. INICIADORES DE ACCIÓN (Buscar / Borrar / Vender)
+  // 3. INICIADORES DE ACCIÓN (Buscar / Borrar / Vender)
   if (mensajeCrudo.toLowerCase().includes("buscar pack")) {
     resetBot();
     setEstadoVenta({ tipo: "SOLO_VER", paso: "ESPERANDO_ID" });
-    enviarMensaje(chatID, "🔢 Escribe el ID del Pack para ver su contenido:");
+    enviarMensaje(chatID, "🔢 Escribe el ID del Pack, o el nombre de un juego para buscarlo:");
     return;
   }
   if (mensajeCrudo.includes("Gestión Stock")) {
@@ -250,7 +226,7 @@ function doPost(e) {
     return;
   }
 
-  // 5. FLUJO ACTIVO (Solo si no es un comando de arriba)
+  // 4. FLUJO ACTIVO (Solo si no es un comando de arriba)
   const estado = getEstadoVenta();
   if (estado) {
     manejarFlujoVenta(chatID, mensajeCrudo, estado);
@@ -264,58 +240,85 @@ function doPost(e) {
  */
 function manejarFlujoVenta(chatID, input, estado) {
   
-  // --- GESTIÓN DE BORRADO ---
+  // --- GESTIÓN DE BORRADO / EDICIÓN ---
   if (estado.tipo === "MENU_BORRADO") {
     if (estado.paso === "SELECCIONAR_OPCION") {
       if (input.includes("Borrar 1 Pack")) {
         estado.paso = "ESPERANDO_ID_BORRAR"; actualizarEstadoVenta(estado);
         enviarMensaje(chatID, "🔢 Escribe el ID del Pack que quieres ELIMINAR:", true);
+      } else if (input.includes("Editar Precio")) {
+        estado.paso = "ESPERANDO_ID_EDITAR_PRECIO"; actualizarEstadoVenta(estado);
+        enviarMensaje(chatID, "🔢 Escribe el ID del Pack cuyo precio quieres cambiar:", true);
       } else if (input.includes("Borrar TODO")) {
         estado.paso = "CONFIRMAR_BORRADO_TOTAL"; actualizarEstadoVenta(estado);
-        enviarMensaje(chatID, "⚠️ PELIGRO CRÍTICO ⚠️\n\nSe creará un respaldo automático.\nEscribe: BORRAR AHORA", true);
+        enviarMensaje(chatID, "⚠️ PELIGRO CRÍTICO ⚠️\n\nEsto borra TODOS los packs y no se puede deshacer.\nEscribe: BORRAR AHORA", true);
       } else { resetBot(); mostrarMenuPrincipal(chatID, "🏠 Menú Principal:"); }
       return;
     }
     if (estado.paso === "ESPERANDO_ID_BORRAR") {
       eliminarPackLogica(parseInt(input), chatID); resetBot(); return;
     }
+    if (estado.paso === "ESPERANDO_ID_EDITAR_PRECIO") {
+      const id = parseInt(input.replace(/\D/g, ""));
+      const datos = obtenerDatosPack(id);
+      if (!datos) {
+        enviarMensaje(chatID, "❌ ID no encontrado. Intenta de nuevo:");
+        return;
+      }
+      estado.idEditarPrecio = id;
+      estado.paso = "ESPERANDO_NUEVO_PRECIO"; actualizarEstadoVenta(estado);
+      enviarMensaje(chatID, `✏️ Pack ${id} — Precio actual: $${Number(datos.precio).toLocaleString()}\n\n💰 Escribe el NUEVO precio (solo números):`);
+      return;
+    }
+    if (estado.paso === "ESPERANDO_NUEVO_PRECIO") {
+      const nuevoPrecio = parseInt(input.replace(/\D/g, ""));
+      if (isNaN(nuevoPrecio) || nuevoPrecio <= 0) {
+        enviarMensaje(chatID, "❌ Precio inválido. Escribe solo números (Ejemplo: 15000):");
+        return;
+      }
+      actualizarPrecioPack(estado.idEditarPrecio, nuevoPrecio, chatID);
+      resetBot(); return;
+    }
     if (estado.paso === "CONFIRMAR_BORRADO_TOTAL") {
-      if (input === "BORRAR AHORA") { crearRespaldoPacks(); limpiarBaseDeDatos(chatID); }
+      if (input === "BORRAR AHORA") { limpiarBaseDeDatos(chatID); }
       else { enviarMensaje(chatID, "❌ Cancelado."); mostrarMenuPrincipal(chatID, "🏠 Menú:"); }
       resetBot(); return;
     }
   }
 
-  // --- BUSQUEDA SIMPLE (CORREGIDA PARA ENVIAR ORIGINAL) ---
+  // --- BUSQUEDA (POR ID O POR NOMBRE DE JUEGO) ---
   if (estado.tipo === "SOLO_VER" && estado.paso === "ESPERANDO_ID") {
-    const idLimpiado = input.replace(/\D/g, ""); 
-    const id = parseInt(idLimpiado);
-    
-    if (isNaN(id) || idLimpiado === "") {
-      enviarMensaje(chatID, "❌ Error: Debes escribir SOLO el número del ID (Ejemplo: 5).");
+    const textoBuscado = input.trim();
+    const esNumerico = /^\d+$/.test(textoBuscado);
+
+    if (esNumerico) {
+      mostrarDetallePack(chatID, parseInt(textoBuscado));
+      resetBot(); return;
+    }
+
+    if (textoBuscado.length < 3) {
+      enviarMensaje(chatID, "❌ Escribe el ID del Pack (Ejemplo: 5) o el nombre de un juego (mínimo 3 letras):");
       return;
     }
 
-    const datos = obtenerDatosPack(id);
-    
-    if (!datos) { 
-      enviarMensaje(chatID, `❌ El ID ${id} no existe.`); 
-      mostrarMenuPrincipal(chatID, "🏠 Menú Principal:"); 
-    } 
-    else {
-      // 1. Título corto
-      enviarMensaje(chatID, `📂 Pack ${datos.id} (Precio: $${datos.precio})`);
+    const resultados = buscarPacksPorJuego(textoBuscado);
 
-      // 2. Limpieza de comilla y envío de mensaje original
-      let mensajeRaw = datos.mensajeOriginal.toString();
-      if (mensajeRaw.startsWith("'")) {
-        mensajeRaw = mensajeRaw.substring(1);
-      }
-      enviarMensaje(chatID, mensajeRaw);
-
-      mostrarMenuPrincipal(chatID, "🏠 Búsqueda finalizada.");
+    if (resultados.length === 0) {
+      enviarMensaje(chatID, `❌ No encontré ningún pack activo con "${textoBuscado}".`);
+      mostrarMenuPrincipal(chatID, "🏠 Menú Principal:");
+      resetBot(); return;
     }
-    resetBot(); return;
+
+    if (resultados.length === 1) {
+      mostrarDetallePack(chatID, resultados[0].packNumber);
+      resetBot(); return;
+    }
+
+    let msg = `🔎 Encontré ${resultados.length} packs con "${textoBuscado}":\n`;
+    resultados.forEach((r) => { msg += `\n📦 Pack ${r.packNumber} — $${Number(r.precio).toLocaleString()} (${r.juego})`; });
+    msg += "\n\n👇 Escribe el ID del pack que quieres ver:";
+    enviarMensaje(chatID, msg);
+    return;
   }
 
   // --- CARRITO DE VENTAS ---
@@ -384,10 +387,10 @@ function manejarFlujoVenta(chatID, input, estado) {
     return;
   }
   if (estado.paso === "CONFIRMAR_COSTO") {
-    if (input.toUpperCase() === "SI" && estado.costoPendiente) { input = estado.costoPendiente.toString(); delete estado.costoPendiente; }
-    const costo = parseInt(input.replace(/\D/g, ""));
+    const yaConfirmado = estado.costoPendiente !== undefined;
+    const costo = (input.toUpperCase() === "SI" && yaConfirmado) ? estado.costoPendiente : parseInt(input.replace(/\D/g, ""));
     const venta = estado.itemTemporal.precioVenta;
-    if (costo > venta && !estado.costoPendiente) {
+    if (costo > venta && !yaConfirmado) {
        estado.costoPendiente = costo; actualizarEstadoVenta(estado);
        enviarMensaje(chatID, `⚠️ ALERTA: Pierdes $${costo - venta}.\nEscribe "SI" para confirmar.`);
        return;
@@ -446,7 +449,6 @@ function agregarItemAlCarro(chatID, estado, proveedor) {
 
 function finalizarVentaCarrito(chatID, estado, cliente) {
   try {
-    let packsEliminados = 0;
     let totalVenta = 0;
     let mensajeDetalle = "";
 
@@ -455,21 +457,17 @@ function finalizarVentaCarrito(chatID, estado, cliente) {
       const costo = Number(item.costo) || 0;
 
       supabaseRequest("sales", "post", {
-        item_type: item.tipo,
-        item_detail: item.detalle,
-        sale_price: venta,
-        cost: costo,
-        profit: venta - costo,
+        item_type: item.tipo === "PACK" ? "pack" : "game",
+        item_title: item.detalle,
+        price_sold: venta,
+        cost_price: costo,
+        payment_method: estado.plataformaGlobal || "Otro",
         provider: item.proveedor || null,
-        platform: estado.plataformaGlobal || null,
-        customer: cliente || null,
-        console: item.consola || null,
-        pack_number: item.tipo === "PACK" ? item.id : null,
+        notes: cliente ? `Cliente: ${cliente}` : null,
       });
 
       if (item.tipo === "PACK") {
         supabaseRequest(`packs?bot_pack_number=eq.${encodeURIComponent(item.id)}`, "delete");
-        packsEliminados++;
       }
 
       totalVenta += venta;
@@ -487,7 +485,7 @@ function finalizarVentaCarrito(chatID, estado, cliente) {
 
 function deshacerUltimaVenta(chatID) {
   try {
-    const rows = supabaseRequest("sales?select=id,item_detail,customer&order=created_at.desc&limit=1", "get");
+    const rows = supabaseRequest("sales?select=id,item_title,notes&order=created_at.desc&limit=1", "get");
 
     if (!rows || rows.length === 0) {
       enviarMensaje(chatID, "❌ No hay ventas.");
@@ -497,7 +495,7 @@ function deshacerUltimaVenta(chatID) {
 
     const venta = rows[0];
     supabaseRequest(`sales?id=eq.${encodeURIComponent(venta.id)}`, "delete");
-    enviarMensaje(chatID, `↩️ VENTA ELIMINADA:\n❌ ${venta.item_detail} (${venta.customer || "Sin cliente"})`);
+    enviarMensaje(chatID, `↩️ VENTA ELIMINADA:\n❌ ${venta.item_title} (${venta.notes || "Sin datos"})`);
     mostrarMenuPrincipal(chatID, "🏠 Menú Principal:");
   } catch (error) {
     enviarMensaje(chatID, `❌ Error deshaciendo venta: ${error.message}`);
@@ -505,14 +503,14 @@ function deshacerUltimaVenta(chatID) {
 }
 
 function mostrarMenuPrincipal(chatID, texto) {
-  const teclado = { keyboard: [[{text: "💰 Registrar Venta"}, {text: "🔍 Buscar Pack"}], [{text: "📊 Estadísticas"}, {text: "🗑️ Gestión Stock"}], [{text: "📤 Activar Subida"}, {text: "🔕 Desactivar Subida"}], [{text: "↩️ Deshacer Venta"}, {text: "🔄 Restablecer Bot"}]], resize_keyboard: true };
+  const teclado = { keyboard: [[{text: "💰 Registrar Venta"}, {text: "🔍 Buscar Pack"}], [{text: "📊 Estadísticas"}, {text: "🗑️ Gestión Stock"}], [{text: "↩️ Deshacer Venta"}, {text: "🔄 Restablecer Bot"}]], resize_keyboard: true };
   UrlFetchApp.fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { method: "post", contentType: "application/json", payload: JSON.stringify({ chat_id: chatID, text: texto, reply_markup: teclado }) });
 }
 function mostrarMenuEstadisticas(chatID) {
-  const teclado = [[{text: "💰 Finanzas Globales"}, {text: "📋 Historial Ventas"}], [{text: "💎 Top Clientes"}, {text: "🎮 Top Productos"}], [{text: "🏆 Top Proveedores"}, {text: "📱 Top Plataformas"}], [{text: "🔙 Volver al Menú"}]];
+  const teclado = [[{text: "📋 Historial Ventas"}], [{text: "🔙 Volver al Menú"}]];
   enviarTeclado(chatID, "📊 ESTADÍSTICAS:", teclado);
 }
-function mostrarMenuBorrado(chatID) { enviarTeclado(chatID, "🗑️ GESTIÓN STOCK:", [[{text: "📦 Borrar 1 Pack"}, {text: "🔥 Borrar TODO"}], [{text: "🔙 Volver"}]]); }
+function mostrarMenuBorrado(chatID) { enviarTeclado(chatID, "🗑️ GESTIÓN STOCK:", [[{text: "📦 Borrar 1 Pack"}, {text: "✏️ Editar Precio"}], [{text: "🔥 Borrar TODO"}], [{text: "🔙 Volver"}]]); }
 function mostrarMenuCarrito(chatID, texto) { enviarTeclado(chatID, texto, [[{text: "📦 Agregar Pack"}, {text: "🎮 Agregar Juego"}], [{text: "🚀 Autopack"}, {text: "✅ Finalizar Venta"}], [{text: "❌ Cancelar"}]]); }
 function mostrarMenuProveedores(chatID) { enviarTeclado(chatID, "👤 Selecciona PROVEEDOR:", DISTRIBUIDORES); }
 function mostrarMenuPlataformas(chatID) { enviarTeclado(chatID, "📱 ¿Por dónde se vendió?", PLATAFORMAS); }
@@ -522,62 +520,10 @@ function enviarComprobante(chatID, cliente, producto, precio) {
   UrlFetchApp.fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { method: "post", contentType: "application/json", payload: JSON.stringify({ chat_id: chatID, text: msg, parse_mode: "Markdown" }) });
 }
 
-function calcularFinanzas(chatID) {
-  try {
-    const ventas = obtenerVentasSupabase();
-
-    if (ventas.length === 0) {
-      enviarMensaje(chatID, "📉 Sin datos.");
-      mostrarMenuPrincipal(chatID, "🏠 Menú:");
-      return;
-    }
-
-    let gHoy = 0;
-    let gMes = 0;
-    let gTotal = 0;
-    const hoy = new Date();
-
-    ventas.forEach((venta) => {
-      const fecha = new Date(venta.created_at);
-      const ganancia = Number(venta.profit) || 0;
-      gTotal += ganancia;
-
-      if (fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear()) {
-        gMes += ganancia;
-      }
-
-      if (
-        fecha.getDate() === hoy.getDate() &&
-        fecha.getMonth() === hoy.getMonth() &&
-        fecha.getFullYear() === hoy.getFullYear()
-      ) {
-        gHoy += ganancia;
-      }
-    });
-
-    enviarMensaje(chatID, `📊 FINANZAS:\n🟢 HOY: $${gHoy.toLocaleString()}\n🗓️ ESTE MES: $${gMes.toLocaleString()}\n💰 TOTAL: $${gTotal.toLocaleString()}`);
-    mostrarMenuPrincipal(chatID, "🏠 Menú:");
-  } catch (error) {
-    enviarMensaje(chatID, `❌ Error calculando finanzas: ${error.message}`);
-  }
-}
-function verTopProveedores(chatID) {
-  generarRankingSupabase(chatID, "provider", "🏆 PROVEEDORES", true, "profit");
-}
-function verTopProductos(chatID) {
-  generarRankingSupabase(chatID, "item_detail", "🎮 PRODUCTOS", false, "count");
-}
-function verTopClientes(chatID) {
-  generarRankingSupabase(chatID, "customer", "💎 CLIENTES", true, "sale_price");
-}
-function verTopPlataformas(chatID) {
-  generarRankingSupabase(chatID, "platform", "📱 PLATAFORMAS", false, "count");
-}
-
 function verUltimasVentas(chatID) {
   try {
     const ventas = supabaseRequest(
-      "sales?select=item_detail,profit,created_at&order=created_at.desc&limit=10",
+      "sales?select=item_title,price_sold,cost_price,created_at&order=created_at.desc&limit=10",
       "get",
     );
 
@@ -589,7 +535,8 @@ function verUltimasVentas(chatID) {
 
     let msg = "📋 ÚLTIMAS VENTAS:\n";
     ventas.forEach((venta) => {
-      msg += `\n📅 ${new Date(venta.created_at).toLocaleDateString("es-CL")} | ${venta.item_detail}\n💵 +$${Number(venta.profit || 0).toLocaleString()}`;
+      const ganancia = Number(venta.price_sold || 0) - Number(venta.cost_price || 0);
+      msg += `\n📅 ${new Date(venta.created_at).toLocaleDateString("es-CL")} | ${venta.item_title}\n💵 +$${ganancia.toLocaleString()}`;
     });
 
     enviarMensaje(chatID, msg);
@@ -612,24 +559,27 @@ function extraerTextoLimpio(texto) {
 function limpiarJuegos(textoBloque) {
   return textoBloque
     .replace(/<br>/g, "\n").replace(/<[^>]*>/g, "").split("\n")
-    .map(l => l.replace(/[🧩🔥⭐️💰💵✅❌🎮🔮™]+/g, "").trim())
+    .map(l => l.replace(/\p{Extended_Pictographic}/gu, "").trim())
     .filter(linea => {
-      // 1. Si la línea es muy corta o son solo guiones, fuera.
-      if (linea.length < 3 || /^[-=_]+$/.test(linea)) return false;
-      
+      // 1. Si la línea es muy corta, o son solo guiones/separadores decorativos, fuera.
+      if (linea.length < 3 || /^[-=_─-╿\s]+$/.test(linea)) return false;
+
       // 2. Filtros de Precios y Totales
       if (/Price|Precio|Valor|Monto|Total|^\d+\s*\$/i.test(linea)) return false;
-      
+
       // 3. Filtros de Datos de Cuenta (ID, Country, etc.)
-      if (/^(ID|Country|For buy|Buy product|Nickname|Date of|Gender|Wallet|PayPal|Linked|Gold Point|Membership|Details|Transaction|Vendedor|Seller|Vendor|NINTENDO SWITCH ACCOUNT)/i.test(linea)) return false;
+      if (/^(ID|Country|For buy|Buy product|Nickname|Date of|Gender|Wallet|PayPal|Linked|Gold Point|Membership|Details|Transaction|Vendedor|Seller|Vendor|NINTENDO SWITCH ACCOUNT|Balance|CC|Orders|Devices|Active Plan|Game Voucher|Child|IsChild)/i.test(linea)) return false;
       if (/waluigi store chile|nintendo primarias|store chile/i.test(linea)) return false;
-      
+
       // 4. NUEVO FILTRO: Elimina "no games found" y variantes
       if (/no games found|no active membership|no linked paypal/i.test(linea)) return false;
 
       // 5. Elimina usuarios de Telegram (@usuario)
       if (linea.startsWith("@")) return false;
-      
+
+      // 6. Elimina encabezados decorativos sin emojis (ej: "NUEVA CUENTA DISPONIBLE", "NINTENDO SWITCH")
+      if (/^(NUEVA CUENTA DISPONIBLE|NINTENDO SWITCH)$/i.test(linea)) return false;
+
       return true;
     })
     .map(j => j.replace(/^\d+[\.\)\-]\s*/, "").replace(/&apos;/g, "'").replace(/["“”]/g, "").replace(/DLC only/gi, "(DLC)").trim());
@@ -643,7 +593,14 @@ function extraerPrecioCLP(texto, aumento) {
   match = texto.match(/(?:^|\n)\s*\$?\s*([0-9]{1,3}(?:[.\s]?[0-9]{3})+)(?:\s*CLP)?/i);
   if (match) return parseMontoCLP(match[1]) + aumento;
 
-  match = texto.match(/(?:Price|USD|US)[^0-9]*([0-9]+(?:[.,][0-9]+)?)/i);
+  match = texto.match(/([0-9]+(?:[.,][0-9]+)?)\s*(?:USDT|USD)\b/i);
+  if (match) return Math.round(parseFloat(match[1].replace(",", ".")) * 1000) + aumento;
+
+  match = texto.match(/Price[^\n0-9]*([0-9]+(?:[.,][0-9]+)?)/i);
+  if (match) return Math.round(parseFloat(match[1].replace(",", ".")) * 1000) + aumento;
+
+  // Línea suelta tipo "10$" sin ninguna palabra clave antes (Price/Precio/USD).
+  match = texto.match(/(?:^|\n)\s*([0-9]+(?:[.,][0-9]+)?)\$\s*(?:\n|$)/);
   if (match) return Math.round(parseFloat(match[1].replace(",", ".")) * 1000) + aumento;
 
   return null;
@@ -687,8 +644,6 @@ function getEstadoVenta() { const j = props.getProperty("venta_estado"); return 
 function actualizarEstadoVenta(o) { setEstadoVenta(o); }
 function setResultadosTemporales(res) { props.setProperty("resultados_temp", JSON.stringify(res)); }
 function getResultadosTemporales() { const j = props.getProperty("resultados_temp"); return j ? JSON.parse(j) : []; }
-function setModoSubir(v) { props.setProperty("modo_subir", v); }
-function getModoSubir() { return props.getProperty("modo_subir") === "on"; }
 function resetBot() {
   props.deleteProperty("venta_estado");
   props.deleteProperty("resultados_temp");
@@ -727,6 +682,53 @@ function obtenerDatosPack(idBuscado) {
     mensajeOriginal: pack.source_message || juegos,
   };
 }
+function buscarPacksPorJuego(query) {
+  const term = encodeURIComponent(`*${query.trim()}*`);
+  const rows = supabaseRequest(
+    `pack_items?select=title,packs!inner(bot_pack_number,price,is_active)&title=ilike.${term}&packs.is_active=eq.true&order=title.asc&limit=15`,
+    "get",
+  );
+
+  const vistos = new Set();
+  const resultados = [];
+  (rows || []).forEach((item) => {
+    const pack = item.packs;
+    if (!pack || !pack.bot_pack_number || vistos.has(pack.bot_pack_number)) return;
+    vistos.add(pack.bot_pack_number);
+    resultados.push({ packNumber: pack.bot_pack_number, precio: pack.price, juego: item.title });
+  });
+  return resultados;
+}
+function mostrarDetallePack(chatID, id) {
+  const datos = obtenerDatosPack(id);
+
+  if (!datos) {
+    enviarMensaje(chatID, `❌ El ID ${id} no existe.`);
+    mostrarMenuPrincipal(chatID, "🏠 Menú Principal:");
+    return;
+  }
+
+  // 1. Título corto
+  enviarMensaje(chatID, `📂 Pack ${datos.id} (Precio: $${datos.precio})`);
+
+  // 2. Limpieza de comilla y envío de mensaje original
+  let mensajeRaw = datos.mensajeOriginal.toString();
+  if (mensajeRaw.startsWith("'")) {
+    mensajeRaw = mensajeRaw.substring(1);
+  }
+  enviarMensaje(chatID, mensajeRaw);
+
+  mostrarMenuPrincipal(chatID, "🏠 Búsqueda finalizada.");
+}
+function actualizarPrecioPack(id, nuevoPrecio, chatID) {
+  try {
+    supabaseRequest(`packs?bot_pack_number=eq.${encodeURIComponent(id)}`, "patch", { price: nuevoPrecio });
+    enviarMensaje(chatID, `✅ Pack ${id} actualizado.\n💰 Nuevo precio: $${nuevoPrecio.toLocaleString()}`);
+    mostrarMenuPrincipal(chatID, "🏠 Menú Principal:");
+  } catch (error) {
+    enviarMensaje(chatID, `❌ Error actualizando precio: ${error.message}`);
+  }
+}
 function eliminarPackLogica(id, chatID) {
   try {
     const datos = obtenerDatosPack(id);
@@ -743,12 +745,6 @@ function eliminarPackLogica(id, chatID) {
   } catch (error) {
     enviarMensaje(chatID, `❌ Error eliminando pack: ${error.message}`);
   }
-}
-function reordenarPacks() {
-  // Supabase no necesita reordenar filas. Mantener esta función evita romper el flujo antiguo.
-}
-function crearRespaldoPacks() {
-  // En Supabase no hacemos backup desde Apps Script. Usa backups/export desde Supabase si lo necesitas.
 }
 function limpiarBaseDeDatos(chatID) {
   try {
