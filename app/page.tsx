@@ -7,6 +7,7 @@ import { MessageCircle, Heart } from 'lucide-react';
 import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
+import { fetchNewsFromSupabase, type NewsItem } from '@/lib/news';
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from '@/lib/settings';
 
 import HomeSectionV2 from '@/components/app-store/HomeSectionV2';
@@ -109,6 +110,7 @@ export default function MobileAppStore() {
 
   const [productos, setProductos] = useState<CatalogGame[]>([]);
   const [packs, setPacks] = useState<CatalogPack[]>([]);
+  const [news, setNews] = useState<NewsItem[]>([]);
   const [appSettings, setAppSettings] = useState(DEFAULT_APP_SETTINGS);
   const [cargando, setCargando] = useState(true);
   
@@ -297,14 +299,16 @@ export default function MobileAppStore() {
   useEffect(() => {
     // CARGA DE DATOS
     const cargarDatos = async () => {
-      const [supabaseCatalog, settings] = await Promise.all([
+      const [supabaseCatalog, settings, newsItems] = await Promise.all([
         fetchCatalogFromSupabase(),
         fetchAppSettings(),
+        fetchNewsFromSupabase(),
       ]);
 
       setProductos(supabaseCatalog?.productos || []);
       setPacks(supabaseCatalog?.packs || []);
       setAppSettings(settings);
+      setNews(newsItems);
       setCargando(false);
     };
     cargarDatos();
@@ -387,6 +391,7 @@ export default function MobileAppStore() {
               sectionMotion={sectionMotion}
               productos={productos}
               packs={packs}
+              news={news}
               ofertasFlash={ofertasFlash}
               cargando={cargando}
               nintendoOnlinePrice={appSettings.nintendoOnlinePrice}

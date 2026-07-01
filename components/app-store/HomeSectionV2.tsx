@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { CatalogGame, CatalogPack } from '@/lib/catalog';
 import { getNintendoThumb } from '@/lib/catalog';
+import type { NewsItem } from '@/lib/news';
 import type { SectionId } from './AppDock';
 import './HomeSectionV2.css';
 
@@ -14,6 +15,7 @@ type Props = {
   sectionMotion: string;
   productos: CatalogGame[];
   packs: CatalogPack[];
+  news: NewsItem[];
   ofertasFlash: CatalogGame[];
   cargando: boolean;
   nintendoOnlinePrice: number;
@@ -80,6 +82,7 @@ export default function HomeSectionV2({
   sectionMotion,
   productos,
   packs,
+  news,
   ofertasFlash,
   cargando,
   nintendoOnlinePrice,
@@ -133,11 +136,34 @@ export default function HomeSectionV2({
         <div className="hs2-news__head">
           <h2 className="hs2-news__title">Noticias</h2>
         </div>
-        {/* Estado vacío — aquí irán las imágenes de noticias */}
-        <div className="hs2-news__empty">
-          <Newspaper size={22} strokeWidth={1.6} />
-          <p>Próximamente noticias</p>
-        </div>
+        {news.length === 0 ? (
+          <div className="hs2-news__empty">
+            <Newspaper size={22} strokeWidth={1.6} />
+            <p>Próximamente noticias</p>
+          </div>
+        ) : (
+          <div className="hs2-news__rail">
+            {news.map((item) => (
+              <div key={item.id} className="hs2-news__card">
+                <span className="hs2-news__card-img">
+                  {item.image_url ? (
+                    <Image src={item.image_url} alt={item.title} fill className="object-cover" sizes="240px" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center">
+                      <Newspaper size={20} strokeWidth={1.6} className="text-white/25" />
+                    </span>
+                  )}
+                </span>
+                <span className="hs2-news__card-body">
+                  <span className="hs2-news__card-title">{item.title}</span>
+                  {item.description && (
+                    <span className="hs2-news__card-desc">{item.description}</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ── INFO GRID: Online + Stats ── */}

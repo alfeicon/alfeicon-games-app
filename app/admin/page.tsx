@@ -1,113 +1,35 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, Gamepad2, HardDrive, ImagePlus, Loader2, LogOut, Plus, Save, ShieldCheck, Tag } from "lucide-react";
+import {
+  AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff,
+  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck,
+} from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
-import GameCard from "@/components/GameCard";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
-import { DATA_IMAGENES } from "@/app/data/imagenes";
+import type { AdminGame, AdminPack, AdminNews, AdSpend, AdminSection, Provider, Sale, SettingsState } from "./_types";
+import { Inicio } from "./_components/Inicio";
+import { JuegosCatalog } from "./_components/JuegosCatalog";
+import { PacksCatalog } from "./_components/PacksCatalog";
+import { Noticias } from "./_components/Noticias";
+import { Ventas } from "./_components/Ventas";
+import { Ajustes } from "./_components/Ajustes";
+import { SaleModal } from "./_components/SaleModal";
 
-type AdminGame = {
-  id: string;
-  title: string;
-  price: number;
-  image_url: string | null;
-  storage_required: string | null;
-  console: string | null;
-  is_offer: boolean;
-  offer_price: number | null;
-  is_active: boolean;
-};
-
-type GameForm = {
-  title: string;
-  price: string;
-  image_url: string;
-  storage_required: string;
-  console: "switch" | "switch2";
-  is_offer: boolean;
-  offer_price: string;
-  is_active: boolean;
-};
-
-type SettingsForm = {
-  nintendoOnlinePrice: string;
-  packPriceIncrease: string;
-};
-
-const emptyForm: GameForm = {
-  title: "",
-  price: "",
-  image_url: "",
-  storage_required: "",
-  console: "switch",
-  is_offer: false,
-  offer_price: "",
-  is_active: true,
-};
-
-const defaultSettingsForm: SettingsForm = {
+const defaultSettings: SettingsState = {
   nintendoOnlinePrice: String(DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
   packPriceIncrease: String(DEFAULT_APP_SETTINGS.packPriceIncrease),
 };
 
-const toPrice = (value: string) => Number(value.replace(/[^0-9]/g, "")) || 0;
-
-const normalizeImageTitle = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[™®©]/g, "")
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-
-const imageCandidates = DATA_IMAGENES.map((item) => ({
-  ...item,
-  normalizedName: normalizeImageTitle(item.name),
-}));
-
-const findNintendoImageByTitle = (title: string) => {
-  const normalizedTitle = normalizeImageTitle(title);
-  if (!normalizedTitle) return null;
-
-  const exactMatch = imageCandidates.find((item) => item.normalizedName === normalizedTitle);
-  if (exactMatch) return exactMatch;
-
-  const scoredMatches = imageCandidates
-    .map((item) => {
-      const startsWithTitle = item.normalizedName.startsWith(normalizedTitle);
-      const titleStartsWithItem = normalizedTitle.startsWith(item.normalizedName);
-      const containsTitle = item.normalizedName.includes(normalizedTitle);
-      const containsItem = normalizedTitle.includes(item.normalizedName);
-      const score =
-        (startsWithTitle ? 80 : 0) +
-        (titleStartsWithItem ? 70 : 0) +
-        (containsTitle ? 40 : 0) +
-        (containsItem ? 30 : 0) -
-        Math.abs(item.normalizedName.length - normalizedTitle.length) * 0.5;
-
-      return { item, score };
-    })
-    .filter(({ score }) => score > 25)
-    .sort((a, b) => b.score - a.score);
-
-  return scoredMatches[0]?.item || null;
-};
-
-const toForm = (game: AdminGame): GameForm => ({
-  title: game.title,
-  price: String(game.price),
-  image_url: game.image_url || "",
-  storage_required: game.storage_required || "",
-  console: game.console === "switch2" ? "switch2" : "switch",
-  is_offer: game.is_offer,
-  offer_price: game.offer_price ? String(game.offer_price) : "",
-  is_active: game.is_active,
-});
+const NAV_ITEMS: { id: AdminSection; label: string; Icon: React.ElementType; accent: string }[] = [
+  { id: "inicio",  label: "Inicio",  Icon: Home,     accent: "text-white" },
+  { id: "juegos",  label: "Juegos",  Icon: Gamepad2, accent: "text-blue-400" },
+  { id: "packs",   label: "Packs",   Icon: Gift,     accent: "text-purple-400" },
+  { id: "noticias", label: "Noticias", Icon: Newspaper, accent: "text-orange-400" },
+  { id: "ventas",  label: "Ventas",  Icon: Receipt,  accent: "text-green-400" },
+  { id: "ajustes", label: "Ajustes", Icon: Settings,  accent: "text-gray-400" },
+];
 
 export default function AdminPage() {
   const [email, setEmail] = useState("");
@@ -116,500 +38,432 @@ export default function AdminPage() {
   const [capsOn, setCapsOn] = useState(false);
   const [sessionReady, setSessionReady] = useState(!isSupabaseConfigured);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  const [section, setSection] = useState<AdminSection>("inicio");
+  const [sectionKey, setSectionKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [games, setGames] = useState<AdminGame[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [form, setForm] = useState<GameForm>(emptyForm);
-  const [settingsForm, setSettingsForm] = useState<SettingsForm>(defaultSettingsForm);
-  const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const noticeTimer = useRef<number | null>(null);
 
-  const selectedGame = useMemo(
-    () => games.find((game) => game.id === selectedId) || null,
-    [games, selectedId],
-  );
-
-  const filteredGames = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    if (!term) return games;
-    return games.filter((game) => game.title.toLowerCase().includes(term));
-  }, [games, query]);
-
-  const previewPrice = toPrice(form.price);
-  const previewOfferPrice = form.is_offer ? toPrice(form.offer_price) : 0;
-  const previewFinalPrice = form.is_offer && previewOfferPrice > 0 ? previewOfferPrice : previewPrice;
-  const previewOriginalPrice = form.is_offer && previewOfferPrice > 0 ? previewPrice : null;
-  const previewConsoleLabel = form.console === "switch2" ? "Solo Switch 2" : "Switch 1 y 2";
+  const [games, setGames] = useState<AdminGame[]>([]);
+  const [packs, setPacks] = useState<AdminPack[]>([]);
+  const [news, setNews] = useState<AdminNews[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [adSpend, setAdSpend] = useState<AdSpend[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [settings, setSettings] = useState<SettingsState>(defaultSettings);
+  const [salesTableExists, setSalesTableExists] = useState<boolean | null>(null);
+  const [salesError, setSalesError] = useState<string | null>(null);
+  const [newsTableExists, setNewsTableExists] = useState<boolean | null>(null);
 
   const showNotice = (type: "success" | "error", text: string) => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
     setNotice({ type, text });
-    window.setTimeout(() => setNotice(null), 3600);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 3500) as unknown as number;
   };
 
   const loadGames = useCallback(async () => {
     if (!supabase) return;
-
-    setLoading(true);
     let { data, error } = await supabase
       .from("games")
-      .select("id,title,price,image_url,storage_required,console,is_offer,offer_price,is_active")
+      .select("id,title,price,cost_price,image_url,storage_required,console,is_offer,offer_price,is_active")
       .order("title", { ascending: true });
-
     if (error?.message?.toLowerCase().includes("console")) {
-      const fallback = await supabase
+      const fb = await supabase
         .from("games")
-        .select("id,title,price,image_url,storage_required,is_offer,offer_price,is_active")
+        .select("id,title,price,cost_price,image_url,storage_required,is_offer,offer_price,is_active")
         .order("title", { ascending: true });
-
-      data = fallback.data?.map((game) => ({ ...game, console: "switch" })) || null;
-      error = fallback.error;
+      data = fb.data?.map(g => ({ ...g, console: "switch" })) || null;
+      error = fb.error;
     }
+    if (!error) setGames((data || []) as AdminGame[]);
+  }, []);
 
-    setLoading(false);
+  const loadPacks = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("packs")
+      .select("id,title,price,cost_price,image_url,console,is_new,is_active,pack_items(title,sort_order)")
+      .order("created_at", { ascending: false });
+    if (!error) setPacks((data || []) as AdminPack[]);
+  }, []);
 
+  const loadNews = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("news")
+      .select("id,title,description,image_url,is_active,sort_order,created_at")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false });
     if (error) {
-      setMessage("No se pudo cargar el catalogo. Revisa permisos de admin en Supabase.");
-      showNotice("error", "No se pudo cargar el catalogo.");
+      const code = error.code ?? "";
+      const msg = error.message ?? "";
+      const tableNotFound = code === "42P01" || code === "PGRST205" || (msg.includes("relation") && msg.includes("does not exist"));
+      setNewsTableExists(tableNotFound ? false : true);
+      setNews([]);
       return;
     }
+    setNewsTableExists(true);
+    setNews((data || []) as AdminNews[]);
+  }, []);
 
-    setGames((data || []) as AdminGame[]);
+  const loadSales = useCallback(async () => {
+    if (!supabase) return;
+    setSalesError(null);
+    const { data, error } = await supabase
+      .from("sales")
+      .select("id,item_type,item_id,item_title,price_sold,cost_price,payment_method,provider,notes,created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) {
+      const code = error.code ?? "";
+      const msg = error.message ?? "";
+      // Only truly "missing" if Postgres/PostgREST says the relation doesn't exist
+      const tableNotFound = code === "42P01" || code === "PGRST205" || (msg.includes("relation") && msg.includes("does not exist"));
+      setSalesTableExists(tableNotFound ? false : true);
+      setSalesError(`[${code}] ${msg}`);
+      setSales([]);
+      return;
+    }
+    setSalesTableExists(true);
+    setSalesError(null);
+    setSales((data || []) as Sale[]);
+  }, []);
+
+  const loadAdSpend = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("ad_spend")
+      .select("id,platform,amount,description,date,created_at")
+      .order("date", { ascending: false })
+      .limit(200);
+    if (!error) setAdSpend((data || []) as AdSpend[]);
+    // Silently ignore ad_spend errors — table might be missing policies
+    // but sales is the primary table we check
+  }, []);
+
+  const loadProviders = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("providers")
+      .select("id,name,is_active")
+      .order("name", { ascending: true });
+    if (!error) setProviders((data || []) as Provider[]);
   }, []);
 
   const loadSettings = useCallback(async () => {
     if (!supabase) return;
-
     const { data, error } = await supabase
-      .from("app_settings")
-      .select("key,value")
-      .in("key", Object.values(SETTING_KEYS));
-
-    if (error) {
-      setSettingsForm(defaultSettingsForm);
-      return;
-    }
-
-    const rows = new Map((data || []).map((row) => [row.key, row.value]));
-    setSettingsForm({
+      .from("app_settings").select("key,value").in("key", Object.values(SETTING_KEYS));
+    if (error) { setSettings(defaultSettings); return; }
+    const rows = new Map((data || []).map(r => [r.key, r.value]));
+    setSettings({
       nintendoOnlinePrice: String(rows.get(SETTING_KEYS.nintendoOnlinePrice) || DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
       packPriceIncrease: String(rows.get(SETTING_KEYS.packPriceIncrease) || DEFAULT_APP_SETTINGS.packPriceIncrease),
     });
   }, []);
 
+  const navigate = (s: AdminSection) => {
+    setSection(s);
+    setSectionKey(k => k + 1);
+    if (s === "ventas") {
+      loadSales();
+      loadAdSpend();
+    }
+  };
+
+  const loadAll = useCallback(async () => {
+    await Promise.all([loadGames(), loadPacks(), loadNews(), loadSales(), loadAdSpend(), loadSettings(), loadProviders()]);
+  }, [loadGames, loadPacks, loadNews, loadSales, loadAdSpend, loadSettings, loadProviders]);
+
   useEffect(() => {
     if (!supabase) return;
-
     supabase.auth.getSession().then(({ data }) => {
-      const hasSession = Boolean(data.session);
-      setIsLoggedIn(hasSession);
-      setSessionReady(true);
-      if (hasSession) {
-        loadGames();
-        loadSettings();
-      }
+      const ok = Boolean(data.session);
+      setIsLoggedIn(ok); setSessionReady(true);
+      if (ok) loadAll();
     });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const hasSession = Boolean(session);
-      setIsLoggedIn(hasSession);
-      if (hasSession) {
-        loadGames();
-        loadSettings();
-      }
-      if (!hasSession) setGames([]);
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
+      const ok = Boolean(session);
+      setIsLoggedIn(ok);
+      if (ok) loadAll();
+      if (!ok) { setGames([]); setPacks([]); setNews([]); setSales([]); setAdSpend([]); }
     });
-
     return () => listener.subscription.unsubscribe();
-  }, [loadGames, loadSettings]);
+  }, [loadAll]);
 
-  const signIn = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!supabase) return;
-
-    setLoading(true);
-    setMessage("");
+  const signIn = async (e: FormEvent) => {
+    e.preventDefault(); if (!supabase) return;
+    setLoading(true); setAuthError("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-
-    if (error) {
-      setMessage("Login invalido o usuario sin acceso.");
-      return;
-    }
+    if (error) setAuthError("Login inválido o usuario sin acceso.");
   };
 
   const signOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
-    setSelectedId(null);
-    setForm(emptyForm);
+    setGames([]); setPacks([]); setNews([]); setSales([]); setAdSpend([]);
   };
 
-  const startNew = (clearMessage = true) => {
-    setSelectedId(null);
-    setForm(emptyForm);
-    if (clearMessage) setMessage("");
-  };
-
-  const selectGame = (game: AdminGame) => {
-    setSelectedId(game.id);
-    setForm(toForm(game));
-    setMessage("");
-  };
-
-  const fillImageFromTitle = () => {
-    const match = findNintendoImageByTitle(form.title);
-
-    if (!match) {
-      showNotice("error", "No encontre una imagen para ese nombre.");
-      return;
-    }
-
-    setForm((current) => ({ ...current, image_url: match.url }));
-    showNotice("success", `Imagen encontrada: ${match.name}`);
-  };
-
-  const saveGame = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!supabase) return;
-
-    const payload = {
-      title: form.title.trim(),
-      price: toPrice(form.price),
-      image_url: form.image_url.trim() || null,
-      storage_required: form.storage_required.trim() || null,
-      console: form.console,
-      is_offer: form.is_offer,
-      offer_price: form.is_offer ? toPrice(form.offer_price) : null,
-      is_active: form.is_active,
-    };
-
-    if (!payload.title || payload.price <= 0) {
-      setMessage("Falta nombre o precio.");
-      showNotice("error", "Falta nombre o precio.");
-      return;
-    }
-
-    setLoading(true);
-    const request = selectedId
-      ? supabase.from("games").update(payload).eq("id", selectedId)
-      : supabase.from("games").insert(payload);
-    const { error } = await request;
-    setLoading(false);
-
-    if (error) {
-      const consoleHint = error.message?.includes("console") ? " Ejecuta primero el SQL para agregar la columna console." : "";
-      setMessage(`No se pudo guardar. Revisa permisos o datos.${consoleHint}`);
-      showNotice("error", "No se pudo guardar el juego.");
-      return;
-    }
-
-    const successText = selectedId ? "Juego actualizado correctamente." : "Juego agregado correctamente.";
-    setMessage(successText);
-    showNotice("success", successText);
-    startNew(false);
-    await loadGames();
-  };
-
-  const saveSettings = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!supabase) return;
-
-    const onlinePrice = toPrice(settingsForm.nintendoOnlinePrice);
-    const packIncrease = toPrice(settingsForm.packPriceIncrease);
-
-    if (onlinePrice <= 0 || packIncrease <= 0) {
-      showNotice("error", "Revisa los precios de ajustes.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.from("app_settings").upsert([
-      {
-        key: SETTING_KEYS.nintendoOnlinePrice,
-        value: onlinePrice,
-        label: "Nintendo Switch Online + Expansion Pack 12 meses",
-      },
-      {
-        key: SETTING_KEYS.packPriceIncrease,
-        value: packIncrease,
-        label: "Aumento automatico para packs del bot",
-      },
-    ]);
-    setLoading(false);
-
-    if (error) {
-      showNotice("error", "No se pudieron guardar los ajustes. Ejecuta supabase/app-settings.sql.");
-      return;
-    }
-
-    showNotice("success", "Ajustes guardados correctamente.");
-    await loadSettings();
-  };
+  // ── Loading ──────────────────────────────────────────────────────────────
+  if (!sessionReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#090b0d]">
+        <Loader2 className="animate-spin text-gray-700" size={22} />
+      </div>
+    );
+  }
 
   if (!isSupabaseConfigured) {
     return (
-      <main className="alfeicon-theme theme-dark min-h-screen bg-black px-5 py-8 text-white">
-        <div className="brand-shell mx-auto max-w-md rounded-[1.5rem] p-5">
-          <h1 className="mb-2 text-xl font-black uppercase tracking-widest">Admin</h1>
-          <p className="text-sm text-gray-400">Faltan las variables de Supabase en `.env.local`.</p>
-        </div>
-      </main>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#090b0d] p-8 text-center">
+        <ShieldCheck size={36} className="text-gray-700" />
+        <p className="text-lg font-black uppercase tracking-widest">Panel no disponible</p>
+        <p className="max-w-xs text-sm text-gray-600">Supabase no está configurado en este entorno.</p>
+        <Link href="/" className="mt-2 text-xs font-black text-gray-600 hover:text-white transition-colors">← Volver al inicio</Link>
+      </div>
     );
   }
 
-  if (!sessionReady) {
-    return (
-      <main className="alfeicon-theme theme-dark flex min-h-screen items-center justify-center bg-black text-blue-400">
-        <Loader2 className="animate-spin" />
-      </main>
-    );
-  }
-
+  // ── Login ────────────────────────────────────────────────────────────────
   if (!isLoggedIn) {
     return (
-      <main className="alfeicon-theme theme-dark min-h-screen bg-black px-5 py-10 text-white">
-        <form onSubmit={signIn} className="brand-shell mx-auto max-w-sm rounded-[1.7rem] p-5">
-          <div className="mb-6 flex items-center gap-3">
-            <ShieldCheck className="text-blue-400" size={24} />
-            <h1 className="text-xl font-black uppercase tracking-widest">Admin</h1>
-          </div>
-          <label className="mb-3 block">
-            <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Email</span>
-            <input value={email} onChange={(event) => setEmail(event.target.value)} className="premium-control w-full rounded-2xl px-3 py-3 text-white outline-none focus:border-blue-500" type="email" />
-          </label>
-          <label className="mb-5 block">
-            <span className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-500">
-              Clave
-              {capsOn && (
-                <span className="flex items-center gap-1 normal-case tracking-normal text-green-400">
-                  <span className="inline-block h-2 w-2 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.9)]" />
-                  Mayúsculas activadas
-                </span>
-              )}
-            </span>
-            <div className="relative">
-              <input
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyUp={(event) => setCapsOn(event.getModifierState("CapsLock"))}
-                onKeyDown={(event) => setCapsOn(event.getModifierState("CapsLock"))}
-                className="premium-control w-full rounded-2xl px-3 py-3 pr-12 text-white outline-none focus:border-blue-500"
-                type={showPassword ? "text" : "password"}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((value) => !value)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#090b0d] p-6">
+        {/* Ambient glow */}
+        <div className="pointer-events-none absolute left-1/2 top-0 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/[0.04] blur-3xl" />
+
+        <div className="animate-soft-in relative z-10 w-full max-w-sm">
+          <div className="mb-10">
+            <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+              <ShieldCheck size={20} className="text-white" />
             </div>
-          </label>
-          {message && <p className="mb-4 text-sm text-red-300">{message}</p>}
-          <button disabled={loading} className="magnetic flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-black uppercase tracking-widest text-black disabled:opacity-60">
-            {loading && <Loader2 size={16} className="animate-spin" />}
-            Entrar
-          </button>
-          <Link href="/" className="mt-3 flex items-center justify-center gap-2 rounded-full border border-white/10 px-4 py-3 text-xs font-bold uppercase tracking-widest text-gray-400 transition-colors hover:text-white">
-            <ArrowLeft size={15} />
-            Volver al inicio
+            <h1 className="text-2xl font-black uppercase tracking-widest">Acceso admin</h1>
+            <p className="mt-1 text-sm text-gray-600">Panel de gestión Alfeicon</p>
+          </div>
+
+          <form onSubmit={signIn} className="space-y-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-600">Email</span>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+                className="premium-control w-full rounded-2xl px-4 py-3.5 text-sm outline-none transition-all focus:border-white/30" />
+            </label>
+            <label className="block">
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-600">Contraseña</span>
+                {capsOn && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-yellow-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-yellow-500" /> Caps Lock
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <input type={showPassword ? "text" : "password"} value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  onKeyDown={e => setCapsOn(e.getModifierState("CapsLock"))}
+                  onKeyUp={e => setCapsOn(e.getModifierState("CapsLock"))}
+                  required
+                  className="premium-control w-full rounded-2xl py-3.5 pl-4 pr-11 text-sm outline-none transition-all focus:border-white/30" />
+                <button type="button" onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-600 transition-colors hover:text-white">
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </label>
+
+            {authError && (
+              <div className="animate-soft-in flex items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/8 px-3.5 py-2.5">
+                <AlertCircle size={13} className="shrink-0 text-red-400" />
+                <p className="text-xs font-semibold text-red-300">{authError}</p>
+              </div>
+            )}
+
+            <button disabled={loading}
+              className="magnetic mt-2 flex w-full items-center justify-center gap-2 rounded-full bg-white py-3.5 text-sm font-black uppercase tracking-widest text-black disabled:opacity-60">
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+              {loading ? "Verificando…" : "Entrar"}
+            </button>
+          </form>
+
+          <Link href="/" className="mt-8 flex items-center gap-1.5 text-xs font-bold text-gray-700 transition-colors hover:text-gray-400">
+            <ArrowLeft size={12} /> Volver al inicio
           </Link>
-        </form>
-      </main>
+        </div>
+      </div>
     );
   }
 
+  const activeItem = NAV_ITEMS.find(i => i.id === section) ?? NAV_ITEMS[0];
+
+  // ── Main shell ────────────────────────────────────────────────────────────
   return (
-    <main className="alfeicon-theme theme-dark min-h-screen bg-black px-4 py-5 text-white">
-      {notice && (
-        <div className={`fixed right-5 top-5 z-50 animate-soft-in rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-2xl ${
-          notice.type === "success"
-            ? "border-green-400/20 bg-green-500/15 text-green-100"
-            : "border-red-400/20 bg-red-500/15 text-red-100"
-        }`}>
-          <div className="flex items-center gap-3">
-            {notice.type === "success" ? <CheckCircle2 size={18} className="text-green-400" /> : <AlertCircle size={18} className="text-red-400" />}
-            <p className="text-sm font-black">{notice.text}</p>
+    <div className="flex h-screen overflow-hidden bg-[#090b0d]">
+      {/* Mobile top bar */}
+      <div className="fixed inset-x-0 top-0 z-40 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0c0f12]/95 px-4 py-3.5 backdrop-blur-md md:hidden">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <activeItem.Icon size={13} className={activeItem.accent} />
+          </div>
+          <p className="truncate text-xs font-black uppercase tracking-widest text-white">{activeItem.label}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Link href="/" className="rounded-lg p-2 text-gray-500 transition-colors hover:text-white">
+            <ArrowLeft size={15} />
+          </Link>
+          <button onClick={signOut} className="rounded-lg p-2 text-gray-500 transition-colors hover:text-red-400">
+            <LogOut size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile bottom dock (same floating glass dock as the storefront) */}
+      <div className="app-dock-wrapper md:hidden">
+        <nav aria-label="Navegación admin" className="app-glass-dock relative flex h-[66px] w-full items-center justify-around overflow-hidden rounded-[2rem] px-1.5">
+          <span className="app-glass-dock-indicator pointer-events-none absolute left-1.5 top-1.5 h-[54px] rounded-[1.8rem] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            style={{ width: `calc((100% - 0.75rem) / ${NAV_ITEMS.length})`, transform: `translateX(${NAV_ITEMS.findIndex(i => i.id === section) * 100}%)` }} />
+          {NAV_ITEMS.map(({ id, label, Icon, accent }) => {
+            const active = section === id;
+            return (
+              <button key={id} onClick={() => navigate(id)}
+                className="relative z-10 flex h-full flex-1 flex-col items-center justify-center gap-0.5">
+                <Icon size={18} className={active ? accent : "text-white/65"} strokeWidth={active ? 2.6 : 2.1} />
+                <span className={`text-[8.5px] font-black uppercase tracking-wider ${active ? "text-white" : "text-white/55"}`}>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Sidebar (desktop) */}
+      <nav
+        className="relative hidden w-[210px] shrink-0 flex-col overflow-hidden md:flex"
+        style={{
+          background: "linear-gradient(180deg, #0c0f12 0%, #090b0d 100%)",
+          borderRight: "1px solid rgba(255,255,255,0.06)",
+        }}
+      >
+        {/* Subtle top glow */}
+        <div className="pointer-events-none absolute left-0 right-0 top-0 h-32 bg-gradient-to-b from-white/[0.035] to-transparent" />
+
+        {/* Logo */}
+        <div className="relative flex items-center gap-3 px-5 py-5">
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-xl"
+            style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
+          >
+            <ShieldCheck size={14} className="text-white/80" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-widest text-white/90">Admin</p>
+            <p className="truncate text-[9px] font-bold tracking-widest text-gray-600">Alfeicon Games</p>
           </div>
         </div>
-      )}
-      <div className="mx-auto grid max-w-7xl gap-5 xl:grid-cols-[320px_minmax(0,1fr)_380px] lg:grid-cols-[300px_minmax(0,1fr)]">
-        <section className="brand-shell animate-soft-in rounded-[1.8rem] p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <h1 className="text-lg font-black uppercase tracking-widest">Juegos</h1>
-            <button onClick={signOut} className="magnetic rounded-xl border border-white/10 p-2 text-gray-400 hover:bg-white/5 hover:text-white" aria-label="Salir">
-              <LogOut size={18} />
-            </button>
-          </div>
-          <div className="mb-3 flex gap-2">
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar" className="premium-control min-w-0 flex-1 rounded-2xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
-            <button onClick={() => startNew()} className="magnetic rounded-2xl bg-blue-600 p-2 text-white" aria-label="Nuevo juego">
-              <Plus size={18} />
-            </button>
-          </div>
-          <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
-            {filteredGames.map((game) => (
-              <button key={game.id} onClick={() => selectGame(game)} className={`magnetic group flex w-full items-center gap-3 rounded-2xl border p-2 text-left hover:-translate-y-0.5 ${selectedId === game.id ? "border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-950/30" : "border-white/5 bg-black/30 hover:bg-white/5"}`}>
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-black">
-                  {game.image_url ? <Image src={game.image_url} alt={game.title} fill className="object-cover" sizes="64px" /> : <Tag className="m-3 text-gray-600" />}
+
+        {/* Nav items */}
+        <div className="relative flex-1 overflow-y-auto px-2.5 py-1">
+          {NAV_ITEMS.map(({ id, label, Icon, accent }) => {
+            const active = section === id;
+            return (
+              <button key={id} onClick={() => navigate(id)}
+                className="group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200"
+                style={{
+                  background: active ? "rgba(255,255,255,0.07)" : "transparent",
+                  boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
+                }}>
+                {/* Hover bg */}
+                {!active && (
+                  <span className="absolute inset-0 rounded-xl bg-white/0 transition-all duration-200 group-hover:bg-white/[0.04]" />
+                )}
+                {/* Active accent line */}
+                {active && (
+                  <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-white/60" />
+                )}
+                <div className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-200 ${
+                  active ? accent : "text-gray-700 group-hover:text-gray-500"
+                }`}
+                  style={{ background: active ? "rgba(255,255,255,0.06)" : "transparent" }}>
+                  <Icon size={14} />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold">{game.title}</p>
-                  <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] font-bold uppercase text-gray-500">
-                    <span>${game.price.toLocaleString("es-CL")} CLP</span>
-                    {game.storage_required && <span>• {game.storage_required}</span>}
-                    <span className={game.console === "switch2" ? "text-blue-400" : ""}>• {game.console === "switch2" ? "Solo Switch 2" : "Switch 1 y 2"}</span>
-                  </div>
-                </div>
-                {game.is_active ? <Eye size={15} className="text-green-400" /> : <EyeOff size={15} className="text-gray-500" />}
+                <span className={`relative text-[10.5px] font-black uppercase tracking-widest transition-colors duration-200 ${
+                  active ? "text-white" : "text-gray-700 group-hover:text-gray-400"
+                }`}>{label}</span>
               </button>
-            ))}
-          </div>
-        </section>
+            );
+          })}
+        </div>
 
-        <form onSubmit={saveGame} className="brand-shell animate-soft-in rounded-[1.8rem] p-5" style={{ animationDelay: "70ms" }}>
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-black uppercase tracking-widest">{selectedGame ? "Editar" : "Nuevo"}</h2>
-            <button disabled={loading} className="magnetic flex items-center gap-2 rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-widest text-black shadow-lg shadow-white/10 disabled:opacity-60">
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {loading ? "Guardando" : "Guardar"}
-            </button>
-          </div>
+        {/* Bottom */}
+        <div className="relative border-t border-white/[0.05] px-2.5 py-3 space-y-0.5">
+          <Link href="/" className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all hover:bg-white/[0.04]">
+            <ArrowLeft size={13} className="text-gray-700 transition-colors group-hover:text-gray-500" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-700 transition-colors group-hover:text-gray-500">Ver tienda</span>
+          </Link>
+          <button onClick={signOut}
+            className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all hover:bg-red-500/8">
+            <LogOut size={13} className="text-gray-700 transition-colors group-hover:text-red-400" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-700 transition-colors group-hover:text-red-400">Cerrar sesión</span>
+          </button>
+        </div>
+      </nav>
 
-          {message && <p className="mb-4 rounded-2xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-gray-300">{message}</p>}
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="md:col-span-2">
-              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Nombre</span>
-              <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className="premium-control w-full rounded-2xl px-3 py-3 outline-none focus:border-blue-500" />
-            </label>
-            <label>
-              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Precio</span>
-              <input value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} inputMode="numeric" className="premium-control w-full rounded-2xl px-3 py-3 outline-none focus:border-blue-500" />
-            </label>
-            <label>
-              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Espacio</span>
-              <input value={form.storage_required} onChange={(event) => setForm({ ...form, storage_required: event.target.value })} className="premium-control w-full rounded-2xl px-3 py-3 outline-none focus:border-blue-500" />
-            </label>
-            <div>
-              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Consola</span>
-              <div className="premium-surface relative flex overflow-hidden rounded-full p-1">
-                <span className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-full bg-white transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${form.console === "switch2" ? "translate-x-[calc(100%+0.5rem)]" : "translate-x-0"}`} />
-                <button type="button" onClick={() => setForm({ ...form, console: "switch" })} className={`relative z-10 flex-1 rounded-full py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${form.console === "switch" ? "text-black" : "text-gray-500 hover:text-white"}`}>
-                  Switch 1 y 2
-                </button>
-                <button type="button" onClick={() => setForm({ ...form, console: "switch2" })} className={`relative z-10 flex-1 rounded-full py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${form.console === "switch2" ? "text-black" : "text-gray-500 hover:text-white"}`}>
-                  Switch 2
-                </button>
-              </div>
-            </div>
-            <label className="md:col-span-2">
-              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Imagen URL</span>
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <input value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} className="premium-control w-full rounded-2xl px-3 py-3 outline-none focus:border-blue-500" />
-                <button
-                  type="button"
-                  onClick={fillImageFromTitle}
-                  disabled={!form.title.trim()}
-                  className="magnetic inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white px-4 py-3 text-xs font-black uppercase tracking-widest text-black disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  <ImagePlus size={15} />
-                  Buscar imagen
-                </button>
-              </div>
-            </label>
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <label className="brand-glass flex items-center justify-between rounded-2xl p-3">
-              <span className="text-sm font-bold">Activo</span>
-              <input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} />
-            </label>
-            <label className="brand-glass flex items-center justify-between rounded-2xl p-3">
-              <span className="text-sm font-bold">Oferta</span>
-              <input type="checkbox" checked={form.is_offer} onChange={(event) => setForm({ ...form, is_offer: event.target.checked })} />
-            </label>
-            <label>
-              <span className="mb-1 block text-xs font-bold uppercase tracking-widest text-gray-500">Precio Oferta</span>
-              <input value={form.offer_price} onChange={(event) => setForm({ ...form, offer_price: event.target.value })} inputMode="numeric" disabled={!form.is_offer} className="premium-control w-full rounded-2xl px-3 py-3 outline-none focus:border-blue-500 disabled:opacity-40" />
-            </label>
-          </div>
-        </form>
-
-        <aside className="premium-surface animate-soft-in rounded-[1.8rem] p-4 xl:sticky xl:top-5 xl:h-fit lg:col-span-2 xl:col-span-1" style={{ animationDelay: "120ms" }}>
-          <div className="mb-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400">Vista previa</p>
-            <h2 className="text-lg font-black uppercase tracking-widest text-white">Tienda</h2>
-          </div>
-
-          <form onSubmit={saveSettings} className="mb-5 rounded-[1.35rem] border border-white/10 bg-black/28 p-3">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-400">Precios rápidos</p>
-                <p className="mt-1 text-xs font-semibold text-gray-500">Online y aumento de packs del bot.</p>
-              </div>
-              <button disabled={loading} className="magnetic rounded-full bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-black disabled:opacity-50">
-                Guardar
-              </button>
-            </div>
-            <div className="grid gap-3">
-              <label>
-                <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Online 12 meses</span>
-                <input
-                  value={settingsForm.nintendoOnlinePrice}
-                  onChange={(event) => setSettingsForm({ ...settingsForm, nintendoOnlinePrice: event.target.value })}
-                  inputMode="numeric"
-                  className="premium-control w-full rounded-2xl px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                />
-              </label>
-              <label>
-                <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Aumento packs bot</span>
-                <input
-                  value={settingsForm.packPriceIncrease}
-                  onChange={(event) => setSettingsForm({ ...settingsForm, packPriceIncrease: event.target.value })}
-                  inputMode="numeric"
-                  className="premium-control w-full rounded-2xl px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                />
-              </label>
-            </div>
-          </form>
-
-          <div className="mx-auto max-w-[350px]">
-            <GameCard
-              titulo={form.title.trim() || "Nombre del juego"}
-              precio={previewFinalPrice}
-              precioOriginal={previewOriginalPrice}
-              img={form.image_url.trim() || null}
-              ahorro={form.is_offer && previewOfferPrice > 0 ? "OFERTA 🔥" : null}
-              esPack={false}
-              storageRequired={form.storage_required.trim() || null}
-              consoleName={form.console}
-              onAdd={() => setMessage("Vista previa: el boton comprar se prueba en la tienda publica.")}
-            />
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <div className="brand-glass rounded-2xl p-3">
-              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-blue-400"><Gamepad2 size={15} /></div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Consola</p>
-              <p className="mt-1 text-sm font-black text-white">{previewConsoleLabel}</p>
-            </div>
-            <div className="brand-glass rounded-2xl p-3">
-              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-green-400"><HardDrive size={15} /></div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Espacio</p>
-              <p className="mt-1 text-sm font-black text-white">{form.storage_required.trim() || "Sin dato"}</p>
-            </div>
-          </div>
-
-          {!form.is_active && (
-            <p className="mt-4 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-200">
-              Este juego esta inactivo, por eso no aparecera en la tienda publica.
-            </p>
+      {/* Main */}
+      <div className="relative flex flex-1 flex-col overflow-hidden">
+        <div key={sectionKey} className="flex h-full flex-col animate-soft-in">
+          {section === "inicio" && (
+            <Inicio games={games} packs={packs} sales={sales}
+              salesTableExists={salesTableExists}
+              onNavigate={navigate}
+              onRegisterSale={() => setShowSaleModal(true)} />
           )}
-        </aside>
+          {section === "juegos" && (
+            <JuegosCatalog games={games} loading={loading} setLoading={setLoading}
+              showNotice={showNotice} onReload={loadGames} />
+          )}
+          {section === "packs" && (
+            <PacksCatalog packs={packs} loading={loading} setLoading={setLoading}
+              showNotice={showNotice} onReload={loadPacks} />
+          )}
+          {section === "noticias" && (
+            <Noticias news={news} newsTableExists={newsTableExists} loading={loading} setLoading={setLoading}
+              showNotice={showNotice} onReload={loadNews} />
+          )}
+          {section === "ventas" && (
+            <Ventas sales={sales} adSpend={adSpend}
+              salesTableExists={salesTableExists}
+              salesError={salesError}
+              loading={loading} setLoading={setLoading}
+              showNotice={showNotice} onReload={loadAll} />
+          )}
+          {section === "ajustes" && (
+            <Ajustes settings={settings} providers={providers} loading={loading}
+              setLoading={setLoading} showNotice={showNotice} onReloadProviders={loadProviders} />
+          )}
+        </div>
+
+        {/* Toast */}
+        {notice && (
+          <div className={`animate-soft-in pointer-events-none fixed bottom-[70px] left-4 right-4 z-50 flex items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-semibold shadow-2xl backdrop-blur-sm sm:bottom-6 sm:left-auto sm:right-6 ${
+            notice.type === "success"
+              ? "border border-green-500/20 bg-green-500/12 text-green-300"
+              : "border border-red-500/20 bg-red-500/12 text-red-300"
+          }`}>
+            {notice.type === "success"
+              ? <CheckCircle2 size={14} className="shrink-0" />
+              : <AlertCircle size={14} className="shrink-0" />}
+            {notice.text}
+          </div>
+        )}
       </div>
-    </main>
+
+      {showSaleModal && (
+        <SaleModal games={games} packs={packs} providers={providers}
+          loading={loading} setLoading={setLoading}
+          showNotice={showNotice}
+          onClose={() => setShowSaleModal(false)}
+          onReload={loadAll} />
+      )}
+    </div>
   );
 }
