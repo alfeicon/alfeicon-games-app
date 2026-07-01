@@ -3,7 +3,7 @@
 import { memo, useEffect, useState, type MouseEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { ArrowDownCircle, ArrowUpRight, Filter, Gamepad2, Gift, HardDrive, Heart, Loader2, Package2, Search, Tag, X } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpRight, ChevronDown, Filter, Gamepad2, Gift, HardDrive, Heart, Loader2, Package2, Search, Tag, X } from 'lucide-react';
 import type { CatalogItem, CatalogPack } from '@/lib/catalog';
 import { getImageForGame, getNintendoThumb } from '@/lib/catalog';
 import './CatalogSection.css';
@@ -133,9 +133,6 @@ const PackCard = memo(function PackCard({
   saved: boolean;
   onOpen: (item: CatalogItem) => void;
 }) {
-  const perGame = item.juegosIncluidos.length > 0
-    ? Math.round(item.precio / item.juegosIncluidos.length)
-    : null;
   const shown = item.juegosIncluidos.slice(0, 4);
   const extra = item.juegosIncluidos.length - shown.length;
 
@@ -178,9 +175,6 @@ const PackCard = memo(function PackCard({
           <span className="pack3-price">
             ${formatPrice(item.precio)}<sup className="pack3-clp">CLP</sup>
           </span>
-          {perGame && (
-            <span className="pack3-per">~${formatPrice(perGame)} c/u</span>
-          )}
           <span className={`pack3-heart${saved ? ' pack3-heart-saved' : ''}`}>
             <Heart size={14} strokeWidth={2.5} fill={saved ? 'currentColor' : 'none'} />
           </span>
@@ -200,42 +194,42 @@ const PackImageMosaic = memo(function PackImageMosaic({
   const withImages = games
     .map(name => ({ name, url: getImageForGame(name) }))
     .filter((g): g is { name: string; url: string } => g.url !== null)
-    .slice(0, 4);
+    .slice(0, 3);
 
   const shown = withImages.length > 0 ? withImages : null;
   const extraCount = totalCount - (shown?.length ?? 0);
 
+  if (!shown) {
+    return (
+      <div className="flex aspect-[3/1] w-full items-center justify-center rounded-xl border border-white/10 bg-white/5">
+        <Package2 size={28} strokeWidth={1.2} className="text-gray-600" />
+      </div>
+    );
+  }
+
   return (
-    <div className="relative aspect-[0.58] overflow-hidden rounded-xl border border-white/10 bg-white/5">
-      {shown ? (
-        <div className={`grid h-full gap-0.5 ${shown.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {shown.map((g, i) => {
-            const isLast = i === shown.length - 1;
-            return (
-              <div key={g.name} className="relative overflow-hidden bg-black/20">
-                <Image
-                  src={getNintendoThumb(g.url, 120, 90) ?? g.url}
-                  alt={g.name}
-                  fill
-                  className="object-cover"
-                  sizes="56px"
-                  placeholder="blur"
-                  blurDataURL={BLUR_PLACEHOLDER}
-                />
-                {isLast && extraCount > 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <span className="text-lg font-black text-white">+{extraCount}</span>
-                  </div>
-                )}
+    <div className={`grid gap-1.5 ${shown.length >= 2 ? 'grid-cols-3' : 'grid-cols-1'}`}>
+      {shown.map((g, i) => {
+        const isLast = i === shown.length - 1;
+        return (
+          <div key={g.name} className="relative aspect-square overflow-hidden rounded-lg border border-white/10 bg-black/20">
+            <Image
+              src={getNintendoThumb(g.url, 120, 120) ?? g.url}
+              alt={g.name}
+              fill
+              className="object-cover"
+              sizes="90px"
+              placeholder="blur"
+              blurDataURL={BLUR_PLACEHOLDER}
+            />
+            {isLast && extraCount > 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <span className="text-sm font-black text-white">+{extraCount}</span>
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="flex h-full items-center justify-center">
-          <Package2 size={36} strokeWidth={1.2} className="text-gray-600" />
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 });
@@ -276,39 +270,28 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
           </button>
         </div>
 
-        <div className="grid grid-cols-[112px_1fr] gap-4">
+        <div className="flex flex-col items-center">
           {/* Pack: mosaic of game covers; Game: Nintendo Switch case */}
           {item.esPack ? (
-            <PackImageMosaic games={item.juegosIncluidos} totalCount={item.juegosIncluidos.length} />
+            <div className="w-full max-w-[280px]">
+              <PackImageMosaic games={item.juegosIncluidos} totalCount={item.juegosIncluidos.length} />
+            </div>
           ) : (
-          <div className="game-case game-case-detail relative aspect-[0.58]">
-            <span className="game-card-label" aria-hidden="true">
-              <Image
-                src="/nintendo-switch-logo-white.png"
-                alt=""
-                width={34}
-                height={22}
-                className="h-full w-full object-contain"
-              />
-            </span>
+          <div className="liquid-glass relative aspect-[16/9] w-full overflow-hidden rounded-[1.2rem]">
             {item.img ? (
-              <span className="game-case-window">
-                <Image src={item.img} alt="" aria-hidden="true" fill className="game-case-image-bg object-cover" sizes="112px" priority />
-                <Image src={item.img} alt={item.titulo} fill className="game-case-image game-case-image-main object-contain" sizes="112px" priority />
-              </span>
+              <Image src={item.img} alt={item.titulo} fill className="relative z-[1] object-contain" sizes="360px" priority />
             ) : (
-              <div className="game-case-window flex items-center justify-center px-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-700">Sin imagen</div>
+              <div className="relative z-[1] flex h-full items-center justify-center px-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">Sin imagen</div>
             )}
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           </div>
           )}
 
-          <div className="min-w-0">
+          <div className="mt-4 min-w-0 text-center">
             <h3 className="line-clamp-4 text-[19px] font-black leading-[1.05] tracking-[-0.02em] text-white">
               {item.titulo}
             </h3>
 
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
               {consoleLabel && (
                 <span className="brand-chip px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#a9bac5]">
                   <Gamepad2 size={11} /> {consoleLabel}
@@ -325,28 +308,40 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
                 </span>
               )}
             </div>
-
-            <div className="mt-4">
-              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Precio</p>
-              {hasOldPrice && !item.esPack && (
-                <p className="text-[11px] font-semibold text-gray-500 line-through decoration-red-500 decoration-2">
-                  ${formatPrice(item.precioOriginal ?? 0)}
-                </p>
-              )}
-              <p className="text-[26px] font-black leading-none tracking-[-0.04em] text-white">
-                ${formatPrice(item.precio)}
-                <span className="ml-1 text-[10px] font-bold tracking-normal text-gray-400">CLP</span>
-              </p>
-            </div>
           </div>
+        </div>
+
+        <div className="mt-4 text-center">
+          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Precio</p>
+          {hasOldPrice && !item.esPack && (
+            <p className="text-[11px] font-semibold text-gray-500 line-through decoration-red-500 decoration-2">
+              ${formatPrice(item.precioOriginal ?? 0)}
+            </p>
+          )}
+          <p className="text-[26px] font-black leading-none tracking-[-0.04em] text-white">
+            ${formatPrice(item.precio)}
+            <span className="ml-1 text-[10px] font-bold tracking-normal text-gray-400">CLP</span>
+          </p>
         </div>
 
         {item.esPack && includedGames.length > 0 && (
           <div className="mt-4 rounded-[1.2rem] border border-white/10 bg-white/[0.045] p-3">
-            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-gray-400">Incluye {includedGames.length} juegos</p>
-            <div className="max-h-28 space-y-1 overflow-y-auto pr-1 text-[11px] font-semibold leading-relaxed text-[#d5dde1] scrollbar-hide">
-              {includedGames.map((game) => (
-                <p key={game} className="line-clamp-1">- {game}</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Incluye {includedGames.length} juegos</p>
+              {includedGames.length > 5 && (
+                <span className="flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wide text-[#a9bac5] animate-bounce">
+                  Desliza <ChevronDown size={11} />
+                </span>
+              )}
+            </div>
+            <div className="max-h-32 space-y-1.5 overflow-y-auto pr-1 text-[11px] font-semibold leading-relaxed text-[#d5dde1] scrollbar-hide">
+              {includedGames.map((game, i) => (
+                <p key={game} className="flex items-center gap-2">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-[8px] font-black text-gray-400">
+                    {i + 1}
+                  </span>
+                  <span className="line-clamp-1">{game}</span>
+                </p>
               ))}
             </div>
           </div>
@@ -417,8 +412,14 @@ function CatalogSection({
       }
     };
 
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [selectedItem]);
 
   return (

@@ -246,98 +246,6 @@ html {
   text-transform: uppercase;
 }
 
-.game-case {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.62rem;
-  background: #e60012;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -2px 0 rgba(154, 0, 10, 0.2),
-    0 5px 10px rgba(0, 0, 0, 0.18);
-  transform: translateZ(0);
-}
-
-.game-case::before {
-  content: none;
-}
-
-.game-case::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 2.4%;
-  z-index: 4;
-  width: 1rem;
-  height: 0.43rem;
-  border: 0;
-  background: rgba(112, 0, 8, 0.86);
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.game-case-window {
-  position: absolute;
-  inset: 13.5% 7% 8%;
-  z-index: 1;
-  overflow: hidden;
-  border-radius: 0.14rem;
-  background: #151515;
-  box-shadow: none;
-}
-
-.game-case-image {
-  z-index: 1;
-  inset: -1px !important;
-  width: calc(100% + 2px) !important;
-  height: calc(100% + 2px) !important;
-  display: block;
-  border-radius: 0.16rem;
-  object-position: center;
-  filter: saturate(1.05) contrast(1.03);
-}
-
-.game-case-image-bg {
-  z-index: 0;
-  inset: -10% !important;
-  width: 120% !important;
-  height: 120% !important;
-  opacity: 0.56;
-  filter: blur(7px) saturate(1.08) contrast(1.05);
-}
-
-.game-case-image-main {
-  padding: 0.08rem;
-  filter: saturate(1.06) contrast(1.03);
-}
-
-.game-card-label {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  left: 50%;
-  top: 3.2%;
-  z-index: 5;
-  width: 1.72rem;
-  height: 0.98rem;
-  transform: translateX(-50%);
-}
-
-.game-case-poster {
-  border-radius: 0.62rem;
-}
-
-.game-case-detail {
-  border-radius: 0.62rem;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 16px 34px rgba(0, 0, 0, 0.38);
-}
-
 .catalog-poster-grid {
   position: relative;
   border-radius: 1.25rem;
@@ -578,6 +486,46 @@ html {
 
 .animate-gentle-float {
   animation: gentleFloat 4s ease-in-out infinite;
+}
+
+@keyframes saleSuccessPop {
+  0% { opacity: 0; transform: scale(0.4); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes saleSuccessRing {
+  0% { opacity: 0.55; transform: scale(0.7); }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+
+@keyframes saleSuccessFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes saleSuccessCheck {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.sale-success-ring {
+  animation: saleSuccessRing 760ms ease-out both;
+}
+
+.sale-success-icon {
+  animation: saleSuccessPop 460ms var(--ease-emphasized) both;
+}
+
+.sale-success-icon svg path,
+.sale-success-icon svg polyline {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: saleSuccessCheck 360ms ease-out 200ms both;
+}
+
+.sale-success-text {
+  animation: saleSuccessFade 320ms var(--ease-standard) 220ms both;
 }
 
 .purchase-splash {
