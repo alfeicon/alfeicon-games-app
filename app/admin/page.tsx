@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff,
-  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck,
+  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck,
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -14,8 +14,10 @@ import { JuegosCatalog } from "./_components/JuegosCatalog";
 import { PacksCatalog } from "./_components/PacksCatalog";
 import { Noticias } from "./_components/Noticias";
 import { Ventas } from "./_components/Ventas";
+import { Entregas } from "./_components/Entregas";
 import { Ajustes } from "./_components/Ajustes";
 import { SaleModal } from "./_components/SaleModal";
+import type { Order } from "./_types";
 
 const defaultSettings: SettingsState = {
   nintendoOnlinePrice: String(DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
@@ -26,6 +28,7 @@ const NAV_ITEMS: { id: AdminSection; label: string; Icon: React.ElementType; acc
   { id: "inicio",  label: "Inicio",  Icon: Home,     accent: "text-white" },
   { id: "juegos",  label: "Juegos",  Icon: Gamepad2, accent: "text-blue-400" },
   { id: "packs",   label: "Packs",   Icon: Gift,     accent: "text-purple-400" },
+  { id: "entregas", label: "Entregas", Icon: PackageCheck, accent: "text-yellow-400" },
   { id: "noticias", label: "Noticias", Icon: Newspaper, accent: "text-orange-400" },
   { id: "ventas",  label: "Ventas",  Icon: Receipt,  accent: "text-green-400" },
   { id: "ajustes", label: "Ajustes", Icon: Settings,  accent: "text-gray-400" },
@@ -50,6 +53,7 @@ export default function AdminPage() {
   const [games, setGames] = useState<AdminGame[]>([]);
   const [packs, setPacks] = useState<AdminPack[]>([]);
   const [news, setNews] = useState<AdminNews[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [adSpend, setAdSpend] = useState<AdSpend[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -57,12 +61,14 @@ export default function AdminPage() {
   const [salesTableExists, setSalesTableExists] = useState<boolean | null>(null);
   const [salesError, setSalesError] = useState<string | null>(null);
   const [newsTableExists, setNewsTableExists] = useState<boolean | null>(null);
+  const [firstLoadDone, setFirstLoadDone] = useState(false);
+  const didLoadRef = useRef(false);
 
-  const showNotice = (type: "success" | "error", text: string) => {
+  const showNotice = useCallback((type: "success" | "error", text: string) => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     setNotice({ type, text });
     noticeTimer.current = window.setTimeout(() => setNotice(null), 3500) as unknown as number;
-  };
+  }, []);
 
   const loadGames = useCallback(async () => {
     if (!supabase) return;
@@ -78,8 +84,13 @@ export default function AdminPage() {
       data = fb.data?.map(g => ({ ...g, console: "switch" })) || null;
       error = fb.error;
     }
-    if (!error) setGames((data || []) as AdminGame[]);
-  }, []);
+    if (error) {
+      console.error("[loadGames]", error);
+      showNotice("error", `No se pudieron cargar los juegos: ${error.message}`);
+      return;
+    }
+    setGames((data || []) as AdminGame[]);
+  }, [showNotice]);
 
   const loadPacks = useCallback(async () => {
     if (!supabase) return;
@@ -87,8 +98,13 @@ export default function AdminPage() {
       .from("packs")
       .select("id,title,price,cost_price,image_url,console,is_new,is_active,pack_items(title,sort_order)")
       .order("created_at", { ascending: false });
-    if (!error) setPacks((data || []) as AdminPack[]);
-  }, []);
+    if (error) {
+      console.error("[loadPacks]", error);
+      showNotice("error", `No se pudieron cargar los packs: ${error.message}`);
+      return;
+    }
+    setPacks((data || []) as AdminPack[]);
+  }, [showNotice]);
 
   const loadNews = useCallback(async () => {
     if (!supabase) return;
@@ -108,6 +124,20 @@ export default function AdminPage() {
     setNewsTableExists(true);
     setNews((data || []) as AdminNews[]);
   }, []);
+
+  const loadOrders = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("[loadOrders]", error);
+      showNotice("error", `No se pudieron cargar las entregas: ${error.message}`);
+      return;
+    }
+    setOrders((data || []) as Order[]);
+  }, [showNotice]);
 
   const loadSales = useCallback(async () => {
     if (!supabase) return;
@@ -139,9 +169,9 @@ export default function AdminPage() {
       .select("id,platform,amount,description,date,created_at")
       .order("date", { ascending: false })
       .limit(200);
-    if (!error) setAdSpend((data || []) as AdSpend[]);
-    // Silently ignore ad_spend errors — table might be missing policies
-    // but sales is the primary table we check
+    if (error) { console.error("[loadAdSpend]", error); return; }
+    setAdSpend((data || []) as AdSpend[]);
+    // ad_spend no es crítico: si falla (tabla/políticas faltantes) solo lo logueamos
   }, []);
 
   const loadProviders = useCallback(async () => {
@@ -150,7 +180,8 @@ export default function AdminPage() {
       .from("providers")
       .select("id,name,is_active")
       .order("name", { ascending: true });
-    if (!error) setProviders((data || []) as Provider[]);
+    if (error) { console.error("[loadProviders]", error); return; }
+    setProviders((data || []) as Provider[]);
   }, []);
 
   const loadSettings = useCallback(async () => {
@@ -172,27 +203,72 @@ export default function AdminPage() {
       loadSales();
       loadAdSpend();
     }
+    if (s === "entregas") {
+      loadOrders();
+    }
   };
 
   const loadAll = useCallback(async () => {
-    await Promise.all([loadGames(), loadPacks(), loadNews(), loadSales(), loadAdSpend(), loadSettings(), loadProviders()]);
-  }, [loadGames, loadPacks, loadNews, loadSales, loadAdSpend, loadSettings, loadProviders]);
+    // 1. Cargar primero lo indispensable para la pantalla de Inicio
+    await Promise.all([loadGames(), loadPacks(), loadSales()]);
+    setFirstLoadDone(true);
+    // 2. Cargar el resto en segundo plano para no saturar la conexión
+    Promise.all([loadOrders(), loadNews(), loadAdSpend(), loadSettings(), loadProviders()]);
+  }, [loadGames, loadPacks, loadSales, loadOrders, loadNews, loadAdSpend, loadSettings, loadProviders]);
 
   useEffect(() => {
     if (!supabase) return;
+    // getSession() y onAuthStateChange(INITIAL_SESSION) se disparan casi juntos:
+    // este ref evita que loadAll corra dos veces y duplique las consultas.
+    const runLoadOnce = () => {
+      if (didLoadRef.current) return;
+      didLoadRef.current = true;
+      loadAll();
+    };
     supabase.auth.getSession().then(({ data }) => {
       const ok = Boolean(data.session);
       setIsLoggedIn(ok); setSessionReady(true);
-      if (ok) loadAll();
+      if (ok) runLoadOnce();
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
       const ok = Boolean(session);
       setIsLoggedIn(ok);
-      if (ok) loadAll();
-      if (!ok) { setGames([]); setPacks([]); setNews([]); setSales([]); setAdSpend([]); }
+      if (ok) runLoadOnce();
+      if (!ok) {
+        didLoadRef.current = false;
+        setFirstLoadDone(false);
+        setGames([]); setPacks([]); setNews([]); setSales([]); setAdSpend([]);
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, [loadAll]);
+
+  // Realtime para actualizar las Entregas y notificar
+  useEffect(() => {
+    if (!supabase || !isLoggedIn) return;
+    const channel = supabase
+      .channel("admin_orders_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
+        loadOrders();
+        
+        // Notificaciones visuales
+        if (payload.eventType === "INSERT") {
+          const num = payload.new.order_number ? `#${payload.new.order_number}` : '';
+          showNotice("success", `¡Nueva orden ${num} creada!`);
+        } else if (payload.eventType === "UPDATE") {
+          const old = payload.old as Order;
+          const updated = payload.new as Order;
+          if (!old.console_code && updated.console_code) {
+             const num = updated.order_number ? `#${updated.order_number}` : '';
+             showNotice("success", `¡Código recibido en la orden ${num}: ${updated.console_code}!`);
+          }
+        }
+      })
+      .subscribe();
+    return () => {
+      supabase?.removeChannel(channel);
+    };
+  }, [isLoggedIn, loadOrders, showNotice]);
 
   const signIn = async (e: FormEvent) => {
     e.preventDefault(); if (!supabase) return;
@@ -414,6 +490,7 @@ export default function AdminPage() {
           {section === "inicio" && (
             <Inicio games={games} packs={packs} sales={sales}
               salesTableExists={salesTableExists}
+              firstLoadDone={firstLoadDone}
               onNavigate={navigate}
               onRegisterSale={() => setShowSaleModal(true)} />
           )}
@@ -428,6 +505,10 @@ export default function AdminPage() {
           {section === "noticias" && (
             <Noticias news={news} newsTableExists={newsTableExists} loading={loading} setLoading={setLoading}
               showNotice={showNotice} onReload={loadNews} />
+          )}
+          {section === "entregas" && (
+            <Entregas orders={orders} games={games} packs={packs} loading={loading} setLoading={setLoading}
+              showNotice={showNotice} onReload={loadOrders} />
           )}
           {section === "ventas" && (
             <Ventas sales={sales} adSpend={adSpend}

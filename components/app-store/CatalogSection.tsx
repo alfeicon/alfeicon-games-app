@@ -3,9 +3,10 @@
 import { memo, useEffect, useState, type MouseEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { ArrowDownCircle, ArrowUpRight, ChevronDown, Filter, Gamepad2, Gift, HardDrive, Heart, Loader2, Package2, Search, Tag, X } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpRight, Filter, Gamepad2, Gift, HardDrive, Heart, Loader2, Package2, Search, Tag, X } from 'lucide-react';
 import type { CatalogItem, CatalogPack } from '@/lib/catalog';
 import { getImageForGame, getNintendoThumb } from '@/lib/catalog';
+import { useCurrency } from '@/components/currency/CurrencyProvider';
 import './CatalogSection.css';
 
 type CatalogSectionProps = {
@@ -48,8 +49,6 @@ type CatalogPosterProps = {
 
 const BLUR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3Crect fill='%23181a1e' width='1' height='1'/%3E%3C/svg%3E";
 
-const formatPrice = (value: number) => value.toLocaleString('es-CL');
-
 /**
  * Nintendo assets use Cloudinary. Extracts the raw content path
  * (ncom/... or store/...) and rebuilds the URL preserving the native
@@ -67,6 +66,7 @@ const CatalogPoster = memo(function CatalogPoster({
   onOpen,
   priority = false,
 }: CatalogPosterProps) {
+  const { format, code } = useCurrency();
   const consoleLabel = getConsoleLabel(item.consoleName) || 'Juego digital';
   const hasDiscount = !item.esPack && Boolean(item.precioOriginal && item.precioOriginal > item.precio);
 
@@ -108,11 +108,11 @@ const CatalogPoster = memo(function CatalogPoster({
         <span className="cat2-bottom">
           <span className="cat2-price-wrap">
             {hasDiscount && !item.esPack && (
-              <span className="cat2-old-price">${formatPrice(item.precioOriginal ?? 0)}</span>
+              <span className="cat2-old-price">{format(item.precioOriginal ?? 0)}</span>
             )}
             <span className={`cat2-price${hasDiscount ? ' cat2-price-sale' : ''}`}>
-              ${formatPrice(item.precio)}
-              <sup className="cat2-clp">CLP</sup>
+              {format(item.precio)}
+              <sup className="cat2-clp">{code}</sup>
             </span>
           </span>
           <span className={`cat2-heart${saved ? ' cat2-heart-saved' : ''}`}>
@@ -133,6 +133,7 @@ const PackCard = memo(function PackCard({
   saved: boolean;
   onOpen: (item: CatalogItem) => void;
 }) {
+  const { format, code } = useCurrency();
   const shown = item.juegosIncluidos.slice(0, 4);
   const extra = item.juegosIncluidos.length - shown.length;
 
@@ -173,7 +174,7 @@ const PackCard = memo(function PackCard({
         </span>
         <span className="pack3-footer">
           <span className="pack3-price">
-            ${formatPrice(item.precio)}<sup className="pack3-clp">CLP</sup>
+            {format(item.precio)}<sup className="pack3-clp">{code}</sup>
           </span>
           <span className={`pack3-heart${saved ? ' pack3-heart-saved' : ''}`}>
             <Heart size={14} strokeWidth={2.5} fill={saved ? 'currentColor' : 'none'} />
@@ -181,56 +182,6 @@ const PackCard = memo(function PackCard({
         </span>
       </span>
     </button>
-  );
-});
-
-const PackImageMosaic = memo(function PackImageMosaic({
-  games,
-  totalCount,
-}: {
-  games: string[];
-  totalCount: number;
-}) {
-  const withImages = games
-    .map(name => ({ name, url: getImageForGame(name) }))
-    .filter((g): g is { name: string; url: string } => g.url !== null)
-    .slice(0, 3);
-
-  const shown = withImages.length > 0 ? withImages : null;
-  const extraCount = totalCount - (shown?.length ?? 0);
-
-  if (!shown) {
-    return (
-      <div className="flex aspect-[3/1] w-full items-center justify-center rounded-xl border border-white/10 bg-white/5">
-        <Package2 size={28} strokeWidth={1.2} className="text-gray-600" />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`grid gap-1.5 ${shown.length >= 2 ? 'grid-cols-3' : 'grid-cols-1'}`}>
-      {shown.map((g, i) => {
-        const isLast = i === shown.length - 1;
-        return (
-          <div key={g.name} className="relative aspect-square overflow-hidden rounded-lg border border-white/10 bg-black/20">
-            <Image
-              src={getNintendoThumb(g.url, 120, 120) ?? g.url}
-              alt={g.name}
-              fill
-              className="object-cover"
-              sizes="90px"
-              placeholder="blur"
-              blurDataURL={BLUR_PLACEHOLDER}
-            />
-            {isLast && extraCount > 0 && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <span className="text-sm font-black text-white">+{extraCount}</span>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
   );
 });
 
@@ -249,44 +200,85 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
   onBuy,
   onToggleSaved,
 }: CatalogDetailModalProps) {
+  const { format, code, isBase, feeUsd } = useCurrency();
   const consoleLabel = getConsoleLabel(item.consoleName);
   const hasOldPrice = !item.esPack && Boolean(item.precioOriginal && item.precioOriginal > item.precio);
   const includedGames = item.esPack ? item.juegosIncluidos : [];
+  const packCovers = item.esPack
+    ? includedGames
+        .map((name) => ({ name, url: getImageForGame(name) }))
+        .filter((g): g is { name: string; url: string } => Boolean(g.url))
+    : [];
 
   return (
     <div className="catalog-detail-backdrop" role="dialog" aria-modal="true" aria-label={`Detalles de ${item.titulo}`} onClick={onClose}>
-      <div className="catalog-detail-panel" onClick={(event) => event.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black">
+      <div
+        className={`catalog-detail-panel${item.esPack ? ' catalog-detail-panel--pack' : ''}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {/* Header fijo */}
+        <div className="cdm-header flex items-center justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-black">
               {item.esPack ? <Gift size={15} /> : <Tag size={15} />}
             </span>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-400">
+            <p className="truncate text-[10px] font-black uppercase tracking-[0.22em] text-gray-400">
               {item.esPack ? 'Pack de juegos' : 'Juego digital'}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar detalles" className="motion-press flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
-            <X size={18} />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onToggleSaved(item)}
+              aria-label={saved ? 'Quitar de favoritos' : 'Guardar favorito'}
+              className={`motion-press flex h-9 w-9 items-center justify-center rounded-full border ${
+                saved ? 'border-[#e5e4e2]/70 bg-[#e5e4e2] text-black' : 'border-white/10 bg-white/10 text-white'
+              }`}
+            >
+              <Heart size={16} fill={saved ? 'currentColor' : 'none'} />
+            </button>
+            <button type="button" onClick={onClose} aria-label="Cerrar detalles" className="motion-press flex h-9 w-9 items-center justify-center rounded-full bg-[#ff4d4f]/18 text-[#ff5a5c]">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-col items-center">
-          {/* Pack: mosaic of game covers; Game: Nintendo Switch case */}
+        {/* Contenido con scroll */}
+        <div className="cdm-scroll scrollbar-hide">
+          {/* Pack: carrusel de portadas; Game: carátula 16:9 */}
           {item.esPack ? (
-            <div className="w-full max-w-[280px]">
-              <PackImageMosaic games={item.juegosIncluidos} totalCount={item.juegosIncluidos.length} />
-            </div>
-          ) : (
-          <div className="liquid-glass relative aspect-[16/9] w-full overflow-hidden rounded-[1.2rem]">
-            {item.img ? (
-              <Image src={item.img} alt={item.titulo} fill className="relative z-[1] object-contain" sizes="360px" priority />
+            packCovers.length > 0 ? (
+              <div className="cdm-carousel scrollbar-hide">
+                {packCovers.map((g) => (
+                  <div key={g.name} className="cdm-carousel-card">
+                    <Image
+                      src={getNintendoThumb(g.url, 240, 240) ?? g.url}
+                      alt={g.name}
+                      fill
+                      sizes="128px"
+                      className="object-cover"
+                      placeholder="blur"
+                      blurDataURL={BLUR_PLACEHOLDER}
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="relative z-[1] flex h-full items-center justify-center px-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">Sin imagen</div>
-            )}
-          </div>
+              <div className="flex aspect-[16/9] w-full items-center justify-center rounded-[1.2rem] border border-white/10 bg-white/5">
+                <Package2 size={30} strokeWidth={1.2} className="text-gray-600" />
+              </div>
+            )
+          ) : (
+            <div className="liquid-glass relative aspect-[16/9] w-full overflow-hidden rounded-[1.2rem]">
+              {item.img ? (
+                <Image src={item.img} alt={item.titulo} fill className="relative z-[1] object-contain" sizes="360px" priority />
+              ) : (
+                <div className="relative z-[1] flex h-full items-center justify-center px-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">Sin imagen</div>
+              )}
+            </div>
           )}
 
-          <div className="mt-4 min-w-0 text-center">
+          <div className="mt-4 flex flex-col items-center text-center">
             <h3 className="line-clamp-4 text-[19px] font-black leading-[1.05] tracking-[-0.02em] text-white">
               {item.titulo}
             </h3>
@@ -308,60 +300,45 @@ const CatalogDetailModal = memo(function CatalogDetailModal({
                 </span>
               )}
             </div>
-          </div>
-        </div>
 
-        <div className="mt-4 text-center">
-          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Precio</p>
-          {hasOldPrice && !item.esPack && (
-            <p className="text-[11px] font-semibold text-gray-500 line-through decoration-red-500 decoration-2">
-              ${formatPrice(item.precioOriginal ?? 0)}
-            </p>
+            {!isBase && (
+              <p className="mx-auto mt-3 max-w-[280px] text-[10px] font-semibold leading-relaxed text-gray-400">
+                Precio internacional (incluye +US${feeUsd} por cambio y transferencia). Pago por
+                transferencia o tarjeta de crédito.
+              </p>
+            )}
+          </div>
+
+          {item.esPack && includedGames.length > 0 && (
+            <div className="mt-5">
+              <p className="cdm-games-label">Incluye {includedGames.length} juegos</p>
+              <div className="cdm-games-list">
+                {includedGames.map((game, i) => (
+                  <div key={game} className="cdm-game-row">
+                    <span className="cdm-game-num">{i + 1}</span>
+                    <span className="cdm-game-name">{game}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
-          <p className="text-[26px] font-black leading-none tracking-[-0.04em] text-white">
-            ${formatPrice(item.precio)}
-            <span className="ml-1 text-[10px] font-bold tracking-normal text-gray-400">CLP</span>
-          </p>
         </div>
 
-        {item.esPack && includedGames.length > 0 && (
-          <div className="mt-4 rounded-[1.2rem] border border-white/10 bg-white/[0.045] p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Incluye {includedGames.length} juegos</p>
-              {includedGames.length > 5 && (
-                <span className="flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wide text-[#a9bac5] animate-bounce">
-                  Desliza <ChevronDown size={11} />
-                </span>
-              )}
-            </div>
-            <div className="max-h-32 space-y-1.5 overflow-y-auto pr-1 text-[11px] font-semibold leading-relaxed text-[#d5dde1] scrollbar-hide">
-              {includedGames.map((game, i) => (
-                <p key={game} className="flex items-center gap-2">
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-[8px] font-black text-gray-400">
-                    {i + 1}
-                  </span>
-                  <span className="line-clamp-1">{game}</span>
-                </p>
-              ))}
-            </div>
+        {/* Footer fijo: precio arriba, botón comprar abajo */}
+        <div className="cdm-footer flex flex-col gap-2.5">
+          <div className="cdm-price">
+            <span className="cdm-price__label">Precio</span>
+            {hasOldPrice && !item.esPack && (
+              <span className="cdm-price__old">{format(item.precioOriginal ?? 0)}</span>
+            )}
+            <span className="cdm-price__value">
+              {format(item.precio)}<sup className="cdm-price__code">{code}</sup>
+            </span>
           </div>
-        )}
-
-        <div className="mt-5 grid grid-cols-[auto_1fr] gap-3">
-          <button
-            type="button"
-            onClick={() => onToggleSaved(item)}
-            aria-label={saved ? 'Quitar de favoritos' : 'Guardar favorito'}
-            className={`motion-press flex h-12 w-12 items-center justify-center rounded-full border ${
-              saved ? 'border-[#e5e4e2]/70 bg-[#e5e4e2] text-black' : 'border-white/10 bg-white/[0.08] text-white'
-            }`}
-          >
-            <Heart size={18} fill={saved ? 'currentColor' : 'none'} />
-          </button>
           <button
             type="button"
             onClick={(event) => onBuy(item, event)}
-            className="motion-press flex h-12 items-center justify-center gap-2 rounded-full bg-[#25d366] px-5 text-xs font-black uppercase tracking-wide text-[#06130a] shadow-lg shadow-[#25d366]/20"
+            className="motion-press flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25d366] px-4 text-xs font-black uppercase tracking-wide text-[#06130a] shadow-lg shadow-[#25d366]/20"
           >
             Comprar por WhatsApp <ArrowUpRight size={15} strokeWidth={2.8} />
           </button>

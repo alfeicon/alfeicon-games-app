@@ -3,12 +3,14 @@
 import Image from 'next/image';
 import { type MouseEvent, useState, useEffect, useRef } from 'react';
 import {
-  ChevronRight, Gamepad2, MessageCircle, Package2, Route, Star, Heart, Newspaper, BookOpen,
+  ChevronRight, Gamepad2, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy
 } from 'lucide-react';
 import type { CatalogGame, CatalogPack } from '@/lib/catalog';
 import { getNintendoThumb } from '@/lib/catalog';
 import type { NewsItem } from '@/lib/news';
 import type { SectionId } from './AppDock';
+import { useCurrency } from '@/components/currency/CurrencyProvider';
+import CurrencySwitcher from '@/components/currency/CurrencySwitcher';
 import './HomeSectionV2.css';
 
 type Props = {
@@ -19,14 +21,13 @@ type Props = {
   ofertasFlash: CatalogGame[];
   cargando: boolean;
   nintendoOnlinePrice: number;
-  canalWhatsapp: string;
   navigateToSection: (s: SectionId) => void;
   setStoreTab: (t: 'individual' | 'packs') => void;
   comprarDirecto: (item: CatalogGame | CatalogPack, event?: MouseEvent<HTMLElement>) => void;
   comprarNintendoOnline: (event?: MouseEvent<HTMLElement>) => void;
+  onOpenTerms: () => void;
+  whatsappNumber: string;
 };
-
-function fmt(n: number) { return n.toLocaleString('es-CL'); }
 
 /* ── Counts up from 0 when element enters the viewport ── */
 function CountUp({ value, loading }: { value: number; loading: boolean }) {
@@ -86,15 +87,26 @@ export default function HomeSectionV2({
   ofertasFlash,
   cargando,
   nintendoOnlinePrice,
-  canalWhatsapp,
   navigateToSection,
   setStoreTab,
   comprarDirecto,
   comprarNintendoOnline,
+  onOpenTerms,
+  whatsappNumber,
 }: Props) {
   useScrollReveal(!cargando);
+  const { format, code } = useCurrency();
+  const [activeStep, setActiveStep] = useState(0);
 
   const recomendados = ofertasFlash.length > 0 ? ofertasFlash : productos;
+
+  // Animate the steps
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveStep(prev => (prev + 1) % 4);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className={`section-motion ${sectionMotion} hs2-root`}>
@@ -107,31 +119,10 @@ export default function HomeSectionV2({
           </span>
           <span>Alfeicon Games</span>
         </div>
-        <a href={canalWhatsapp} target="_blank" rel="noopener" aria-label="Soporte en vivo" className="hs2-support-pill">
-          <span className="hs2-live-dot" />
-          <span>Soporte en vivo</span>
-          <MessageCircle size={13} strokeWidth={1.6} />
-        </a>
+        <CurrencySwitcher />
       </div>
 
-      {/* ── ACCESO RÁPIDO: INSTRUCCIONES ── */}
-      <button
-        type="button"
-        onClick={() => navigateToSection('instrucciones')}
-        className="hs2-guide-card"
-        aria-label="Ver instrucciones de instalación"
-      >
-        <span className="hs2-guide-ico"><BookOpen size={20} strokeWidth={1.8} /></span>
-        <span className="hs2-guide-text">
-          <span className="hs2-guide-title">¿No sabes cómo instalar tu juego?</span>
-          <span className="hs2-guide-sub">Te enseñamos paso a paso — elige tu consola.</span>
-        </span>
-        <span className="hs2-guide-cta">
-          Ver instrucciones <ChevronRight size={13} strokeWidth={2.5} />
-        </span>
-      </button>
-
-      {/* ── NOTICIAS ── */}
+      {/* 1. NOTICIAS */}
       <section className="hs2-news" aria-label="Noticias">
         <div className="hs2-news__head">
           <h2 className="hs2-news__title">Noticias</h2>
@@ -166,27 +157,10 @@ export default function HomeSectionV2({
         )}
       </section>
 
-      {/* ── INFO GRID: Online + Stats ── */}
+      {/* 2. JUEGOS Y PACKS (Stats) */}
       <div className="hs2-info-grid mt-3 mb-3">
-        <button type="button" onClick={comprarNintendoOnline} className="hs2-online-card">
-          <span className="hs2-online-watermark" aria-hidden>🎁</span>
-          <div className="hs2-online-top">
-            <div className="hs2-online-info">
-              <span className="hs2-online-badge">DESTACADO</span>
-              <h2 className="hs2-online-title">Online + expansión</h2>
-              <p className="hs2-online-dur">12 meses</p>
-            </div>
-            <p className="hs2-online-price">
-              ${fmt(nintendoOnlinePrice)}&nbsp;<sup>CLP</sup>
-            </p>
-          </div>
-          <span className="hs2-online-cta">
-            Comprar ahora <ChevronRight size={13} strokeWidth={2.5} />
-          </span>
-        </button>
-
-        <div className="hs2-stat-col">
-          <button type="button" onClick={() => navigateToSection('catalogo')} className="hs2-stat-card">
+        <div className="hs2-stat-col" style={{ width: '100%', flexDirection: 'row' }}>
+          <button type="button" onClick={() => navigateToSection('catalogo')} className="hs2-stat-card" style={{ flex: 1 }}>
             <span className="hs2-stat-ico-box">
               <Gamepad2 size={18} className="hs2-stat-ico" strokeWidth={1.6} />
             </span>
@@ -201,7 +175,7 @@ export default function HomeSectionV2({
           <button
             type="button"
             onClick={() => { setStoreTab('packs'); navigateToSection('catalogo'); }}
-            className="hs2-stat-card"
+            className="hs2-stat-card" style={{ flex: 1 }}
           >
             <span className="hs2-stat-ico-box">
               <Package2 size={18} className="hs2-stat-ico" strokeWidth={1.6} />
@@ -217,7 +191,27 @@ export default function HomeSectionV2({
         </div>
       </div>
 
-      {/* ── STEPS CARD ── */}
+      {/* 3. ONLINE + EXPANSION */}
+      <div className="hs2-info-grid mb-3">
+        <button type="button" onClick={comprarNintendoOnline} className="hs2-online-card" style={{ width: '100%' }}>
+          <span className="hs2-online-watermark" aria-hidden>🎁</span>
+          <div className="hs2-online-top">
+            <div className="hs2-online-info">
+              <span className="hs2-online-badge">DESTACADO</span>
+              <h2 className="hs2-online-title">Online + expansión</h2>
+              <p className="hs2-online-dur">12 meses</p>
+            </div>
+            <p className="hs2-online-price">
+              {format(nintendoOnlinePrice)}&nbsp;<sup>{code}</sup>
+            </p>
+          </div>
+          <span className="hs2-online-cta">
+            Comprar ahora <ChevronRight size={13} strokeWidth={2.5} />
+          </span>
+        </button>
+      </div>
+
+      {/* 4. COMPRA GUIADA (Steps Card) */}
       <div className="hs2-reveal" data-delay="0">
         <div className="hs2-steps-card mb-4">
           <div className="hs2-steps-head">
@@ -230,16 +224,16 @@ export default function HomeSectionV2({
           </div>
           <div className="hs2-steps-track">
             {(['Elige', 'Confirma', 'Paga', 'Recibe y juega'] as const).map((lbl, i) => (
-              <div key={lbl} className="hs2-step">
-                <span className={`hs2-step-num${i === 0 ? ' hs2-step-active' : ''}`}>{i + 1}</span>
-                <span className="hs2-step-lbl">{lbl}</span>
+              <div key={lbl} className="hs2-step" style={{ transition: 'all 0.3s ease' }}>
+                <span className={`hs2-step-num ${activeStep === i ? 'hs2-step-active' : ''}`} style={{ transition: 'all 0.3s ease', transform: activeStep === i ? 'scale(1.1)' : 'scale(1)' }}>{i + 1}</span>
+                <span className="hs2-step-lbl" style={{ opacity: activeStep === i ? 1 : 0.6, fontWeight: activeStep === i ? 800 : 600 }}>{lbl}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── RECOMENDADOS ── */}
+      {/* 5. RECOMENDADOS */}
       <section className="hs2-reveal mb-5" data-delay="60">
         <div className="hs2-sec-head mb-3">
           <h2 className="hs2-sec-title">Recomendados</h2>
@@ -267,7 +261,7 @@ export default function HomeSectionV2({
                 </span>
                 <span className="hs2-game-info">
                   <span className="hs2-game-name">{item.titulo}</span>
-                  <span className="hs2-game-price">${fmt(item.precio)}</span>
+                  <span className="hs2-game-price">{format(item.precio)}</span>
                 </span>
               </button>
             ))
@@ -275,13 +269,10 @@ export default function HomeSectionV2({
         </div>
       </section>
 
-      {/* ── CLIENTES FELICES ── */}
+      {/* 6. CLIENTES FELICES */}
       <section className="hs2-reveal mb-6" data-delay="120">
         <div className="hs2-sec-head mb-3">
           <h2 className="hs2-sec-title">Clientes felices</h2>
-          <button type="button" onClick={() => navigateToSection('perfil')} className="hs2-see-all">
-            Ver más <ChevronRight size={12} />
-          </button>
         </div>
         <div className="hs2-reviews-rail scrollbar-hide">
           {[
@@ -304,6 +295,54 @@ export default function HomeSectionV2({
           ))}
         </div>
       </section>
+
+      {/* 7. INSTRUCCIONES Y SOPORTE */}
+      <div className="hs2-reveal mb-6" data-delay="150">
+        <button
+          type="button"
+          onClick={() => navigateToSection('instrucciones')}
+          className="hs2-guide-card mb-2"
+          aria-label="Ver instrucciones de instalación"
+        >
+          <span className="hs2-guide-ico"><BookOpen size={20} strokeWidth={1.8} /></span>
+          <span className="hs2-guide-text">
+            <span className="hs2-guide-title">¿No sabes cómo instalar tu juego?</span>
+            <span className="hs2-guide-sub">Te enseñamos paso a paso — elige tu consola.</span>
+          </span>
+          <span className="hs2-guide-cta">
+            Ver instrucciones <ChevronRight size={13} strokeWidth={2.5} />
+          </span>
+        </button>
+
+        <a
+          href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent("Hola Alfeicon Games, tuve un problema con uno de mis juegos y necesito soporte.")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hs2-guide-card"
+          style={{ '--card-tint': 'var(--tw-colors-red-500)', backgroundImage: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.02) 100%)', borderColor: 'rgba(239, 68, 68, 0.2)' } as any}
+          aria-label="Soporte y problemas"
+        >
+          <span className="hs2-guide-ico" style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: 'rgba(239, 68, 68, 1)' }}>
+            <LifeBuoy size={20} strokeWidth={1.8} />
+          </span>
+          <span className="hs2-guide-text">
+            <span className="hs2-guide-title">¿Tuviste un problema con tu juego?</span>
+            <span className="hs2-guide-sub">Contáctanos al soporte y lo resolveremos.</span>
+          </span>
+          <span className="hs2-guide-cta" style={{ color: 'rgba(239, 68, 68, 1)' }}>
+            Hablar con soporte <ChevronRight size={13} strokeWidth={2.5} />
+          </span>
+        </a>
+      </div>
+
+      {/* ── TÉRMINOS Y CONDICIONES (footer inicio) ── */}
+      <div className="hs2-reveal mb-6" data-delay="180">
+        <button type="button" onClick={onOpenTerms} className="support-terms-btn">
+          <ShieldCheck size={16} />
+          <span>Términos y condiciones</span>
+          <ChevronRight size={15} className="ml-auto" />
+        </button>
+      </div>
 
     </div>
   );

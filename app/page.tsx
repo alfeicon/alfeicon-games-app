@@ -14,6 +14,8 @@ import HomeSectionV2 from '@/components/app-store/HomeSectionV2';
 import GuideSection, { type GuideConsole } from '@/components/app-store/GuideSection';
 import SupportSection from '@/components/app-store/SupportSection';
 import TermsModal from '@/components/app-store/TermsModal';
+import { CurrencyProvider, useCurrency } from '@/components/currency/CurrencyProvider';
+import CurrencyWelcome from '@/components/currency/CurrencyWelcome';
 
 const CatalogSection = dynamic(() => import('@/components/app-store/CatalogSection'), {
   ssr: false,
@@ -52,6 +54,15 @@ const CATALOG_INITIAL_COUNT = 6;
 const CATALOG_BATCH_SIZE = 6;
 
 export default function MobileAppStore() {
+  return (
+    <CurrencyProvider>
+      <StoreApp />
+    </CurrencyProvider>
+  );
+}
+
+function StoreApp() {
+  const { format, currency, isBase } = useCurrency();
   // --- ESTADOS ---
   const [activeSection, setActiveSection] = useState<SectionId>('inicio');
   const [visibleSection, setVisibleSection] = useState<SectionId>('inicio');
@@ -242,30 +253,34 @@ export default function MobileAppStore() {
     }, 1800);
   }, []);
 
+  const notaInternacional = isBase
+    ? ''
+    : `\n(Precio internacional en ${currency.label}, incluye +US$7 por costos de cambio y transferencia. Pago por transferencia internacional o tarjeta de crédito.)`;
+
   const comprarDirecto = useCallback((item: CatalogItem, event?: MouseEvent<HTMLElement>) => {
     let mensaje = "";
-    const precioFmt = item.precio.toLocaleString('es-CL');
+    const precioFmt = `${format(item.precio)} ${currency.code}`;
 
     if (item.esPack) {
       const listaJuegosTexto = item.juegosIncluidos.length > 0
           ? item.juegosIncluidos.map((juego) => `- ${juego}`).join('\n')
           : "Consultar juegos";
 
-      mensaje = `Hola Alfeicon Games!\n\nMe interesa este pack que vi en la web:\n\n*${item.titulo}*\n\nIncluye:\n${listaJuegosTexto}\n\nPrecio: $${precioFmt}\n\n¿Lo tienes disponible?`;
+      mensaje = `Hola Alfeicon Games!\n\nMe interesa este pack que vi en la web:\n\n*${item.titulo}*\n\nIncluye:\n${listaJuegosTexto}\n\nPrecio: ${precioFmt}${notaInternacional}\n\n¿Lo tienes disponible?`;
     } else {
-      mensaje = `Hola Alfeicon Games!\n\nVengo de la web y quiero llevarme este juego:\n\n*${item.titulo}*\nPrecio: $${precioFmt}\n\n¿Qué métodos de pago tienes disponible?`;
+      mensaje = `Hola Alfeicon Games!\n\nVengo de la web y quiero llevarme este juego:\n\n*${item.titulo}*\nPrecio: ${precioFmt}${notaInternacional}\n\n¿Qué métodos de pago tienes disponible?`;
     }
-    
+
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
     goToWhatsApp(url, event);
-  }, [goToWhatsApp]);
+  }, [goToWhatsApp, format, currency.code, notaInternacional]);
 
   const comprarNintendoOnline = useCallback((event?: MouseEvent<HTMLElement>) => {
-    const precioFmt = appSettings.nintendoOnlinePrice.toLocaleString('es-CL');
-    const mensaje = `Hola Alfeicon Games!\n\nMe interesa Nintendo Switch Online + Paquete de expansión por 12 meses.\n\nPrecio: $${precioFmt}\n\n¿Lo tienes disponible?`;
+    const precioFmt = `${format(appSettings.nintendoOnlinePrice)} ${currency.code}`;
+    const mensaje = `Hola Alfeicon Games!\n\nMe interesa Nintendo Switch Online + Paquete de expansión por 12 meses.\n\nPrecio: ${precioFmt}${notaInternacional}\n\n¿Lo tienes disponible?`;
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
     goToWhatsApp(url, event);
-  }, [appSettings.nintendoOnlinePrice, goToWhatsApp]);
+  }, [appSettings.nintendoOnlinePrice, goToWhatsApp, format, currency.code, notaInternacional]);
 
   const getSavedKey = useCallback((item: CatalogItem) => {
     return `${item.esPack ? 'pack' : 'game'}:${String(item.id)}`;
@@ -383,7 +398,7 @@ export default function MobileAppStore() {
       <div className="noise-overlay" />
       <div className="relative z-10 min-h-[100dvh] w-full max-w-md overflow-hidden border-x border-gray-900 bg-black font-sans text-white shadow-2xl">
         {/* MAIN */}
-        <main className="min-h-[100dvh] overflow-x-hidden px-4 pb-32">
+        <main className="min-h-[100dvh] overflow-x-hidden px-4 pb-32 pt-[calc(env(safe-area-inset-top)+16px)]">
           
 {/* SECCIÓN 1: INICIO */}
           {visibleSection === 'inicio' && (
@@ -395,11 +410,12 @@ export default function MobileAppStore() {
               ofertasFlash={ofertasFlash}
               cargando={cargando}
               nintendoOnlinePrice={appSettings.nintendoOnlinePrice}
-              canalWhatsapp={CONFIG.canalWhatsapp}
               navigateToSection={navigateToSection}
               setStoreTab={changeStoreTab}
               comprarDirecto={comprarDirecto}
               comprarNintendoOnline={comprarNintendoOnline}
+              onOpenTerms={() => setShowTerms(true)}
+              whatsappNumber={CONFIG.whatsappNumber}
             />
           )}
 
@@ -460,6 +476,9 @@ export default function MobileAppStore() {
 
 {/* MODAL TÉRMINOS Y CONDICIONES */}
 {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+
+{/* PROMPT DE MONEDA (primera visita) */}
+<CurrencyWelcome />
 
         {purchaseTransition && (
           <div className="pointer-events-none fixed inset-0 z-[70] overflow-hidden" style={purchaseInkStyle}>

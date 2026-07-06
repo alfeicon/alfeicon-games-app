@@ -3,7 +3,7 @@
 import { useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { ChevronRight, Facebook, Instagram, MessageCircle, ShieldCheck, Youtube } from 'lucide-react';
+import { Check, ChevronRight, Facebook, Instagram, MessageCircle, ShieldCheck, Youtube } from 'lucide-react';
 
 // Toques sobre el logo necesarios para abrir el modo admin (atajo oculto).
 const ADMIN_TAPS = 5;
@@ -16,9 +16,9 @@ type SupportSectionProps = {
 };
 
 const STATS = [
-  { value: '+500', label: 'Clientes' },
-  { value: '99.3%', label: 'Sin problemas' },
-  { value: '1-3 meses', label: 'Garantía' },
+  { value: '+500', label: 'Clientes felices' },
+  { value: '99.3%', label: 'Compras sin problemas' },
+  { value: '7 días', label: 'Garantía incluida' },
 ];
 
 const CHANNELS = [
@@ -30,7 +30,7 @@ const CHANNELS = [
 const FAQ = [
   { q: '¿Necesito mi consola desbloqueada?', a: 'No. Los juegos son digitales y se descargan desde la eShop oficial de Nintendo.' },
   { q: '¿Existe riesgo de baneo?', a: 'Existe un riesgo mínimo del 0.7%. El cliente acepta este punto al comprar.' },
-  { q: '¿Cuánto dura la garantía?', a: 'Compradores nuevos: 1 mes. Compradores antiguos: 3 meses.' },
+  { q: '¿Cuánto dura la garantía?', a: 'La garantía es de 7 días desde la entrega de tu cuenta.' },
   { q: '¿Cuánto tiempo durará el juego?', a: 'Indefinido si sigues las instrucciones: no borres el juego ni la cuenta, ni modifiques datos.' },
 ];
 
@@ -73,12 +73,15 @@ export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTe
 
       <div className="support-body">
 
-        {/* ── TRUST STATS ── */}
-        <div className="support-stats">
+        {/* ── TRUST CHECKLIST ── */}
+        <div className="support-checks">
           {STATS.map(s => (
-            <div key={s.label} className="support-stat">
-              <span className="support-stat__value">{s.value}</span>
-              <span className="support-stat__label">{s.label}</span>
+            <div key={s.label} className="support-check">
+              <span className="support-check__tick">
+                <Check size={16} strokeWidth={3.2} />
+              </span>
+              <span className="support-check__value">{s.value}</span>
+              <span className="support-check__label">{s.label}</span>
             </div>
           ))}
         </div>

@@ -24,10 +24,11 @@
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.11);
   border-radius: 999px;
-  padding: 6px 14px 6px 6px;
+  padding: 6px 16px 6px 6px;
   font-size: 13px;
   font-weight: 700;
   color: var(--theme-text);
+  white-space: nowrap;
 }
 
 .hs2-logo-mark {
@@ -62,6 +63,54 @@
   background: #22c55e;
   flex-shrink: 0;
   box-shadow: 0 0 7px #22c55e90;
+}
+
+.hs2-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cur-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 999px;
+  padding: 6px 14px;
+  min-height: 42px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--theme-text);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease, opacity 140ms ease;
+}
+
+.cur-pill:active { opacity: 0.7; }
+.cur-pill__flag { font-size: 15px; line-height: 1; }
+.cur-pill__code { letter-spacing: 0.02em; }
+
+/* Pop al cambiar de moneda: el span se remonta (key={code}) y reproduce esto */
+.cur-pill__val {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: curPillPop 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes curPillPop {
+  0%   { transform: scale(0.55); opacity: 0; }
+  55%  { transform: scale(1.14); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cur-pill__val { animation: none; }
+}
+
+.theme-light .cur-pill {
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.1);
 }
 
 /* ── Hero card stack ── */
@@ -470,17 +519,17 @@
 .hs2-guide-cta {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
-  font-size: 9.5px;
-  font-weight: 900;
+  font-size: 10px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #fff;
-  background: rgba(228,0,15,0.9);
-  border-radius: 99px;
-  padding: 6px 10px;
-  box-shadow: 0 2px 10px rgba(228,0,15,0.3);
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.85);
+  transition: opacity 0.2s ease;
+}
+.hs2-guide-card:hover .hs2-guide-cta {
+  opacity: 1;
 }
 
 .hs2-steps-card {

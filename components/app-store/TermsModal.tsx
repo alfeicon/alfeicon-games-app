@@ -1,12 +1,15 @@
 "use client";
 
 import { ShieldCheck, X } from 'lucide-react';
+import { useScrollLock } from '@/lib/useScrollLock';
 
 type TermsModalProps = {
   onClose: () => void;
 };
 
 export default function TermsModal({ onClose }: TermsModalProps) {
+  useScrollLock(true);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/88 p-4 backdrop-blur-2xl animate-fade-in">
       <div className="brand-shell flex max-h-[90vh] w-full max-w-md flex-col rounded-[2rem]">
@@ -58,15 +61,10 @@ export default function TermsModal({ onClose }: TermsModalProps) {
           {/* 5. Garantía Técnica */}
           <section className="space-y-4">
             <h4 className="text-white text-sm font-black uppercase tracking-wide border-b border-white/5 pb-1">5. Garantía Técnica</h4>
-            <div className="grid grid-cols-2 gap-3 text-center">
-              <div className="bg-white/5 p-3 rounded-xl">
-                <p className="text-gray-400 text-[10px] uppercase font-bold">Compradores Nuevos</p>
-                <p className="text-lg text-blue-400 font-black">1 Mes</p>
-              </div>
-              <div className="bg-white/5 p-3 rounded-xl border border-blue-500/30">
-                <p className="text-gray-400 text-[10px] uppercase font-bold">Compradores Antiguos</p>
-                <p className="text-lg text-green-400 font-black">3 Meses</p>
-              </div>
+            <div className="rounded-2xl border border-green-500/25 bg-green-500/10 p-4 text-center">
+              <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wide">Duración de la garantía</p>
+              <p className="text-2xl text-green-400 font-black mt-1">7 días</p>
+              <p className="text-gray-400 text-[11px] mt-1">desde la entrega de tu cuenta</p>
             </div>
             <p>• Cubre fallos del juego no causados por el usuario. Incluye reposición (1 vez) o devolución del 50%.</p>
             <p className="text-xs text-red-500 font-bold bg-red-500/5 p-3 rounded-lg border border-red-500/20">

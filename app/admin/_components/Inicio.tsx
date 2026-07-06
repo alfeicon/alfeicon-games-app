@@ -10,11 +10,12 @@ type Props = {
   packs: AdminPack[];
   sales: Sale[];
   salesTableExists: boolean | null;
+  firstLoadDone?: boolean;
   onNavigate: (s: AdminSection) => void;
   onRegisterSale: () => void;
 };
 
-export function Inicio({ games, packs, sales, salesTableExists, onNavigate, onRegisterSale }: Props) {
+export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = true, onNavigate, onRegisterSale }: Props) {
   const now = new Date();
 
   const thisMonth = useMemo(
@@ -92,7 +93,11 @@ export function Inicio({ games, packs, sales, salesTableExists, onNavigate, onRe
             <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-2xl ${bg}`}>
               <Icon size={18} className={color} />
             </div>
-            <p className="text-3xl font-black leading-none tracking-tight">{value}</p>
+            {firstLoadDone ? (
+              <p className="text-3xl font-black leading-none tracking-tight">{value}</p>
+            ) : (
+              <div className="h-8 w-20 animate-pulse rounded-lg bg-white/10" />
+            )}
             <p className="mt-1.5 text-[10px] font-black uppercase tracking-widest text-gray-600">{label}</p>
             <p className="mt-0.5 text-[11px] text-gray-700">{sub}</p>
           </div>
@@ -126,7 +131,13 @@ export function Inicio({ games, packs, sales, salesTableExists, onNavigate, onRe
             </div>
             <span className="text-[10px] text-gray-600">este mes</span>
           </div>
-          {topItems.length === 0 ? (
+          {!firstLoadDone ? (
+            <div className="space-y-4">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="h-4 animate-pulse rounded bg-white/10" style={{ width: `${90 - i * 20}%` }} />
+              ))}
+            </div>
+          ) : topItems.length === 0 ? (
             <div className="flex flex-col items-center py-8 text-center">
               <Zap size={26} className="mb-3 text-gray-700" />
               <p className="text-xs font-bold text-gray-600">
@@ -175,7 +186,16 @@ export function Inicio({ games, packs, sales, salesTableExists, onNavigate, onRe
               Ver todas →
             </button>
           </div>
-          {sales.length === 0 ? (
+          {!firstLoadDone ? (
+            <div className="divide-y divide-white/5">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="flex items-center gap-3 py-2.5">
+                  <div className="h-7 w-7 shrink-0 animate-pulse rounded-lg bg-white/10" />
+                  <div className="h-3 flex-1 animate-pulse rounded bg-white/10" />
+                </div>
+              ))}
+            </div>
+          ) : sales.length === 0 ? (
             <div className="flex flex-col items-center py-8 text-center">
               <Receipt size={26} className="mb-3 text-gray-700" />
               <p className="text-xs font-bold text-gray-600">
@@ -215,7 +235,9 @@ export function Inicio({ games, packs, sales, salesTableExists, onNavigate, onRe
           ].map(({ label, value, total, bar, nav }) => (
             <button key={label} onClick={() => onNavigate(nav)}
               className="brand-glass rounded-2xl p-4 text-left transition-all hover:bg-white/8">
-              <p className="text-2xl font-black">{value}</p>
+              {firstLoadDone
+                ? <p className="text-2xl font-black">{value}</p>
+                : <div className="h-6 w-10 animate-pulse rounded bg-white/10" />}
               <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-gray-600">{label}</p>
               <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-white/10">
                 <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.round((value / total) * 100)}%` }} />

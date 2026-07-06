@@ -74,6 +74,9 @@
   justify-content: center;
   color: #fff;
   z-index: 2;
+  /* Oculto por defecto (estado expandido). Motion lo muestra al colapsar.
+     Evita que el ícono aparezca en el centro antes de la hidratación. */
+  opacity: 0;
 }
 
 .dock-full-content {

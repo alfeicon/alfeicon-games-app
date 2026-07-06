@@ -105,6 +105,7 @@ function AppDock({ activeSection, showBottomNav, dockCollapsed, navIndex, onNavi
         {/* Icono activo — visible solo cuando está colapsado */}
         <motion.span
           className="dock-pill-icon"
+          initial={false}
           animate={{ opacity: dockCollapsed ? 1 : 0, scale: dockCollapsed ? 1 : 0.5 }}
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           style={{ pointerEvents: 'none' }}

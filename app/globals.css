@@ -364,8 +364,10 @@ html {
 
 .catalog-detail-panel {
   width: min(390px, 100%);
-  max-height: min(76vh, 640px);
-  overflow-y: auto;
+  max-height: min(86vh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 1.7rem;
   background:
@@ -374,11 +376,162 @@ html {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.13),
     0 24px 70px rgba(0, 0, 0, 0.48);
-  padding: 1rem;
   -webkit-backdrop-filter: blur(18px) saturate(110%);
   backdrop-filter: blur(18px) saturate(110%);
   animation: catalogDetailPanelIn 280ms var(--ease-standard) both;
 }
+
+/* Packs: hoja alta para revisar los juegos con calma (sin quedar pegada arriba) */
+.catalog-detail-panel--pack {
+  height: 72vh;
+}
+
+/* Sheets sin regiones (selector de moneda, bienvenida): bloque con padding y
+   scroll propio, para que el contorno redondeado y el aire vuelvan a verse. */
+.catalog-detail-panel--scroll {
+  display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1rem;
+}
+
+/* Regiones: header y footer fijos, contenido scrolleable en el medio */
+.cdm-header {
+  flex-shrink: 0;
+  padding: 1rem 1rem 0.75rem;
+}
+.cdm-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1rem 0.25rem;
+}
+.cdm-footer {
+  flex-shrink: 0;
+  padding: 0.85rem 1rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Carrusel de portadas del pack */
+.cdm-carousel {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.cdm-carousel-card {
+  position: relative;
+  flex: 0 0 auto;
+  width: 128px;
+  height: 128px;
+  border-radius: 1rem;
+  overflow: hidden;
+  scroll-snap-align: start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.theme-light .cdm-carousel-card {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+/* Lista de juegos del pack (solo texto) */
+.cdm-games-label {
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 0.6rem;
+}
+.cdm-games-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.cdm-game-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.cdm-game-num {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.58rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.45);
+}
+.cdm-game-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #e9edf0;
+}
+
+/* Precio en el footer: etiqueta arriba, valor debajo, sobre el botón comprar */
+.cdm-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  line-height: 1.1;
+}
+.cdm-price__label {
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.4);
+}
+.cdm-price__old {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  text-decoration: line-through;
+  text-decoration-color: #ef4444;
+}
+.cdm-price__value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #fff;
+  white-space: nowrap;
+}
+.cdm-price__code {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  margin-left: 2px;
+  top: -0.55em;
+}
+
+/* Light mode */
+.theme-light .cdm-footer { border-top-color: rgba(0, 0, 0, 0.08); }
+.theme-light .cdm-games-label { color: rgba(0, 0, 0, 0.45); }
+.theme-light .cdm-game-row {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+.theme-light .cdm-game-num { background: rgba(0, 0, 0, 0.06); color: rgba(0, 0, 0, 0.5); }
+.theme-light .cdm-game-name { color: #0a0a0a; }
+.theme-light .cdm-price__label { color: rgba(0, 0, 0, 0.45); }
+.theme-light .cdm-price__old { color: rgba(0, 0, 0, 0.4); }
+.theme-light .cdm-price__value { color: #0a0a0a; }
+.theme-light .cdm-price__code { color: rgba(0, 0, 0, 0.45); }
 
 @keyframes catalogDetailBackdropIn {
   from {
@@ -3289,6 +3442,19 @@ html {
   transition: transform 0.15s;
 }
 
+/* ── Refinamientos de la guía (funcionan en ambos modos) ── */
+/* Tip: acento verde de marca + icono coherente en oscuro y claro */
+.guide-tip {
+  border-left: 3px solid rgba(37,211,102,0.45);
+}
+.guide-tip svg { color: #25d366; }
+
+/* Feedback táctil consistente */
+.guide-checklist-item { transition: background 0.15s ease; }
+.guide-checklist-item:active { background: rgba(255,255,255,0.06); }
+.theme-light .guide-checklist-item:active { background: rgba(0,0,0,0.05); }
+.guide-wa-btn:active { transform: scale(0.94); }
+
 /* ── Console picker cards (legacy – keep for @property) ── */
 @keyframes consoleCardIn {
   from { opacity: 0; transform: translateY(24px) scale(0.97); }
@@ -3529,31 +3695,44 @@ html {
   color: rgba(0,0,0,0.8) !important;
 }
 
-/* Detail screen */
-.theme-light .guide-detail-body {
-  background: transparent;
+/* ── Detail screen (light mode) ── */
+.theme-light .guide-detail-body { background: transparent; }
+.theme-light .guide-section-label { color: rgba(0,0,0,0.45); }
+
+/* Checklist */
+.theme-light .guide-checklist { border-color: rgba(0,0,0,0.08); }
+.theme-light .guide-checklist-item {
+  background: rgba(0,0,0,0.03);
+  border-bottom-color: rgba(0,0,0,0.06);
 }
-.theme-light .guide-step-card {
+.theme-light .guide-checklist-title { color: #0a0a0a; }
+.theme-light .guide-checklist-desc { color: rgba(0,0,0,0.5); }
+
+/* Tip bar */
+.theme-light .guide-tip {
   background: rgba(0,0,0,0.04);
   border-color: rgba(0,0,0,0.08);
 }
-.theme-light .guide-step-num {
-  background: #e4000f;
+.theme-light .guide-tip p { color: rgba(0,0,0,0.6); }
+
+/* Video note */
+.theme-light .guide-video-note p { color: rgba(0,0,0,0.5); }
+
+/* PDF preview */
+.theme-light .guide-pdf-preview {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.08);
 }
-.theme-light .guide-step-title {
-  color: #111;
-}
-.theme-light .guide-step-desc {
-  color: rgba(0,0,0,0.55);
-}
-.theme-light .guide-tip-card {
+.theme-light .guide-pdf-preview__title { color: #0a0a0a; }
+.theme-light .guide-pdf-preview__meta { color: rgba(0,0,0,0.5); }
+
+/* WhatsApp bar */
+.theme-light .guide-wa-bar {
   background: rgba(0,0,0,0.04);
   border-color: rgba(0,0,0,0.08);
-  color: rgba(0,0,0,0.6);
 }
-.theme-light .guide-section-label {
-  color: rgba(0,0,0,0.4);
-}
+.theme-light .guide-wa-bar__label { color: rgba(0,0,0,0.4); }
+.theme-light .guide-wa-bar__title { color: #0a0a0a; }
 
 /* ══════════════════════════════════════════
    SOPORTE — REDESIGN
@@ -3562,22 +3741,32 @@ html {
 /* Hero */
 .support-hero {
   position: relative;
-  min-height: 340px;
+  min-height: 300px;
   overflow: hidden;
   display: flex;
   align-items: flex-end;
+  border-radius: 1.9rem;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 22px 55px rgba(0,0,0,0.45);
 }
 .support-hero__bg {
   position: absolute;
   inset: 0;
-  background: linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #1a1a2e 100%);
+  background:
+    radial-gradient(ellipse 95% 70% at 78% 10%, rgba(37,211,102,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 75% 60% at 12% 95%, rgba(37,211,102,0.07) 0%, transparent 60%),
+    linear-gradient(180deg, #0c100e 0%, #0a0a0a 100%);
 }
 .support-hero__bg::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 80% 60% at 80% 20%, rgba(99,102,241,0.25) 0%, transparent 60%),
-              radial-gradient(ellipse 60% 50% at 10% 80%, rgba(34,211,238,0.12) 0%, transparent 60%);
+  background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.55), transparent 68%);
+  mask-image: linear-gradient(180deg, rgba(0,0,0,0.55), transparent 68%);
 }
 .support-hero__content {
   position: relative;
@@ -3674,34 +3863,46 @@ html {
   padding: 0.75rem 0.25rem 0.25rem;
 }
 
-/* Stats */
-.support-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+/* Trust checklist */
+.support-checks {
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
-.support-stat {
+.support-check {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 1rem;
-  padding: 0.9rem 0.5rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.2rem;
+  border-radius: 1.25rem;
+  padding: 0.85rem 1rem;
 }
-.support-stat__value {
-  font-size: 1.1rem;
+.support-check__tick {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(37,211,102,0.15);
+  color: #25d366;
+}
+.support-check__value {
+  font-size: 0.95rem;
   font-weight: 900;
   color: #fff;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
 }
-.support-stat__label {
-  font-size: 0.62rem;
+.support-check__label {
+  font-size: 0.78rem;
   font-weight: 600;
-  color: rgba(255,255,255,0.35);
-  text-align: center;
+  color: rgba(255,255,255,0.45);
+  margin-left: auto;
+  text-align: right;
 }
 
 /* Social channels */
@@ -3778,24 +3979,31 @@ html {
   color: rgba(255,255,255,0.5);
   transition: background 0.15s;
 }
-.support-terms-btn svg:first-child { color: #6366f1; flex-shrink: 0; }
+.support-terms-btn svg:first-child { color: #25d366; flex-shrink: 0; }
 .support-terms-btn:active { background: rgba(255,255,255,0.08); }
 
 /* ── Light mode overrides ── */
+.theme-light .support-hero {
+  border-color: rgba(0,0,0,0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.5),
+    0 18px 45px rgba(0,0,0,0.12);
+}
 .theme-light .support-hero__bg {
-  background: linear-gradient(160deg, #e0e7ff 0%, #c7d2fe 40%, #a5b4fc 70%, #ddd6fe 100%);
+  background:
+    radial-gradient(ellipse 95% 70% at 78% 10%, rgba(22,163,74,0.18) 0%, transparent 55%),
+    linear-gradient(180deg, #f4f6f5 0%, #eceeed 100%);
 }
 .theme-light .support-hero__bg::after {
-  background: radial-gradient(ellipse 80% 60% at 80% 20%, rgba(99,102,241,0.18) 0%, transparent 60%),
-              radial-gradient(ellipse 60% 50% at 10% 80%, rgba(34,211,238,0.1) 0%, transparent 60%);
+  background-image: radial-gradient(rgba(0,0,0,0.05) 1px, transparent 1px);
 }
-.theme-light .support-hero__title { color: #1e1b4b; }
-.theme-light .support-hero__sub { color: rgba(30,27,75,0.55); }
+.theme-light .support-hero__title { color: #0a0a0a; }
+.theme-light .support-hero__sub { color: rgba(0,0,0,0.55); }
 .theme-light .support-hero__badge { color: #16a34a; background: rgba(22,163,74,0.1); border-color: rgba(22,163,74,0.2); }
 .theme-light .support-hero__dot { background: #16a34a; }
-.theme-light .support-stat { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.07); }
-.theme-light .support-stat__value { color: #1e1b4b; }
-.theme-light .support-stat__label { color: rgba(0,0,0,0.4); }
+.theme-light .support-check { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.07); }
+.theme-light .support-check__value { color: #0a0a0a; }
+.theme-light .support-check__label { color: rgba(0,0,0,0.45); }
 .theme-light .support-section-label { color: rgba(0,0,0,0.35); }
 .theme-light .support-channel { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.07); }
 .theme-light .support-channel__label { color: #111; }

@@ -57,4 +57,16 @@ export type AdminNews = {
   created_at: string;
 };
 
-export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "ventas" | "ajustes";
+export type Order = {
+  id: string;
+  order_number?: number;
+  short_code: string;
+  game_name: string;
+  status: 'pending_console_code' | 'pending_setup' | 'preparing' | 'ready' | 'completed' | 'issue';
+  console_code: string | null;
+  account_email: string | null;
+  account_password: string | null;
+  created_at: string;
+};
+
+export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "ventas" | "entregas" | "ajustes";
