@@ -16,7 +16,7 @@ type SupportSectionProps = {
 };
 
 const STATS = [
-  { value: '+500', label: 'Clientes felices' },
+  { value: '+1000', label: 'Clientes felices' },
   { value: '99.3%', label: 'Compras sin problemas' },
   { value: '7 días', label: 'Garantía incluida' },
 ];
