@@ -52,6 +52,12 @@ export const metadata: Metadata = {
     locale: 'es_CL',
     type: 'website',
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Alfeicon Games 🎮 | Ofertas Nintendo Switch",
+    description: "🔥 Packs y Juegos a precios bajos. ¡Entra y revisa nuestro catálogo con entrega inmediata!",
+    images: ["/banner.png"],
+  },
 };
 
 export const viewport: Viewport = {
