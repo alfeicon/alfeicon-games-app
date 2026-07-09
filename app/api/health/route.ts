@@ -25,7 +25,11 @@ async function checkDatabase(): Promise<{ ok: boolean; error?: string }> {
   const client = createClient(url, key, { auth: { persistSession: false } });
 
   try {
-    // Consulta mínima y barata contra una tabla de lectura pública.
+    // 1. Limpieza automática de "Posibles Entregas" (Borradores) abandonadas > 15 minutos
+    const limitDate = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    await client.from("orders").delete().eq("status", "draft").lt("created_at", limitDate);
+
+    // 2. Consulta mínima y barata contra una tabla de lectura pública para chequeo de salud.
     const { error } = await client.from("app_settings").select("key").limit(1);
     if (error) return { ok: false, error: error.message };
     return { ok: true };

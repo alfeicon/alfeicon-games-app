@@ -62,7 +62,7 @@ export type Order = {
   order_number?: number;
   short_code: string;
   game_name: string;
-  status: 'pending_console_code' | 'pending_setup' | 'preparing' | 'ready' | 'completed' | 'issue';
+  status: 'draft' | 'pending_console_code' | 'pending_setup' | 'preparing' | 'ready' | 'completed' | 'issue';
   console_code: string | null;
   account_email: string | null;
   account_password: string | null;

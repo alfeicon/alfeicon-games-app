@@ -18,6 +18,7 @@ interface GameCardProps {
   onAdd: (event: MouseEvent<HTMLButtonElement>) => void;
   onSave?: () => void;
   saved?: boolean;
+  ctaLabel?: string; // Texto del botón principal (por defecto "Comprar")
 }
 
 function GameCard({ 
@@ -33,6 +34,7 @@ function GameCard({
   onAdd,
   onSave,
   saved = false,
+  ctaLabel = 'Comprar',
 }: GameCardProps) {
   
   const [expandido, setExpandido] = useState(false);
@@ -196,7 +198,7 @@ function GameCard({
                 className="magnetic group/cta flex h-11 items-center gap-2 rounded-full bg-[#25d366] pl-4 pr-1.5 text-xs font-black uppercase tracking-wide text-[#06130a] shadow-lg shadow-[#25d366]/20 hover:bg-[#36e477]"
             >
                 {esPack ? <Gift size={15} strokeWidth={2.5} aria-hidden="true" /> : <Zap size={15} strokeWidth={2.5} fill="currentColor" className="opacity-55" aria-hidden="true" />}
-                Comprar
+                {ctaLabel}
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#06130a]/10 transition-transform duration-500 group-hover/cta:translate-x-0.5">
                   <ArrowUpRight size={14} strokeWidth={2.6} aria-hidden="true" />
                 </span>

@@ -2,12 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
 import {
-  ChevronDown, ChevronUp, Eye, EyeOff, Gamepad2, Gift, HardDrive, ImagePlus, Loader2, Package, Plus, Save, Tag, Trash2, X,
+  ChevronDown, ChevronUp, Gamepad2, Gift, HardDrive, ImagePlus, Loader2, Package, Plus, Save, Sparkles, Trash2, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
-import GameCard from "@/components/GameCard";
+import PackStoreCard from "@/components/app-store/PackStoreCard";
 import type { AdminPack } from "../_types";
 import { fmt, toPrice, findImage } from "../_helpers";
 
@@ -57,6 +56,39 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
     isNew: packs.filter(p => p.is_new).length,
   }), [packs]);
 
+  // Packs ya guardados que aún no tienen imagen.
+  const missingImage = useMemo(() => packs.filter(p => !p.image_url), [packs]);
+
+  // Recorre los packs sin portada y les busca imagen (por nombre del pack o por
+  // sus juegos), guardando el resultado en la base de datos.
+  const fillMissingImages = async () => {
+    if (!supabase) return;
+    if (missingImage.length === 0) { showNotice("success", "Todos los packs ya tienen imagen."); return; }
+    if (!window.confirm(`Buscar imagen para ${missingImage.length} pack(s) sin portada?`)) return;
+
+    setLoading(true);
+    let updated = 0, notFound = 0;
+    try {
+      for (const p of missingImage) {
+        const titles = (p.pack_items ?? [])
+          .slice()
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(it => it.title);
+        const m = findImage(p.title) ?? titles.map(t => findImage(t)).find(Boolean) ?? null;
+        if (!m) { notFound++; continue; }
+        const { error } = await supabase.from("packs").update({ image_url: m.url }).eq("id", p.id);
+        if (error) throw error;
+        updated++;
+      }
+      showNotice("success", `Listo: ${updated} con imagen${notFound ? ` · ${notFound} sin coincidencia` : ""}.`);
+      await onReload();
+    } catch (err) {
+      showNotice("error", `Error al rellenar: ${err instanceof Error ? err.message : "desconocido"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     let list = packs;
     const t = query.trim().toLowerCase();
@@ -72,17 +104,39 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
   const close = () => { setModalOpen(false); setSelectedId(null); };
 
   const fillImg = () => {
-    const m = findImage(form.title);
-    if (!m) { showNotice("error", "Sin imagen para ese nombre."); return; }
-    setForm(f => ({ ...f, image_url: m.url }));
+    // 1) Intenta con el nombre del pack.
+    let m = findImage(form.title);
+    // 2) Si no hay, prueba con cada juego incluido y usa el primero que tenga
+    //    imagen. Así maximizamos las chances de encontrar una portada.
+    if (!m) {
+      for (const item of form.items) {
+        const hit = findImage(item.title);
+        if (hit) { m = hit; break; }
+      }
+    }
+    if (!m) { showNotice("error", "Sin imagen ni por el pack ni por sus juegos."); return; }
+    setForm(f => ({ ...f, image_url: m!.url }));
     showNotice("success", `Imagen: ${m.name}`);
   };
 
   const addItem = () => {
     const t = newItemTitle.trim();
     if (!t) return;
-    setForm(f => ({ ...f, items: [...f.items, { title: t, sort_order: f.items.length }] }));
+    const items = [...form.items, { title: t, sort_order: form.items.length }];
+
+    // Auto-rellena la imagen del pack SOLO si aún no hay una puesta. Intenta
+    // por el nombre del pack y, si no, por sus juegos (incluido el recién
+    // agregado). No pisa una imagen que ya hayas elegido a mano.
+    let image_url = form.image_url;
+    let autoName: string | null = null;
+    if (!image_url.trim()) {
+      const m = findImage(form.title) ?? items.map(it => findImage(it.title)).find(Boolean) ?? null;
+      if (m) { image_url = m.url; autoName = m.name; }
+    }
+
+    setForm(f => ({ ...f, items, image_url }));
     setNewItemTitle("");
+    if (autoName) showNotice("success", `Imagen automática: ${autoName}`);
   };
 
   const removeItem = (i: number) =>
@@ -156,6 +210,13 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
           <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Packs</h1>
           <p className="mt-0.5 text-[10px] text-gray-600">{packs.length} en catálogo · {counts.active} activos</p>
         </div>
+        {missingImage.length > 0 && (
+          <button onClick={fillMissingImages} disabled={loading}
+            className="flex items-center gap-1.5 rounded-full border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-300 transition-all duration-200 hover:bg-purple-500/20 disabled:opacity-50 active:scale-95">
+            {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            Rellenar imágenes ({missingImage.length})
+          </button>
+        )}
         <button onClick={newPack}
           className="flex items-center gap-1.5 rounded-full bg-purple-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all duration-200 hover:bg-purple-400 active:scale-95">
           <Plus size={12} strokeWidth={3} /> Nuevo pack
@@ -188,56 +249,45 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
           </div>
         </div>
 
-        {/* Rows */}
-        <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
-          {filtered.length === 0 && (
+        {/* Grilla estilo tienda: las mismas tarjetas de la página pública,
+            pero al hacer clic abres el editor en vez de comprar. */}
+        <div className="flex-1 overflow-y-auto px-4 pb-32 pt-4 md:pb-6">
+          {filtered.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <Gift size={24} className="text-gray-800" />
               <p className="text-xs text-gray-700">Sin resultados</p>
             </div>
-          )}
-          {filtered.map(pack => {
-            const itemCount = pack.pack_items?.length ?? 0;
-            return (
-              <button key={pack.id} onClick={() => select(pack)}
-                className="group relative flex w-full items-center gap-3 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]">
-                {/* Status dot */}
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-200 ${pack.is_active ? "bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-white/15"}`} />
-
-                {/* Thumbnail */}
-                <div className="relative h-10 w-[3.25rem] shrink-0 overflow-hidden rounded-lg bg-white/[0.04] transition-transform duration-200 group-hover:scale-[1.04]">
-                  {pack.image_url
-                    ? <Image src={pack.image_url} alt={pack.title} fill className="object-cover" sizes="52px" />
-                    : <Tag className="m-auto mt-2.5 text-gray-800" size={13} />}
-                </div>
-
-                {/* Info */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <p className="truncate text-[13px] font-bold leading-tight text-white">{pack.title}</p>
-                    {pack.is_new && (
-                      <span className="shrink-0 rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-purple-300">Nuevo</span>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {filtered.map(pack => {
+                const juegos = (pack.pack_items ?? [])
+                  .slice()
+                  .sort((a, b) => a.sort_order - b.sort_order)
+                  .map(it => it.title);
+                return (
+                  <div
+                    key={pack.id}
+                    className={`relative transition-opacity duration-200 ${pack.is_active ? "" : "opacity-45"}`}
+                  >
+                    {!pack.is_active && (
+                      <span className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-black/75 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-white/80 backdrop-blur">
+                        Oculto
+                      </span>
                     )}
+                    <PackStoreCard
+                      titulo={pack.title}
+                      img={pack.image_url}
+                      juegos={juegos}
+                      precio={pack.price}
+                      esNuevo={pack.is_new}
+                      onClick={() => select(pack)}
+                      ariaLabel={`Editar ${pack.title}`}
+                    />
                   </div>
-                  <p className="mt-0.5 text-[10px] text-gray-600">
-                    {itemCount} juego{itemCount !== 1 ? "s" : ""} · {pack.console === "switch2" ? "Solo Switch 2" : "Switch 1 y 2"}
-                  </p>
-                </div>
-
-                {/* Price */}
-                <p className="shrink-0 text-[13px] font-black text-white">${fmt(pack.price)}</p>
-
-                {/* Visibility */}
-                <div className="shrink-0">
-                  {pack.is_active
-                    ? <Eye size={11} className="text-white/20 transition-all group-hover:text-white/40" />
-                    : <EyeOff size={11} className="text-white/10" />}
-                </div>
-
-                <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.04]" />
-              </button>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -322,7 +372,7 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
                         <input value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })}
                           className="min-w-0 flex-1 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-purple-500/30 placeholder:text-gray-700"
                           placeholder="https://…" />
-                        <button type="button" onClick={fillImg} disabled={!form.title.trim()}
+                        <button type="button" onClick={fillImg} disabled={!form.title.trim() && form.items.length === 0}
                           className="shrink-0 rounded-xl border border-white/8 bg-white/4 p-2.5 text-gray-500 transition-all hover:border-white/14 hover:bg-white/8 hover:text-white disabled:opacity-30 active:scale-95">
                           <ImagePlus size={15} />
                         </button>
@@ -423,18 +473,13 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
                       style={{ background: "rgba(168,85,247,0.06)" }} />
                   </div>
 
-                  <div className="relative z-10 w-full max-w-[240px]">
-                    <GameCard
+                  <div className="relative z-10 w-full max-w-[280px]">
+                    <PackStoreCard
                       titulo={form.title || "Nombre del pack"}
-                      precio={toPrice(form.price)}
-                      precioOriginal={null}
                       img={form.image_url || null}
-                      ahorro={form.is_new ? "¡NUEVO! ✨" : null}
-                      esPack={true}
-                      juegosIncluidos={form.items.map(i => i.title)}
-                      consoleName={form.console}
-                      storageRequired={null}
-                      onAdd={() => {}}
+                      juegos={form.items.map(i => i.title)}
+                      precio={toPrice(form.price)}
+                      esNuevo={form.is_new}
                     />
                   </div>
                 </div>
@@ -486,7 +531,7 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
                   {form.is_new && (
                     <div className="rounded-xl border border-purple-500/15 bg-purple-500/6 px-3 py-2.5">
                       <p className="text-[9px] font-black uppercase tracking-widest text-purple-400 mb-0.5">Etiqueta activa</p>
-                      <p className="text-[11px] text-purple-300/80">Aparece con badge "NUEVO" en tienda</p>
+                      <p className="text-[11px] text-purple-300/80">Aparece con badge &quot;NUEVO&quot; en tienda</p>
                     </div>
                   )}
                 </div>

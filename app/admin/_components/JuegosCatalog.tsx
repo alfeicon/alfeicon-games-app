@@ -2,10 +2,10 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
-import { Eye, EyeOff, Gamepad2, HardDrive, ImagePlus, Loader2, Plus, Save, Search, Tag, Trash2, X } from "lucide-react";
+import { Gamepad2, HardDrive, ImagePlus, Loader2, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import GameCard from "@/components/GameCard";
+import GameStoreCard from "@/components/app-store/GameStoreCard";
 import type { AdminGame } from "../_types";
 import { fmt, toPrice, findImage } from "../_helpers";
 
@@ -164,58 +164,44 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
           </div>
         </div>
 
-        {/* Rows */}
-        <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
-          {filtered.length === 0 && (
+        {/* Grilla estilo tienda: mismas tarjetas del catálogo público; al
+            hacer clic se abre el editor en vez del detalle de compra. */}
+        <div className="flex-1 overflow-y-auto px-4 pb-32 pt-4 md:pb-6">
+          {filtered.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <Search size={24} className="text-gray-800" />
               <p className="text-xs text-gray-700">Sin resultados</p>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {filtered.map((game, idx) => {
+                const isOffer = game.is_offer && Boolean(game.offer_price);
+                return (
+                  <div
+                    key={game.id}
+                    className={`relative transition-opacity duration-200 ${game.is_active ? "" : "opacity-45"}`}
+                  >
+                    {!game.is_active && (
+                      <span className="pointer-events-none absolute right-3 top-3 z-20 rounded-full bg-black/75 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-white/80 backdrop-blur">
+                        Oculto
+                      </span>
+                    )}
+                    <GameStoreCard
+                      titulo={game.title}
+                      img={game.image_url}
+                      consoleName={game.console}
+                      precio={isOffer ? game.offer_price! : game.price}
+                      precioOriginal={isOffer ? game.price : null}
+                      ahorro={isOffer ? "OFERTA" : null}
+                      onClick={() => select(game)}
+                      ariaLabel={`Editar ${game.title}`}
+                      priority={idx < 4}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           )}
-          {filtered.map((game) => (
-            <button key={game.id} onClick={() => select(game)}
-              className="group relative flex w-full items-center gap-3 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]">
-              {/* Status dot */}
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-200 ${game.is_active ? "bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-white/15"}`} />
-
-              {/* Thumbnail */}
-              <div className="relative h-10 w-[3.25rem] shrink-0 overflow-hidden rounded-lg bg-white/[0.04] transition-transform duration-200 group-hover:scale-[1.04]">
-                {game.image_url
-                  ? <Image src={game.image_url} alt={game.title} fill className="object-cover" sizes="52px" />
-                  : <Tag className="m-auto mt-2.5 text-gray-800" size={13} />}
-              </div>
-
-              {/* Info */}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-bold leading-tight text-white">{game.title}</p>
-                <p className="mt-0.5 text-[10px] text-gray-600">
-                  {game.console === "switch2" ? "Solo Switch 2" : "Switch 1 y 2"}
-                  {game.storage_required && <span className="ml-1.5 text-gray-700">· {game.storage_required}</span>}
-                </p>
-              </div>
-
-              {/* Price */}
-              <div className="shrink-0 text-right">
-                {game.is_offer && game.offer_price ? (
-                  <>
-                    <p className="text-[11px] font-black text-orange-400">${fmt(game.offer_price)}</p>
-                    <p className="text-[9px] text-gray-700 line-through">${fmt(game.price)}</p>
-                  </>
-                ) : (
-                  <p className="text-[13px] font-black text-white">${fmt(game.price)}</p>
-                )}
-              </div>
-
-              {/* Visibility */}
-              <div className="shrink-0">
-                {game.is_active
-                  ? <Eye size={11} className="text-white/20 transition-all group-hover:text-white/40" />
-                  : <EyeOff size={11} className="text-white/10" />}
-              </div>
-
-              <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.04]" />
-            </button>
-          ))}
         </div>
       </div>
 

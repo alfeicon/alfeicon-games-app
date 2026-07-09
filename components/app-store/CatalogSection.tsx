@@ -411,10 +411,9 @@ function CatalogSection({
             onChange={(e) => {
               const texto = e.target.value;
               setSearchTerm(texto);
-              if (texto === '') {
-                setFilterTerm('');
-                setVisibleCount(catalogInitialCount);
-              }
+              // Búsqueda en vivo: filtra mientras escribes, sin apretar "Buscar".
+              setFilterTerm(texto);
+              setVisibleCount(catalogInitialCount);
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') ejecutarBusqueda();

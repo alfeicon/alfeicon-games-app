@@ -9,6 +9,7 @@ import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
 import { fetchNewsFromSupabase, type NewsItem } from '@/lib/news';
 import { fetchAppSettings, type AppSettings } from '@/lib/settings';
+import { supabase } from '@/lib/supabase/client';
 
 import HomeSectionV2 from '@/components/app-store/HomeSectionV2';
 import GuideSection, { type GuideConsole } from '@/components/app-store/GuideSection';
@@ -61,6 +62,16 @@ export type StoreInitialData = {
   news: NewsItem[];
   settings: AppSettings;
 };
+
+// Genera un código aleatorio alfanumérico (ej: ALF-Y8K2)
+function generateShortCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let result = "ALF-";
+  for (let i = 0; i < 4; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
 
 export default function MobileAppStore({ initial }: { initial: StoreInitialData }) {
   return (
@@ -270,26 +281,46 @@ function StoreApp({ initial }: { initial: StoreInitialData }) {
   const comprarDirecto = useCallback((item: CatalogItem, event?: MouseEvent<HTMLElement>) => {
     let mensaje = "";
     const precioFmt = `${format(item.precio)} ${currency.code}`;
+    const code = generateShortCode();
 
     if (item.esPack) {
       const listaJuegosTexto = item.juegosIncluidos.length > 0
           ? item.juegosIncluidos.map((juego) => `- ${juego}`).join('\n')
           : "Consultar juegos";
 
-      mensaje = `Hola Alfeicon Games!\n\nMe interesa este pack que vi en la web:\n\n*${item.titulo}*\n\nIncluye:\n${listaJuegosTexto}\n\nPrecio: ${precioFmt}${notaInternacional}\n\n¿Lo tienes disponible?`;
+      mensaje = `Hola Alfeicon Games!\n\nMe interesa este pack que vi en la web:\n\n*${item.titulo}*\n\nIncluye:\n${listaJuegosTexto}\n\nPrecio: ${precioFmt}${notaInternacional}\n\nMi orden generada es: *${code}*\n\n¿Lo tienes disponible?`;
     } else {
-      mensaje = `Hola Alfeicon Games!\n\nVengo de la web y quiero llevarme este juego:\n\n*${item.titulo}*\nPrecio: ${precioFmt}${notaInternacional}\n\n¿Qué métodos de pago tienes disponible?`;
+      mensaje = `Hola Alfeicon Games!\n\nVengo de la web y quiero llevarme este juego:\n\n*${item.titulo}*\nPrecio: ${precioFmt}${notaInternacional}\n\nMi orden generada es: *${code}*\n\n¿Qué métodos de pago tienes disponible?`;
     }
 
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
     goToWhatsApp(url, event);
+
+    // Registrar "Posible Entrega" de forma silenciosa
+    supabase?.from('orders').insert({
+      game_name: item.titulo,
+      status: 'draft',
+      short_code: code,
+    }).then(({ error }) => {
+      if (error) console.error("Error creating draft order", error);
+    });
   }, [goToWhatsApp, format, currency.code, notaInternacional]);
 
   const comprarNintendoOnline = useCallback((event?: MouseEvent<HTMLElement>) => {
     const precioFmt = `${format(appSettings.nintendoOnlinePrice)} ${currency.code}`;
-    const mensaje = `Hola Alfeicon Games!\n\nMe interesa Nintendo Switch Online + Paquete de expansión por 12 meses.\n\nPrecio: ${precioFmt}${notaInternacional}\n\n¿Lo tienes disponible?`;
+    const code = generateShortCode();
+    const mensaje = `Hola Alfeicon Games!\n\nMe interesa Nintendo Switch Online + Paquete de expansión por 12 meses.\n\nPrecio: ${precioFmt}${notaInternacional}\n\nMi orden generada es: *${code}*\n\n¿Lo tienes disponible?`;
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
     goToWhatsApp(url, event);
+
+    // Registrar "Posible Entrega" de forma silenciosa
+    supabase?.from('orders').insert({
+      game_name: "Nintendo Switch Online 12 Meses",
+      status: 'draft',
+      short_code: code,
+    }).then(({ error }) => {
+      if (error) console.error("Error creating draft order", error);
+    });
   }, [appSettings.nintendoOnlinePrice, goToWhatsApp, format, currency.code, notaInternacional]);
 
   const getSavedKey = useCallback((item: CatalogItem) => {

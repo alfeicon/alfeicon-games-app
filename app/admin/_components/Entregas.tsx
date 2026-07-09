@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check
+  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import type { Order, AdminGame, AdminPack } from "../_types";
@@ -31,6 +31,7 @@ const toForm = (o: Order): OrderForm => ({
 });
 
 const STATUS_LABELS: Record<Order["status"], string> = {
+  draft: "Nueva Consulta",
   pending_console_code: "Esperando código",
   pending_setup: "Código recibido",
   preparing: "Avisado",
@@ -40,6 +41,7 @@ const STATUS_LABELS: Record<Order["status"], string> = {
 };
 
 const STATUS_COLORS: Record<Order["status"], string> = {
+  draft: "text-purple-400 bg-purple-500/10 border-purple-500/20",
   pending_console_code: "text-blue-400 bg-blue-500/10 border-blue-500/20",
   pending_setup: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20",
   preparing: "text-orange-400 bg-orange-500/10 border-orange-500/20",
@@ -86,6 +88,9 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
   const [modalOpen, setModalOpen] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
   
+  // Tabs: Nuevas (drafts), Activas, Historial
+  const [activeTab, setActiveTab] = useState<'drafts' | 'active' | 'history'>('active');
+  
   // Para sugerencias de autocompletado
   const [query, setQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -106,19 +111,28 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
   const addSuggestion = (title: string) => {
     const parts = form.game_name.split('+').map(p => p.trim()).filter(Boolean);
     if (form.game_name.includes('+') || parts.length > 0) {
-       // Only pop if the user was typing something after the last plus, 
-       // or if there is no plus but they were typing something
-       // Wait, if parts.length > 0, the last part is what they were typing.
-       // We should always pop the last part because that's the search query.
        parts.pop();
     }
     parts.push(title);
     setForm({ ...form, game_name: parts.join(' + ') + ' + ' });
   };
 
-  const counts = useMemo(() => ({
-    pending: orders.filter(o => o.status !== "completed").length,
-  }), [orders]);
+  const draftOrders = useMemo(() => orders.filter(o => o.status === 'draft'), [orders]);
+  const activeOrders = useMemo(() => orders.filter(o => !['draft', 'completed', 'issue'].includes(o.status)), [orders]);
+  const historyOrders = useMemo(() => orders.filter(o => ['completed', 'issue'].includes(o.status)), [orders]);
+
+  const counts = {
+    drafts: draftOrders.length,
+    active: activeOrders.length,
+  };
+
+  // Secciones para "Activas"
+  const activeSections = [
+    { label: "Esperando código de Nintendo", status: "pending_console_code", items: activeOrders.filter(o => o.status === 'pending_console_code'), icon: Clock },
+    { label: "Código recibido (¡Tienes que preparar!)", status: "pending_setup", items: activeOrders.filter(o => o.status === 'pending_setup'), icon: AlertCircle, color: "text-yellow-500" },
+    { label: "Cliente avisado (Barra en 85%)", status: "preparing", items: activeOrders.filter(o => o.status === 'preparing'), icon: CheckCircle2 },
+    { label: "Credenciales Listas (Esperando confirmación)", status: "ready", items: activeOrders.filter(o => o.status === 'ready'), icon: KeyRound },
+  ];
 
   // Índice del paso actual en el stepper (‑1 si es "issue", que no está en STEPS).
   const currentStepIndex = STEPS.findIndex(s => s.key === form.status);
@@ -137,11 +151,10 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
     };
     if (!payload.game_name) { showNotice("error", "Falta el nombre del juego."); return; }
 
-    // Al guardar código de acceso + contraseña por PRIMERA vez, la orden pasa
-    // sola a "Listo" (el cliente ya puede ver sus datos).
+    // Al guardar código de acceso + contraseña por PRIMERA vez, la orden pasa a "Listo"
     const firstCredentialSave =
       selectedOrder && payload.account_email && payload.account_password && !selectedOrder.account_password;
-    if (firstCredentialSave) payload.status = "ready";
+    if (firstCredentialSave && payload.status === "preparing") payload.status = "ready";
 
     setLoading(true);
     try {
@@ -169,21 +182,32 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
     }
   };
 
-  const del = async () => {
-    if (!supabase || !selectedOrder) return;
-    if (!window.confirm(`¿Eliminar la orden ${selectedOrder.short_code}?`)) return;
+  const del = async (orderToDel = selectedOrder) => {
+    if (!supabase || !orderToDel) return;
+    if (!window.confirm(`¿Eliminar la orden ${orderToDel.short_code}?`)) return;
     setLoading(true);
-    const { error } = await supabase.from("orders").delete().eq("id", selectedOrder.id);
+    const { error } = await supabase.from("orders").delete().eq("id", orderToDel.id);
     setLoading(false);
     if (error) { showNotice("error", "No se pudo eliminar."); return; }
-    showNotice("success", "Orden eliminada."); close(); await onReload();
+    showNotice("success", "Orden eliminada."); 
+    if (orderToDel === selectedOrder) close(); 
+    await onReload();
   };
 
-  // Reinicia el proceso: el cliente vuelve a empezar (elegir consola + ingresar
-  // su código). Guarda también el juego por si el admin lo cambió.
+  const confirmDraft = async (order: Order) => {
+    if (!supabase) return;
+    setLoading(true);
+    const { error } = await supabase.from("orders").update({ status: "pending_console_code" }).eq("id", order.id);
+    setLoading(false);
+    if (error) { showNotice("error", `No se pudo confirmar: ${error.message}`); return; }
+    showNotice("success", "Entrega confirmada y movida a Activas.");
+    await onReload();
+  };
+
+  // Reinicia el proceso: el cliente vuelve a empezar.
   const restartOrder = async () => {
     if (!supabase || !selectedOrder) return;
-    if (!window.confirm("Esto reiniciará el proceso: el cliente volverá al inicio (elegir consola e ingresar su código de nuevo). ¿Continuar?")) return;
+    if (!window.confirm("Esto reiniciará el proceso: el cliente volverá al inicio (elegir consola e ingresar código de nuevo). ¿Continuar?")) return;
     const gameName = form.game_name.replace(/\+\s*$/, "").trim();
     setLoading(true);
     const { error } = await supabase.from("orders").update({
@@ -200,84 +224,159 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
     await onReload();
   };
 
+  // Componente interno para renderizar cada item de la lista
+  const OrderItem = ({ item }: { item: Order }) => (
+    <div className="group relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]">
+      
+      <button onClick={() => select(item)} className="flex items-center gap-4 flex-1 min-w-0 text-left">
+        <div className={`flex shrink-0 items-center justify-center rounded-xl border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[item.status]}`}>
+          {item.status === 'ready' || item.status === 'completed' ? <CheckCircle2 size={11} className="mr-1" /> :
+           item.status === 'issue' ? <AlertCircle size={11} className="mr-1" /> :
+           item.status === 'draft' ? <HelpCircle size={11} className="mr-1" /> :
+           <Clock size={11} className="mr-1" />}
+          {STATUS_LABELS[item.status]}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-bold leading-tight text-white">
+            {item.order_number ? `Orden #${item.order_number}` : item.short_code} · {item.game_name}
+          </p>
+          <p className="mt-0.5 truncate text-[10px] text-gray-600">
+            {item.short_code} · {fmtDate(item.created_at)} {item.console_code ? `· Código Cliente: ${item.console_code}` : ''}
+          </p>
+        </div>
+      </button>
+
+      {item.status === "draft" && (
+        <div className="flex shrink-0 gap-2">
+           <button onClick={() => del(item)} disabled={loading} className="p-2 text-gray-600 hover:text-red-400 hover:bg-white/5 rounded-full transition-colors"><X size={16} /></button>
+           <button onClick={() => confirmDraft(item)} disabled={loading} className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest bg-purple-500 hover:bg-purple-400 text-black rounded-full transition-colors flex items-center gap-1.5"><Check size={12} strokeWidth={3} /> Confirmar</button>
+        </div>
+      )}
+
+      {item.status === "pending_setup" && (
+        <button
+          onClick={async () => {
+            if (!supabase) return;
+            setLoading(true);
+            const { error } = await supabase.from("orders").update({ status: "preparing" }).eq("id", item.id);
+            setLoading(false);
+            if (error) { showNotice("error", `No se pudo avisar: ${error.message}`); return; }
+            showNotice("success", "Cliente avisado — barra al 85%.");
+            await onReload();
+          }}
+          disabled={loading}
+          className="shrink-0 flex items-center gap-1.5 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-50"
+        >
+          <PackageCheck size={12} /> Avisar
+        </button>
+      )}
+
+      {item.status === "preparing" && (
+        <div className="shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-600/30 bg-gray-600/10 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-gray-500 cursor-not-allowed">
+          <CheckCircle2 size={12} /> Avisado
+        </div>
+      )}
+
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.04]" />
+    </div>
+  );
+
   return (
     <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-4 border-b border-white/[0.06] px-6 py-4">
-        <div className="flex-1">
-          <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Entregas</h1>
-          <p className="mt-0.5 text-[10px] text-gray-600">{orders.length} órdenes · {counts.pending} pendientes</p>
+      <div className="flex shrink-0 flex-col border-b border-white/[0.06]">
+        <div className="flex items-center gap-4 px-6 py-4">
+          <div className="flex-1">
+            <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Entregas</h1>
+            <p className="mt-0.5 text-[10px] text-gray-600">{orders.length} órdenes totales</p>
+          </div>
+          <button onClick={onReload} disabled={loading} className="rounded-full bg-white/5 p-2 text-white hover:bg-white/10 active:scale-95 disabled:opacity-50">
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          </button>
+          <button onClick={newOrder}
+            className="flex items-center gap-1.5 rounded-full bg-yellow-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition-all duration-200 hover:bg-yellow-400 active:scale-95">
+            <Plus size={12} strokeWidth={3} /> Nueva
+          </button>
         </div>
-        <button onClick={onReload} disabled={loading} className="rounded-full bg-white/5 p-2 text-white hover:bg-white/10 active:scale-95 disabled:opacity-50">
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-        </button>
-        <button onClick={newOrder}
-          className="flex items-center gap-1.5 rounded-full bg-yellow-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition-all duration-200 hover:bg-yellow-400 active:scale-95">
-          <Plus size={12} strokeWidth={3} /> Nueva Orden
-        </button>
+
+        {/* Tabs */}
+        <div className="flex px-4 gap-2 pb-2">
+          <button onClick={() => setActiveTab('drafts')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'drafts' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+            <span className="flex items-center gap-1.5">Nuevas {counts.drafts > 0 && <span className="bg-purple-500 text-black px-1.5 py-0.5 rounded-full text-[8px]">{counts.drafts}</span>}</span>
+          </button>
+          <button onClick={() => setActiveTab('active')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'active' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+            <span className="flex items-center gap-1.5">Activas {counts.active > 0 && <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-full text-[8px]">{counts.active}</span>}</span>
+          </button>
+          <button onClick={() => setActiveTab('history')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'history' ? 'bg-white/10 text-white border border-white/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+            Historial
+          </button>
+        </div>
       </div>
 
       {/* List */}
       <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
-        {orders.length === 0 && (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <PackageCheck size={24} className="text-gray-800" />
-            <p className="text-xs text-gray-700">Sin órdenes todavía</p>
+        
+        {/* Vista: Nuevas Consultas (Borradores) */}
+        {activeTab === 'drafts' && (
+          <div>
+            {draftOrders.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <HelpCircle size={24} className="text-gray-800" />
+                <p className="text-xs text-gray-700">No hay consultas recientes</p>
+                <p className="text-[10px] text-gray-600 max-w-[200px]">Cuando un cliente pregunte por WhatsApp, aparecerá aquí por 15 minutos.</p>
+              </div>
+            ) : (
+              <div className="p-4 mb-2 bg-purple-500/5 border-b border-purple-500/10">
+                 <p className="text-[10px] text-purple-400 font-bold">Estas órdenes fueron generadas automáticamente y expirarán en 15 minutos si no las confirmas.</p>
+              </div>
+            )}
+            {draftOrders.map(item => <OrderItem key={item.id} item={item} />)}
           </div>
         )}
-        {orders.map(item => (
-          <div key={item.id} className="group relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]">
-            
-            <button onClick={() => select(item)} className="flex items-center gap-4 flex-1 min-w-0 text-left">
-              <div className={`flex shrink-0 items-center justify-center rounded-xl border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[item.status]}`}>
-                {item.status === 'ready' || item.status === 'completed' ? <CheckCircle2 size={11} className="mr-1" /> :
-                 item.status === 'issue' ? <AlertCircle size={11} className="mr-1" /> :
-                 <Clock size={11} className="mr-1" />}
-                {STATUS_LABELS[item.status]}
-              </div>
 
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-bold leading-tight text-white">
-                  {item.order_number ? `Orden #${item.order_number}` : item.short_code} · {item.game_name}
-                </p>
-                <p className="mt-0.5 truncate text-[10px] text-gray-600">
-                  {item.short_code} · Creada: {fmtDate(item.created_at)} {item.console_code ? `· Código: ${item.console_code}` : ''}
-                </p>
+        {/* Vista: Activas (Agrupadas por secciones) */}
+        {activeTab === 'active' && (
+          <div>
+            {activeOrders.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <PackageCheck size={24} className="text-gray-800" />
+                <p className="text-xs text-gray-700">No hay entregas activas</p>
               </div>
-            </button>
-
-            {item.status === "pending_setup" && (
-              <button
-                onClick={async () => {
-                  if (!supabase) return;
-                  setLoading(true);
-                  const { error } = await supabase.from("orders").update({ status: "preparing" }).eq("id", item.id);
-                  setLoading(false);
-                  if (error) { showNotice("error", `No se pudo avisar: ${error.message}`); return; }
-                  showNotice("success", "Cliente avisado — barra al 85%.");
-                  await onReload();
-                }}
-                disabled={loading}
-                className="shrink-0 flex items-center gap-1.5 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-50"
-              >
-                <PackageCheck size={12} /> Avisar
-              </button>
+            ) : (
+              activeSections.map(section => (
+                section.items.length > 0 && (
+                  <div key={section.status} className="mb-6">
+                    <div className="flex items-center gap-2 px-6 py-2 bg-[rgb(12,12,14)] border-y border-white/5">
+                       <section.icon size={13} className={section.color || "text-gray-500"} />
+                       <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-400">{section.label} ({section.items.length})</h2>
+                    </div>
+                    {section.items.map(item => <OrderItem key={item.id} item={item} />)}
+                  </div>
+                )
+              ))
             )}
-
-            {item.status === "preparing" && (
-              <div className="shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-600/30 bg-gray-600/10 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-gray-500 cursor-not-allowed">
-                <CheckCircle2 size={12} /> Avisado
-              </div>
-            )}
-
-            <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.04]" />
           </div>
-        ))}
+        )}
+
+        {/* Vista: Historial */}
+        {activeTab === 'history' && (
+          <div>
+            {historyOrders.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <CheckCircle2 size={24} className="text-gray-800" />
+                <p className="text-xs text-gray-700">No hay historial</p>
+              </div>
+            ) : (
+              historyOrders.map(item => <OrderItem key={item.id} item={item} />)
+            )}
+          </div>
+        )}
       </div>
 
       {/* Edit modal */}
       {modalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-6">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-6">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
 
           <div className="animate-soft-in relative z-10 flex h-full w-full max-w-2xl flex-col overflow-hidden sm:h-auto sm:min-h-[500px] sm:max-h-[90vh] sm:rounded-3xl sm:border sm:border-white/[0.07]"
@@ -303,7 +402,7 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
               </div>
               <div className="flex shrink-0 gap-1.5">
                 {selectedOrder && (
-                  <button onClick={del} type="button"
+                  <button onClick={() => del(selectedOrder)} type="button"
                     className="rounded-xl border border-red-500/15 p-2 text-red-500/50 transition-all hover:border-red-500/30 hover:bg-red-500/8 hover:text-red-400 active:scale-95">
                     <Trash2 size={13} />
                   </button>
@@ -368,7 +467,7 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
                     </div>
                   )}
 
-                  {selectedOrder && (
+                  {selectedOrder && form.status !== 'draft' && (
                     <div className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-4">
                       <div className="mb-2.5 flex items-center gap-2">
                         <Hash size={13} className="text-gray-500" />
@@ -477,6 +576,7 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
                         <span className={LABEL}>Cambiar estado manualmente</span>
                         <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as Order["status"] })}
                           className={INPUT + " appearance-none cursor-pointer"}>
+                          <option value="draft">0 · Borrador (Nueva Consulta)</option>
                           <option value="pending_console_code">1 · Esperando código del cliente</option>
                           <option value="pending_setup">2 · Código recibido</option>
                           <option value="preparing">3 · Avisado (prepárate, 85%)</option>
@@ -493,7 +593,7 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <label>
-                            <span className={LABEL}>Código de acceso (5 dígitos)</span>
+                            <span className={LABEL}>Código (5 dígitos)</span>
                             <input inputMode="numeric" value={form.account_email}
                               onChange={e => setForm({ ...form, account_email: e.target.value.replace(/\D/g, "").slice(0, 5) })}
                               className={INPUT + " text-center font-mono text-lg font-black tracking-[0.4em]"} placeholder="12345" maxLength={5} />
