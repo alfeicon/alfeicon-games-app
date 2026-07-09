@@ -68,6 +68,15 @@ export default function AdminPage() {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     setNotice({ type, text });
     noticeTimer.current = window.setTimeout(() => setNotice(null), 3500) as unknown as number;
+
+    // Reportar a Telegram si es un error
+    if (type === "error") {
+      fetch("/api/notify-error", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, source: "Panel Admin Web" }),
+      }).catch(console.error);
+    }
   }, []);
 
   const loadGames = useCallback(async () => {
@@ -118,7 +127,7 @@ export default function AdminPage() {
       const msg = error.message ?? "";
       const tableNotFound = code === "42P01" || code === "PGRST205" || (msg.includes("relation") && msg.includes("does not exist"));
       setNewsTableExists(tableNotFound ? false : true);
-      setNews([]);
+      if (tableNotFound) setNews([]);
       return;
     }
     setNewsTableExists(true);
@@ -150,11 +159,10 @@ export default function AdminPage() {
     if (error) {
       const code = error.code ?? "";
       const msg = error.message ?? "";
-      // Only truly "missing" if Postgres/PostgREST says the relation doesn't exist
       const tableNotFound = code === "42P01" || code === "PGRST205" || (msg.includes("relation") && msg.includes("does not exist"));
       setSalesTableExists(tableNotFound ? false : true);
       setSalesError(`[${code}] ${msg}`);
-      setSales([]);
+      if (tableNotFound) setSales([]);
       return;
     }
     setSalesTableExists(true);
@@ -212,8 +220,16 @@ export default function AdminPage() {
     // 1. Cargar primero lo indispensable para la pantalla de Inicio
     await Promise.all([loadGames(), loadPacks(), loadSales()]);
     setFirstLoadDone(true);
-    // 2. Cargar el resto en segundo plano para no saturar la conexión
-    Promise.all([loadOrders(), loadNews(), loadAdSpend(), loadSettings(), loadProviders()]);
+    // 2. Cargar el resto en segundo plano (escalonado para no saturar la conexión / rate limits)
+    setTimeout(() => {
+      loadOrders();
+      loadNews();
+    }, 100);
+    setTimeout(() => {
+      loadAdSpend();
+      loadSettings();
+      loadProviders();
+    }, 300);
   }, [loadGames, loadPacks, loadSales, loadOrders, loadNews, loadAdSpend, loadSettings, loadProviders]);
 
   useEffect(() => {
