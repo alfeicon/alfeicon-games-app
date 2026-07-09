@@ -49,22 +49,33 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
     const name = newProvider.trim();
     if (!name) return;
     setLoading(true);
-    const { error } = await supabase.from("providers").insert({ name });
-    setLoading(false);
-    if (error) { showNotice("error", `No se pudo agregar: ${error.message}`); return; }
-    setNewProvider("");
-    showNotice("success", "Proveedor agregado.");
-    await onReloadProviders();
+    try {
+      const { error } = await supabase.from("providers").insert({ name });
+      if (error) throw error;
+      setNewProvider("");
+      showNotice("success", "Proveedor agregado.");
+      await onReloadProviders();
+    } catch (err: any) {
+      showNotice("error", `No se pudo agregar: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const removeProvider = async (id: string) => {
     if (!supabase) return;
     if (!window.confirm("¿Eliminar este proveedor?")) return;
     setLoading(true);
-    await supabase.from("providers").delete().eq("id", id);
-    setLoading(false);
-    showNotice("success", "Proveedor eliminado.");
-    await onReloadProviders();
+    try {
+      const { error } = await supabase.from("providers").delete().eq("id", id);
+      if (error) throw error;
+      showNotice("success", "Proveedor eliminado.");
+      await onReloadProviders();
+    } catch (err: any) {
+      showNotice("error", `No se pudo eliminar: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
