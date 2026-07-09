@@ -451,7 +451,7 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
                 </div>
               ) : (
                 <form onSubmit={save} className="flex flex-1 flex-col overflow-hidden">
-                  <div className="flex-1 space-y-5 overflow-y-auto p-5">
+                  <div className="flex-1 space-y-5 overflow-y-auto p-5 pb-8">
 
                   {!selectedOrder && (
                     <div className="rounded-2xl border border-yellow-500/15 bg-yellow-500/[0.04] p-4">
@@ -606,6 +606,22 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
                           </label>
                         </div>
                         <p className="mt-2.5 text-[10px] text-gray-600">El cliente verá estos datos al marcar la orden como "Listo".</p>
+                      </div>
+
+                      <div className="rounded-xl border border-blue-500/15 bg-blue-500/[0.03] p-4 mt-2">
+                        <div className="mb-2 flex items-center gap-2">
+                          <Copy size={13} className="text-blue-500" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-white">Link para el cliente</p>
+                        </div>
+                        <div className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-black/50 p-2">
+                          <input readOnly value={`${window.location.origin}/entrega/${selectedOrder.short_code}`} className="flex-1 bg-transparent px-2 text-[11px] text-gray-400 outline-none" />
+                          <button onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/entrega/${selectedOrder.short_code}`);
+                            showNotice("success", "Enlace copiado");
+                          }} type="button" className="flex items-center gap-2 rounded-lg bg-blue-500/20 px-3 py-2 text-blue-400 hover:bg-blue-500/30 transition-colors">
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Copiar</span>
+                          </button>
+                        </div>
                       </div>
                     </>
                   )}
