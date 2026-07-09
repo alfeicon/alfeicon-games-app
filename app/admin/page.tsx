@@ -219,17 +219,24 @@ export default function AdminPage() {
 
   const loadAll = useCallback(async () => {
     // 1. Cargar primero lo indispensable para la pantalla de Inicio
-    await Promise.all([loadGames(), loadPacks(), loadSales()]);
-    setFirstLoadDone(true);
+    try {
+      await Promise.all([loadGames(), loadPacks(), loadSales()]);
+    } catch (err) {
+      console.error("[loadAll] Error inesperado (posible AdBlock o fallo de red):", err);
+      showNotice("error", "Error de conexión. Revisa tu internet o desactiva tu AdBlock.");
+    } finally {
+      setFirstLoadDone(true);
+    }
+
     // 2. Cargar el resto en segundo plano (escalonado para no saturar la conexión / rate limits)
     setTimeout(() => {
-      loadOrders();
-      loadNews();
+      loadOrders().catch(console.error);
+      loadNews().catch(console.error);
     }, 100);
     setTimeout(() => {
-      loadAdSpend();
-      loadSettings();
-      loadProviders();
+      loadAdSpend().catch(console.error);
+      loadSettings().catch(console.error);
+      loadProviders().catch(console.error);
     }, 300);
   }, [loadGames, loadPacks, loadSales, loadOrders, loadNews, loadAdSpend, loadSettings, loadProviders]);
 
