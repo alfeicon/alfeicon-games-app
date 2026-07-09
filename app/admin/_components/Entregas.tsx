@@ -539,23 +539,23 @@ export function Entregas({ orders, games, packs, providers, loading, setLoading,
                     </label>
                     
                     {showSuggestions && (
-                      <div className="mt-2 rounded-xl border border-white/10 bg-[#0c0f12] p-2 shadow-2xl absolute left-0 right-0 z-50">
+                      <div className="mt-2 rounded-xl border border-white/10 bg-[#0c0f12] p-2 shadow-inner">
                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Catálogo</p>
-                        <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
+                        <div className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1">
                           {suggestions.map(item => (
                             <button key={item.title} type="button" onClick={() => addSuggestion(item)}
-                              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-white/10 transition-colors">
-                              {item.type === "pack" ? <Gift size={11} className="text-purple-400 shrink-0" /> : <Gamepad2 size={11} className="text-blue-400 shrink-0" />}
-                              <span className="truncate text-[11px] font-bold text-gray-300">{item.title}</span>
+                              className="flex items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-white/10 transition-colors">
+                              {item.type === "pack" ? <Gift size={13} className="text-purple-400 shrink-0" /> : <Gamepad2 size={13} className="text-blue-400 shrink-0" />}
+                              <span className="text-[12px] font-bold text-gray-300 leading-tight">{item.title}</span>
                             </button>
                           ))}
                           {suggestions.length === 0 && (
-                            <p className="py-2 text-center text-[10px] text-gray-600">Sin resultados</p>
+                            <p className="py-3 text-center text-[11px] text-gray-600">Sin resultados</p>
                           )}
                         </div>
-                        <div className="mt-2 text-center pt-1 border-t border-white/5">
+                        <div className="mt-2 text-center pt-2 border-t border-white/5">
                           <button type="button" onClick={() => setShowSuggestions(false)}
-                            className="text-[10px] w-full py-1.5 font-bold text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded hover:bg-white/5">Cerrar sugerencias</button>
+                            className="text-[10px] w-full py-2 font-bold text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded hover:bg-white/5">Cerrar catálogo</button>
                         </div>
                       </div>
                     )}
