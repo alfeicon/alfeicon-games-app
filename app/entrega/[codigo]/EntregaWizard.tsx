@@ -159,6 +159,13 @@ export function EntregaWizard() {
     if (supabase && order) {
       await supabase.from("orders").update({ status: "completed" }).eq("id", order.id);
       setOrder({ ...order, status: "completed" });
+      
+      // Notificar por Telegram
+      fetch('/api/notify-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'COMPLETED', order })
+      }).catch(err => console.error("Error sending notification", err));
     }
     setState("ready"); // boleta final
     
@@ -176,6 +183,13 @@ export function EntregaWizard() {
     if (supabase && order) {
       await supabase.from("orders").update({ status: "issue" }).eq("id", order.id);
       setOrder({ ...order, status: "issue" });
+
+      // Notificar por Telegram
+      fetch('/api/notify-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ISSUE', order })
+      }).catch(err => console.error("Error sending notification", err));
     }
     const code = order?.short_code || "";
     const juego = order?.game_name ? ` (${order.game_name})` : "";
@@ -200,8 +214,16 @@ export function EntregaWizard() {
     setIsSubmitting(false);
     
     if (!error) {
-      setOrder({ ...order, console_code: inputCode.trim().toUpperCase(), status: "pending_setup" });
+      const updatedOrder = { ...order, console_code: inputCode.trim().toUpperCase(), status: "pending_setup" as const };
+      setOrder(updatedOrder);
       setState("waiting_setup");
+
+      // Notificar por Telegram
+      fetch('/api/notify-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'CODE_SUBMITTED', order: updatedOrder })
+      }).catch(err => console.error("Error sending notification", err));
     }
   };
 
