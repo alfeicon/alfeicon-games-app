@@ -523,7 +523,7 @@ export default function AdminPage() {
               showNotice={showNotice} onReload={loadNews} />
           )}
           {section === "entregas" && (
-            <Entregas orders={orders} games={games} packs={packs} loading={loading} setLoading={setLoading}
+            <Entregas orders={orders} games={games} packs={packs} providers={providers} loading={loading} setLoading={setLoading}
               showNotice={showNotice} onReload={loadOrders} />
           )}
           {section === "ventas" && (

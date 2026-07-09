@@ -6,7 +6,7 @@ import {
   AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
-import type { Order, AdminGame, AdminPack } from "../_types";
+import type { Order, AdminGame, AdminPack, Provider } from "../_types";
 import { fmtDate } from "../_helpers";
 
 type OrderForm = {
@@ -14,6 +14,9 @@ type OrderForm = {
   status: Order["status"];
   account_email: string;
   account_password: string;
+  sale_price: number | "";
+  cost_price: number | "";
+  provider: string;
 };
 
 const emptyForm: OrderForm = {
@@ -21,6 +24,9 @@ const emptyForm: OrderForm = {
   status: "pending_console_code",
   account_email: "",
   account_password: "",
+  sale_price: "",
+  cost_price: "",
+  provider: "",
 };
 
 const toForm = (o: Order): OrderForm => ({
@@ -28,6 +34,9 @@ const toForm = (o: Order): OrderForm => ({
   status: o.status,
   account_email: o.account_email || "",
   account_password: o.account_password || "",
+  sale_price: o.sale_price ?? "",
+  cost_price: o.cost_price ?? "",
+  provider: o.provider || "",
 });
 
 const STATUS_LABELS: Record<Order["status"], string> = {
@@ -66,6 +75,7 @@ type Props = {
   orders: Order[];
   games: AdminGame[];
   packs: AdminPack[];
+  providers: Provider[];
   loading: boolean;
   setLoading: (v: boolean) => void;
   showNotice: (type: "success" | "error", text: string) => void;
@@ -82,7 +92,7 @@ function generateShortCode() {
   return result;
 }
 
-export function Entregas({ orders, games, packs, loading, setLoading, showNotice, onReload }: Props) {
+export function Entregas({ orders, games, packs, providers, loading, setLoading, showNotice, onReload }: Props) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [form, setForm] = useState<OrderForm>(emptyForm);
   const [modalOpen, setModalOpen] = useState(false);
@@ -96,8 +106,8 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   const pool = useMemo(() => {
-    const allGames = (games || []).filter(g => g.is_active).map(g => ({ title: g.title, type: "game" as const }));
-    const allPacks = (packs || []).filter(p => p.is_active).map(p => ({ title: p.title, type: "pack" as const }));
+    const allGames = (games || []).filter(g => g.is_active).map(g => ({ title: g.title, type: "game" as const, price: g.is_offer ? g.offer_price : g.price, cost: g.cost_price }));
+    const allPacks = (packs || []).filter(p => p.is_active).map(p => ({ title: p.title, type: "pack" as const, price: p.price, cost: p.cost_price }));
     return [...allGames, ...allPacks];
   }, [games, packs]);
 
@@ -108,13 +118,20 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
     return pool.filter(t => t.title.toLowerCase().includes(currentSearch)).slice(0, 5);
   }, [pool, form.game_name]);
 
-  const addSuggestion = (title: string) => {
+  const addSuggestion = (item: { title: string, price: number | null, cost: number | null }) => {
     const parts = form.game_name.split('+').map(p => p.trim()).filter(Boolean);
     if (form.game_name.includes('+') || parts.length > 0) {
        parts.pop();
     }
-    parts.push(title);
-    setForm({ ...form, game_name: parts.join(' + ') + ' + ' });
+    parts.push(item.title);
+    
+    // Auto-fill prices if empty
+    setForm({ 
+      ...form, 
+      game_name: parts.join(' + ') + ' + ',
+      sale_price: form.sale_price === "" ? (item.price || "") : form.sale_price,
+      cost_price: form.cost_price === "" ? (item.cost || "") : form.cost_price
+    });
   };
 
   const draftOrders = useMemo(() => orders.filter(o => o.status === 'draft'), [orders]);
@@ -148,6 +165,9 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
       status: form.status,
       account_email: form.account_email.trim() || null,
       account_password: form.account_password.trim() || null,
+      sale_price: form.sale_price === "" ? null : form.sale_price,
+      cost_price: form.cost_price === "" ? null : form.cost_price,
+      provider: form.provider || null,
     };
     if (!payload.game_name) { showNotice("error", "Falta el nombre del juego."); return; }
 
@@ -522,7 +542,7 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Catálogo</p>
                         <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
                           {suggestions.map(item => (
-                            <button key={item.title} type="button" onClick={() => addSuggestion(item.title)}
+                            <button key={item.title} type="button" onClick={() => addSuggestion(item)}
                               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-white/10 transition-colors">
                               {item.type === "pack" ? <Gift size={11} className="text-purple-400 shrink-0" /> : <Gamepad2 size={11} className="text-blue-400 shrink-0" />}
                               <span className="truncate text-[11px] font-bold text-gray-300">{item.title}</span>
@@ -586,7 +606,34 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
                         </select>
                       </label>
 
-                      <div className="rounded-xl border border-yellow-500/15 bg-yellow-500/[0.03] p-4">
+                      <div className="rounded-xl border border-green-500/15 bg-green-500/[0.03] p-4 mt-2">
+                        <div className="mb-3 flex items-center gap-2">
+                          <CheckCircle2 size={13} className="text-green-500" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-white">Datos para la Venta (Auto)</p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                          <label>
+                            <span className={LABEL}>Precio Venta ($)</span>
+                            <input type="number" min="0" value={form.sale_price} onChange={e => setForm({ ...form, sale_price: e.target.value ? Number(e.target.value) : "" })} className={INPUT} placeholder="Ej: 15000" />
+                          </label>
+                          <label>
+                            <span className={LABEL}>Precio Costo ($)</span>
+                            <input type="number" min="0" value={form.cost_price} onChange={e => setForm({ ...form, cost_price: e.target.value ? Number(e.target.value) : "" })} className={INPUT} placeholder="Ej: 5000" />
+                          </label>
+                          <label>
+                            <span className={LABEL}>Proveedor</span>
+                            <select value={form.provider} onChange={e => setForm({ ...form, provider: e.target.value })} className={INPUT + " appearance-none cursor-pointer"}>
+                              <option value="">- Seleccionar -</option>
+                              {providers.filter(p => p.is_active).map(p => (
+                                <option key={p.id} value={p.name}>{p.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <p className="mt-2.5 text-[10px] text-gray-600">Al pasar a estado "Completada", estos datos se registrarán automáticamente en tus Ventas.</p>
+                      </div>
+
+                      <div className="rounded-xl border border-yellow-500/15 bg-yellow-500/[0.03] p-4 mt-2">
                         <div className="mb-3 flex items-center gap-2">
                           <KeyRound size={13} className="text-yellow-500" />
                           <p className="text-[10px] font-black uppercase tracking-widest text-white">Datos que recibirá el cliente</p>

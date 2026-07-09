@@ -66,6 +66,9 @@ export type Order = {
   console_code: string | null;
   account_email: string | null;
   account_password: string | null;
+  sale_price?: number;
+  cost_price?: number;
+  provider?: string | null;
   created_at: string;
 };
 

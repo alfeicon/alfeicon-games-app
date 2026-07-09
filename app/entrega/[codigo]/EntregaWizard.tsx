@@ -689,6 +689,11 @@ export function EntregaWizard() {
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Juego Adquirido</p>
                   <p className="font-bold text-gray-900 leading-tight">{order?.game_name}</p>
+                  {order?.sale_price != null && (
+                    <p className="mt-1.5 text-sm font-black text-green-600">
+                      ${order.sale_price.toLocaleString("es-CL")}
+                    </p>
+                  )}
                 </div>
                 
                 <div className="pt-2">
