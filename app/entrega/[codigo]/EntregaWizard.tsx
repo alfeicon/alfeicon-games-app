@@ -46,6 +46,7 @@ export function EntregaWizard() {
   const progressRef = useRef(0);
   const subscriptionRef = useRef<any>(null);
   const playedPreparingSound = useRef(false);
+  const wakeLockRef = useRef<any>(null);
   const [notificationStatus, setNotificationStatus] = useState<NotificationPermission | "default">("default");
 
   useEffect(() => {
@@ -83,7 +84,7 @@ export function EntregaWizard() {
           promise.then(handlePermission).catch(() => {});
         }
       } else {
-        alert("Tu navegador no soporta notificaciones web.");
+        alert("Tu navegador (ej. iPhone/Safari) no permite notificaciones web aquí.\n\nPero no te preocupes: ¡hemos activado un sistema para mantener tu pantalla encendida mientras esperas!");
       }
     } catch (e) {
       console.warn("Error requesting notifications:", e);
@@ -106,6 +107,43 @@ export function EntregaWizard() {
       playNotificationSound();
     }
   }, [state, tutorialStep]);
+
+  // Mantener la pantalla encendida (Wake Lock) durante la espera
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if ("wakeLock" in navigator && state === "waiting_setup") {
+          wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
+        }
+      } catch (err: any) {
+        console.warn(`Wake lock error: ${err.name}, ${err.message}`);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && state === "waiting_setup") {
+        requestWakeLock();
+      }
+    };
+
+    if (state === "waiting_setup") {
+      requestWakeLock();
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    } else {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+    };
+  }, [state]);
 
   // Progreso simulado para waiting_setup (lento)
   useEffect(() => {
