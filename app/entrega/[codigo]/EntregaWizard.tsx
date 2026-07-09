@@ -259,6 +259,35 @@ export function EntregaWizard() {
       .subscribe();
   };
 
+  // Fallback: Polling de seguridad cada 5 segundos
+  // Por si el Realtime de Supabase no está activado en la tabla 'orders' o se desconecta.
+  useEffect(() => {
+    let pollInterval: any;
+    if (["loading", "select_console", "tutorial", "input_code"].includes(state)) return; // No hacer polling si aún no envía el código
+    if (["credentials_ready", "tutorial_download", "ready", "support"].includes(state)) return; // No hacer polling si ya terminó
+
+    if (order?.id) {
+      pollInterval = setInterval(async () => {
+        try {
+          const { data, error } = await supabase.from("orders").select("*").eq("id", order.id).maybeSingle();
+          if (data && !error) {
+            // Si el estado o los datos clave cambiaron, actualizamos.
+            if (data.status !== order.status || data.account_email !== order.account_email) {
+              setOrder(data as Order);
+              determineNextState(data as Order);
+            }
+          }
+        } catch (e) {
+          console.warn("Error polling order:", e);
+        }
+      }, 5000); // 5 segundos
+    }
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [state, order?.id, order?.status, order?.account_email]);
+
   const determineNextState = (o: Order) => {
     if (o.status === "completed") {
       setState("ready"); // boleta final (estado 5: entrega completa)
