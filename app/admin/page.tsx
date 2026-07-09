@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff,
-  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck,
+  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, X
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -46,6 +46,7 @@ export default function AdminPage() {
   const [section, setSection] = useState<AdminSection>("inicio");
   const [sectionKey, setSectionKey] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const noticeTimer = useRef<number | null>(null);
@@ -410,23 +411,76 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Mobile bottom dock (same floating glass dock as the storefront) */}
+      {/* Mobile bottom dock (simplified) */}
       <div className="app-dock-wrapper md:hidden">
         <nav aria-label="Navegación admin" className="app-glass-dock relative flex h-[66px] w-full items-center justify-around overflow-hidden rounded-[2rem] px-1.5">
-          <span className="app-glass-dock-indicator pointer-events-none absolute left-1.5 top-1.5 h-[54px] rounded-[1.8rem] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{ width: `calc((100% - 0.75rem) / ${NAV_ITEMS.length})`, transform: `translateX(${NAV_ITEMS.findIndex(i => i.id === section) * 100}%)` }} />
-          {NAV_ITEMS.map(({ id, label, Icon, accent }) => {
+          {/* We only show a selection of items on the main dock */}
+          {[
+            NAV_ITEMS.find(i => i.id === "inicio")!,
+            NAV_ITEMS.find(i => i.id === "entregas")!,
+            NAV_ITEMS.find(i => i.id === "ventas")!
+          ].map(({ id, label, Icon, accent }) => {
             const active = section === id;
             return (
               <button key={id} onClick={() => navigate(id)}
                 className="relative z-10 flex h-full flex-1 flex-col items-center justify-center gap-0.5">
+                {active && (
+                  <span className="absolute inset-x-2 top-1.5 h-[54px] rounded-[1.8rem] bg-white/[0.08]" />
+                )}
                 <Icon size={18} className={active ? accent : "text-white/65"} strokeWidth={active ? 2.6 : 2.1} />
                 <span className={`text-[8.5px] font-black uppercase tracking-wider ${active ? "text-white" : "text-white/55"}`}>{label}</span>
               </button>
             );
           })}
+          
+          {/* Menu button */}
+          <button onClick={() => setShowMobileMenu(true)}
+            className="relative z-10 flex h-full flex-1 flex-col items-center justify-center gap-0.5">
+            <LayoutGrid size={18} className="text-white/65" strokeWidth={2.1} />
+            <span className="text-[8.5px] font-black uppercase tracking-wider text-white/55">Menú</span>
+          </button>
         </nav>
       </div>
+
+      {/* Mobile Bottom Sheet Menu */}
+      {showMobileMenu && (
+        <div className="fixed inset-0 z-50 flex items-end md:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setShowMobileMenu(false)} />
+          <div className="animate-slide-up relative w-full rounded-t-3xl border-t border-white/[0.08] bg-[#0c0f12]/95 backdrop-blur-xl p-6 pb-10">
+            <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-white/20" />
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-black uppercase tracking-widest text-white">Navegación</h2>
+              <button onClick={() => setShowMobileMenu(false)} className="rounded-full bg-white/5 p-2 text-gray-400 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              {NAV_ITEMS.map(({ id, label, Icon, accent }) => {
+                const active = section === id;
+                return (
+                  <button key={id} onClick={() => { navigate(id); setShowMobileMenu(false); }}
+                    className="flex flex-col items-center gap-2">
+                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl border transition-all ${
+                      active ? `border-${accent.split('-')[1]}-500/30 bg-${accent.split('-')[1]}-500/10` : 'border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.05]'
+                    }`}>
+                      <Icon size={22} className={active ? accent : "text-gray-400"} />
+                    </div>
+                    <span className={`text-[9px] font-black uppercase tracking-widest ${active ? "text-white" : "text-gray-500"}`}>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-8 border-t border-white/[0.05] pt-6 flex flex-col gap-3">
+               <Link href="/" className="flex items-center justify-center gap-2 rounded-2xl border border-white/[0.05] bg-white/[0.02] py-3 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                 <ArrowLeft size={14} /> Ver Tienda
+               </Link>
+               <button onClick={() => { signOut(); setShowMobileMenu(false); }} className="flex items-center justify-center gap-2 rounded-2xl bg-red-500/10 border border-red-500/20 py-3 text-[10px] font-black uppercase tracking-widest text-red-400">
+                 <LogOut size={14} /> Cerrar Sesión
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sidebar (desktop) */}
       <nav
