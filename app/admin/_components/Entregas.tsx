@@ -221,6 +221,7 @@ export function Entregas({ orders, games, packs, providers, loading, setLoading,
     setLoading(false);
     if (error) { showNotice("error", `No se pudo confirmar: ${error.message}`); return; }
     showNotice("success", "Entrega confirmada y movida a Activas.");
+    setActiveTab("active");
     await onReload();
   };
 
