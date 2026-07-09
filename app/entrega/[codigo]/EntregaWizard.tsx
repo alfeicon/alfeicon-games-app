@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
 import { ArrowRight, ArrowLeft, Smartphone, Maximize, X, CheckCircle2, Copy, Gamepad2, Loader2, PackageCheck, MonitorSmartphone, KeyRound, Check, AlertCircle, Hash, Camera, LifeBuoy, BellRing } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { playNotificationSound, playSuccessSound, playErrorSound } from "@/lib/sounds";
 import type { Order } from "../../../app/admin/_types"; // we can redefine it here to be safe
 
 // Soporte por WhatsApp (mismo número de la tienda).
@@ -39,6 +40,16 @@ export function EntregaWizard() {
   const [showSupportConfirm, setShowSupportConfirm] = useState(false);
   const progressRef = useRef(0);
   const subscriptionRef = useRef<any>(null);
+  const playedPreparingSound = useRef(false);
+
+  // Escuchar cambios de estado principales para sonidos
+  useEffect(() => {
+    if (state === "credentials_ready") {
+      playSuccessSound();
+    } else if (state === "support") {
+      playErrorSound();
+    }
+  }, [state]);
 
   // Progreso simulado para waiting_setup (lento)
   useEffect(() => {
@@ -59,7 +70,15 @@ export function EntregaWizard() {
         else if (progressRef.current < 85 && order?.status !== "preparing") progressRef.current += 0.05; // Muy lento hasta el 85%
         else if (progressRef.current < 99) progressRef.current += 0.01; // Casi estático hasta el 99%
         
-        setProgress(Math.floor(progressRef.current));
+        const currentProgress = Math.floor(progressRef.current);
+        setProgress(currentProgress);
+
+        // Sonido de alerta cuando llega al 85% o preparing
+        if ((order?.status === "preparing" || currentProgress >= 85) && !playedPreparingSound.current) {
+          playNotificationSound();
+          playedPreparingSound.current = true;
+        }
+
       }, 1000);
     }
     return () => clearInterval(interval);
