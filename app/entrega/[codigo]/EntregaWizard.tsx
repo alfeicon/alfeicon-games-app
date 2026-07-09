@@ -32,6 +32,11 @@ export function EntregaWizard() {
   const [tutorialStep, setTutorialStep] = useState(1);
   const [downloadStep, setDownloadStep] = useState(9);
   const [inputCode, setInputCode] = useState("");
+  const [codeWarning, setCodeWarning] = useState(false);
+  const codeWarnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [codeSent, setCodeSent] = useState(false);
+  const codeSentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifiedRef = useRef<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedPass, setCopiedPass] = useState(false);
@@ -41,6 +46,24 @@ export function EntregaWizard() {
   const progressRef = useRef(0);
   const subscriptionRef = useRef<any>(null);
   const playedPreparingSound = useRef(false);
+  const [notificationStatus, setNotificationStatus] = useState<NotificationPermission | "default">("default");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotificationStatus(Notification.permission);
+    }
+  }, []);
+
+  const requestNotifications = () => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      Notification.requestPermission().then(permission => {
+        setNotificationStatus(permission);
+        if (permission === "granted") {
+          new Notification("Notificaciones activadas", { body: "Te avisaremos cuando haya novedades con tu orden.", icon: "/logo.png", badge: "/logo.png" });
+        }
+      });
+    }
+  };
 
   // Escuchar cambios de estado principales para sonidos
   useEffect(() => {
@@ -50,6 +73,14 @@ export function EntregaWizard() {
       playErrorSound();
     }
   }, [state]);
+
+  // Sonido de alerta al llegar al paso 8 del tutorial (donde el código aparece
+  // en la consola) para reforzar que ingrese y envíe el código.
+  useEffect(() => {
+    if (state === "tutorial" && tutorialStep === 8) {
+      playNotificationSound();
+    }
+  }, [state, tutorialStep]);
 
   // Progreso simulado para waiting_setup (lento)
   useEffect(() => {
@@ -77,6 +108,10 @@ export function EntregaWizard() {
         if ((order?.status === "preparing" || currentProgress >= 85) && !playedPreparingSound.current) {
           playNotificationSound();
           playedPreparingSound.current = true;
+          if (!notifiedRef.current.has("85")) {
+             notifiedRef.current.add("85");
+             notifyClient("¡Estamos por terminar! ⏳", "El proceso va en un 85%, prepárate para recibir tus credenciales.");
+          }
         }
 
       }, 1000);
@@ -92,6 +127,8 @@ export function EntregaWizard() {
       if (subscriptionRef.current) {
         supabase?.removeChannel(subscriptionRef.current);
       }
+      if (codeWarnTimer.current) clearTimeout(codeWarnTimer.current);
+      if (codeSentTimer.current) clearTimeout(codeSentTimer.current);
     };
   }, [params.codigo]);
 
@@ -144,6 +181,16 @@ export function EntregaWizard() {
           const updatedOrder = payload.new as Order;
           setOrder(updatedOrder);
           determineNextState(updatedOrder);
+
+          // Avisar al cliente (notificación del navegador) cuando le enviamos
+          // las credenciales (status "ready"). Una sola vez por incidente.
+          if (updatedOrder.status === "ready" && !notifiedRef.current.has("ready")) {
+            notifiedRef.current.add("ready");
+            notifyClient(
+              "¡Tus credenciales están listas! 🎮",
+              "Ya puedes continuar con la instalación de tu juego en Alfeicon Games.",
+            );
+          }
         }
       )
       .subscribe();
@@ -218,26 +265,70 @@ export function EntregaWizard() {
     setState("support");
   };
 
+  // Maneja lo que escribe/pega el cliente: deja solo letras A–Z y, si intentó
+  // meter números o símbolos, muestra un aviso temporal.
+  const handleCodeInput = (raw: string) => {
+    const noAccents = raw.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    setInputCode(noAccents.toUpperCase().replace(/[^A-Z]/g, ""));
+
+    // ¿Escribió algo que no sea letra (ni espacio)? → avisar.
+    if (/[^A-Za-z\s]/.test(noAccents)) {
+      setCodeWarning(true);
+      if (codeWarnTimer.current) clearTimeout(codeWarnTimer.current);
+      codeWarnTimer.current = setTimeout(() => setCodeWarning(false), 2800);
+    }
+  };
+
+  // Muestra una notificación del navegador (si el cliente dio permiso). Sirve
+  // para avisarle cuando lleguen sus credenciales aunque tenga la pestaña de
+  // fondo o el teléfono bloqueado con la página abierta.
+  const notifyClient = (title: string, body: string) => {
+    try {
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        new Notification(title, { body, icon: "/logo.png", badge: "/logo.png" });
+      }
+    } catch { /* no-op */ }
+  };
+
   const submitCode = async () => {
-    if (!inputCode.trim() || !order || !supabase) return;
+    // Sanitiza de nuevo por seguridad: solo 8 letras mayúsculas A–Z.
+    const cleanCode = inputCode
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "");
+    if (cleanCode.length !== 8 || !order || !supabase) return;
     setIsSubmitting(true);
-    
+
     const { error } = await supabase
       .from("orders")
-      .update({ 
-        console_code: inputCode.trim().toUpperCase(),
+      .update({
+        console_code: cleanCode,
         status: "pending_setup"
       })
       .eq("id", order.id);
 
     setIsSubmitting(false);
-    
+
     if (!error) {
-      const updatedOrder = { ...order, console_code: inputCode.trim().toUpperCase(), status: "pending_setup" as const };
+      const updatedOrder = { ...order, console_code: cleanCode, status: "pending_setup" as const };
       setOrder(updatedOrder);
+
+      // Confirmación visible de "código enviado" + sonido de éxito.
+      setCodeSent(true);
+      playSuccessSound();
+      if (codeSentTimer.current) clearTimeout(codeSentTimer.current);
+      codeSentTimer.current = setTimeout(() => setCodeSent(false), 3500);
+
+      // Pedimos permiso de notificaciones AQUÍ (es un gesto del usuario) para
+      // poder avisarle cuando le enviemos las credenciales.
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().then(perm => setNotificationStatus(perm)).catch(() => {});
+      }
+
       setState("waiting_setup");
 
-      // Notificar por Telegram
+      // Notificar por Telegram (al admin): "tal orden envió código".
       fetch('/api/notify-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -262,6 +353,36 @@ export function EntregaWizard() {
     animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.4, ease: "easeOut" as const } },
     exit: { opacity: 0, y: -10, scale: 0.98, transition: { duration: 0.2 } }
   };
+
+  // Campo de código reutilizable (input filtrado A–Z + aviso). Se usa tanto en
+  // el paso 8 del tutorial como en la pantalla dedicada de ingreso de código.
+  const codeField = (
+    <div>
+      <input
+        type="text"
+        inputMode="text"
+        autoCapitalize="characters"
+        autoComplete="off"
+        spellCheck={false}
+        value={inputCode}
+        onChange={e => handleCodeInput(e.target.value)}
+        placeholder="Ej: ABCDEFGH"
+        className={`w-full rounded-2xl border bg-black/50 px-4 py-5 text-center text-2xl font-black tracking-[0.2em] text-white outline-none transition-all focus:bg-white/5 placeholder:text-white/20 uppercase ${
+          codeWarning ? "border-red-500/70" : "border-white/10 focus:border-yellow-500/50"
+        }`}
+        maxLength={8}
+      />
+      {codeWarning ? (
+        <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] font-bold text-red-400">
+          <AlertCircle size={13} /> Esos caracteres no son válidos. Solo letras de la A a la Z.
+        </p>
+      ) : (
+        <p className="mt-2 text-center text-[11px] text-gray-500">
+          Solo letras (A–Z). Sin números ni símbolos.
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div className="relative mx-auto flex h-[100dvh] w-full max-w-md flex-col overflow-y-auto overflow-x-hidden bg-[#090b0d] p-6 text-white">
@@ -331,8 +452,29 @@ export function EntregaWizard() {
         )}
       </AnimatePresence>
 
+      {/* CONFIRMACIÓN: código enviado */}
+      <AnimatePresence>
+        {codeSent && (
+          <motion.div
+            key="code-sent"
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed left-1/2 top-4 z-[90] flex -translate-x-1/2 items-center gap-2.5 rounded-full border border-green-500/30 bg-[#0c1510]/95 px-4 py-3 shadow-2xl shadow-green-500/20 backdrop-blur-xl"
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-500 text-black">
+              <CheckCircle2 size={16} strokeWidth={3} />
+            </span>
+            <div className="pr-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-green-400">Código enviado</p>
+              <p className="text-[11px] font-bold text-white">Estamos preparando tu pedido</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence mode="wait">
-        
+
         {/* LOADING */}
         {state === "loading" && (
           <motion.div key="loading" variants={variants} initial="initial" animate="animate" exit="exit" className="flex flex-col flex-1 items-center justify-center text-center">
@@ -428,38 +570,58 @@ export function EntregaWizard() {
               </button>
             </div>
 
-            <p className="mb-6 landscape:mb-2 text-center text-sm text-gray-300 leading-relaxed">
-              {tutorialStep === 8 
-                ? "Una vez llegues a esta pantalla, anota el código para enviarlo."
-                : "Sigue las indicaciones mostradas en tu consola."}
-            </p>
+            {tutorialStep === 8 ? (
+              // Paso 8: el código aparece en la consola → se ingresa y envía aquí mismo.
+              <>
+                <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/[0.08] px-4 py-3">
+                  <BellRing size={18} className="shrink-0 animate-pulse text-yellow-500" />
+                  <p className="text-left text-[13px] font-bold leading-snug text-white">
+                    Escribe aquí el código que aparece en tu consola y toca <span className="text-yellow-400">Enviar Código</span>.
+                  </p>
+                </div>
 
-            <div className="flex gap-3">
-              <button onClick={() => {
-                  if (tutorialStep === 1) setState("select_console");
-                  else setTutorialStep(prev => prev - 1);
-                }}
-                className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-transparent text-white transition-all hover:bg-white/5">
-                <ArrowLeft size={18} />
-              </button>
-              <button onClick={() => {
-                  if (tutorialStep === 8) {
-                    setState("input_code");
-                  }
-                  else setTutorialStep(prev => prev + 1);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 rounded-full bg-white py-3.5 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-gray-200">
-                {tutorialStep === 8 ? "Ingresar Código" : <>Continuar <ArrowRight size={16}/></>}
-              </button>
-            </div>
-            
-            {tutorialStep < 8 && (
-              <button 
-                onClick={() => setState("input_code")} 
-                className="mt-6 text-[10px] font-bold text-gray-500 hover:text-white uppercase tracking-widest transition-colors w-full text-center"
-              >
-                Ya conozco los pasos, saltar al código
-              </button>
+                <div className="mb-5">{codeField}</div>
+
+                <div className="flex gap-3">
+                  <button onClick={() => setTutorialStep(7)} disabled={isSubmitting}
+                    className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-transparent text-white transition-all hover:bg-white/5 disabled:opacity-50">
+                    <ArrowLeft size={18} />
+                  </button>
+                  <button onClick={submitCode} disabled={inputCode.length !== 8 || isSubmitting}
+                    className="flex-[2] flex items-center justify-center gap-2 rounded-full bg-yellow-500 py-3.5 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-yellow-400 disabled:opacity-50">
+                    {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <>Enviar Código <ArrowRight size={16}/></>}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mb-6 landscape:mb-2 text-center text-sm text-gray-300 leading-relaxed">
+                  Sigue las indicaciones mostradas en tu consola.
+                </p>
+
+                <div className="flex gap-3">
+                  <button onClick={() => {
+                      if (tutorialStep === 1) setState("select_console");
+                      else setTutorialStep(prev => prev - 1);
+                    }}
+                    className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-transparent text-white transition-all hover:bg-white/5">
+                    <ArrowLeft size={18} />
+                  </button>
+                  <button onClick={() => setTutorialStep(prev => prev + 1)}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-full bg-white py-3.5 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-gray-200">
+                    Continuar <ArrowRight size={16}/>
+                  </button>
+                </div>
+
+                {tutorialStep < 8 && (
+                  <button
+                    onClick={() => setState("input_code")}
+                    className="mt-6 text-[10px] font-bold text-gray-500 hover:text-white uppercase tracking-widest transition-colors w-full text-center"
+                  >
+                    Ya conozco los pasos, saltar al código
+                  </button>
+                )}
+              </>
             )}
           </motion.div>
         )}
@@ -476,16 +638,7 @@ export function EntregaWizard() {
               <p className="mt-2 text-sm text-gray-400">Escribe el código que aparece en la pantalla de tu consola.</p>
             </div>
 
-            <div className="mb-8">
-              <input 
-                type="text" 
-                value={inputCode} 
-                onChange={e => setInputCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
-                placeholder="Ej: ABCDEFGH" 
-                className="w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-5 text-center text-2xl font-black tracking-[0.2em] text-white outline-none transition-all focus:border-yellow-500/50 focus:bg-white/5 placeholder:text-white/20 uppercase"
-                maxLength={8}
-              />
-            </div>
+            <div className="mb-8">{codeField}</div>
 
             <div className="flex gap-3">
               <button onClick={() => { setState("tutorial"); setTutorialStep(8); }} disabled={isSubmitting}
@@ -562,6 +715,28 @@ export function EntregaWizard() {
               <p className="text-[9px] text-gray-300 leading-snug">
                 <strong className="text-white">NO cierres ni salgas</strong> de la pantalla del código en tu consola. Si lo haces, el código cambiará y habrá que empezar de nuevo.
               </p>
+            </div>
+
+            <div className="mb-4 w-full max-w-[280px]">
+              <p className="text-[10px] text-gray-400 mb-2 text-left leading-relaxed">
+                💡 <strong className="text-gray-300">Recomendación:</strong> Activa las notificaciones para que te avisemos en cuanto tus credenciales estén listas, incluso si sales de esta página o bloqueas el celular.
+              </p>
+              
+              {notificationStatus === "granted" ? (
+                <button 
+                  disabled
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-widest cursor-not-allowed"
+                >
+                  <CheckCircle2 size={16} /> Notificaciones activadas
+                </button>
+              ) : (
+                <button 
+                  onClick={requestNotifications}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500/10 border border-blue-500/30 px-4 py-3 text-[11px] font-bold text-blue-400 uppercase tracking-widest transition-colors hover:bg-blue-500/20"
+                >
+                  <BellRing size={16} /> Activar Notificaciones
+                </button>
+              )}
             </div>
 
             {/* Barra de progreso */}
