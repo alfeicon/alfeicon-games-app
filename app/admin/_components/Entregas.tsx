@@ -572,7 +572,7 @@ export function Entregas({ orders, games, packs, loading, setLoading, showNotice
                         </div>
                       </div>
 
-                      <label>
+                      <label className="block">
                         <span className={LABEL}>Cambiar estado manualmente</span>
                         <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as Order["status"] })}
                           className={INPUT + " appearance-none cursor-pointer"}>
