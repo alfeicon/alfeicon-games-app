@@ -726,92 +726,88 @@ export function EntregaWizard() {
         {/* 5. WAITING SETUP (Realtime) */}
         {state === "waiting_setup" && (
           <motion.div key="waiting" variants={variants} initial="initial" animate="animate" exit="exit" className="flex flex-col flex-1 items-center justify-center text-center">
-            <div className="relative mb-4">
+            <div className="relative mb-2">
                <div className="absolute inset-0 rounded-full bg-green-500/20 blur-xl animate-pulse"></div>
-               <div className="relative flex h-16 w-16 items-center justify-center rounded-3xl border border-green-500/20 bg-green-500/10 shadow-2xl overflow-hidden">
+               <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-green-500/20 bg-green-500/10 shadow-2xl overflow-hidden">
                  <motion.div
                    animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                  >
-                   <PackageCheck className="text-green-400" size={28} />
+                   <PackageCheck className="text-green-400" size={22} />
                  </motion.div>
                </div>
             </div>
             
-            <p className="text-[10px] font-black uppercase tracking-widest text-green-500 mb-0.5">Paso 3 de 3</p>
-            <h1 className="text-xl font-black uppercase tracking-widest mb-2">{order?.status === "preparing" ? "¡Casi listo!" : "En Preparación"}</h1>
+            <p className="text-[9px] font-black uppercase tracking-widest text-green-500 mb-0.5">Paso 3 de 3</p>
+            <h1 className="text-lg font-black uppercase tracking-widest mb-2">{order?.status === "preparing" ? "¡Casi listo!" : "En Preparación"}</h1>
 
             {order?.status === "preparing" || progress >= 85 ? (
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                className="mb-4 flex w-full max-w-[280px] items-center gap-2.5 rounded-2xl border border-yellow-500/40 bg-yellow-500/10 px-3.5 py-3">
-                <BellRing size={20} className="shrink-0 animate-pulse text-yellow-500" />
-                <p className="text-left text-[12px] font-bold leading-snug text-white">
-                  ¡Prepárate! Mantente atento a tu teléfono — en breve recibirás tus credenciales.
+                className="mb-3 flex w-full max-w-[280px] items-center gap-2 rounded-2xl border border-yellow-500/40 bg-yellow-500/10 px-3 py-2">
+                <BellRing size={16} className="shrink-0 animate-pulse text-yellow-500" />
+                <p className="text-left text-[11px] font-bold leading-tight text-white">
+                  ¡Prepárate! En breve recibirás tus credenciales.
                 </p>
               </motion.div>
             ) : (
-              <p className="text-xs text-gray-400 mb-4 max-w-[280px]">
-                Estamos configurando todo en nuestros servidores. Esta pantalla se actualizará sola.
+              <p className="text-[11px] text-gray-400 mb-3 max-w-[280px] leading-tight">
+                Estamos configurando todo. Esta pantalla se actualizará sola.
               </p>
             )}
 
-            <div className="w-full max-w-[280px] flex flex-col gap-2 mb-4">
+            <div className="w-full max-w-[280px] grid grid-cols-2 gap-2 mb-3">
               {/* Card del juego */}
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-left flex items-center gap-3 shadow-lg">
-                <div className="h-8 w-8 shrink-0 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-                  <Gamepad2 className="text-gray-400" size={14} />
+              <div className="rounded-xl border border-white/10 bg-white/5 p-2 text-left flex flex-col items-start gap-1 shadow-lg overflow-hidden">
+                <div className="flex items-center gap-1.5 w-full">
+                  <Gamepad2 className="text-gray-400 shrink-0" size={12} />
+                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-500 truncate">Juego</p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Juego a entregar</p>
-                  <p className="font-bold text-white text-xs truncate">{order?.game_name}</p>
-                </div>
+                <p className="font-bold text-white text-[11px] truncate w-full">{order?.game_name}</p>
               </div>
 
               {/* Card del código */}
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-left flex items-center gap-3 shadow-lg">
-                <div className="h-8 w-8 shrink-0 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-                  <KeyRound className="text-gray-400" size={14} />
+              <div className="rounded-xl border border-white/10 bg-white/5 p-2 text-left flex flex-col items-start gap-1 shadow-lg overflow-hidden">
+                <div className="flex items-center gap-1.5 w-full">
+                  <KeyRound className="text-gray-400 shrink-0" size={12} />
+                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-500 truncate">Código</p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Código Enviado</p>
-                  <p className="font-mono font-bold text-white text-xs truncate">{order?.console_code || inputCode}</p>
-                </div>
+                <p className="font-mono font-bold text-white text-[11px] truncate w-full">{order?.console_code || inputCode}</p>
               </div>
             </div>
 
-            <div className="mb-4 w-full max-w-[280px] rounded-xl border border-red-500/20 bg-red-500/10 p-2.5 text-left">
-              <p className="text-[10px] font-bold text-red-400 flex items-center gap-1.5 mb-1"><AlertCircle size={12} /> MUY IMPORTANTE</p>
-              <p className="text-[9px] text-gray-300 leading-snug">
-                <strong className="text-white">NO cierres ni salgas</strong> de la pantalla del código en tu consola. Si lo haces, el código cambiará y habrá que empezar de nuevo.
+            <div className="mb-3 w-full max-w-[280px] rounded-xl border border-red-500/20 bg-red-500/10 p-2 text-left">
+              <p className="text-[9px] font-bold text-red-400 flex items-center gap-1.5 mb-0.5"><AlertCircle size={10} /> IMPORTANTE</p>
+              <p className="text-[9px] text-gray-300 leading-tight">
+                <strong className="text-white">NO salgas</strong> de la pantalla del código en tu consola. Si lo haces, el código cambiará.
               </p>
             </div>
 
-            <div className="mb-4 w-full max-w-[280px]">
-              <p className="text-[10px] text-gray-400 mb-2 text-left leading-relaxed">
-                💡 <strong className="text-gray-300">Recomendación:</strong> Activa las notificaciones para que te avisemos en cuanto tus credenciales estén listas, incluso si sales de esta página o bloqueas el celular.
+            <div className="mb-3 w-full max-w-[280px]">
+              <p className="text-[9px] text-gray-400 mb-1.5 text-left leading-tight">
+                💡 <strong className="text-gray-300">Recomendación:</strong> Activa las notificaciones para avisarte cuando esté listo, incluso si bloqueas el celular.
               </p>
               
               {notificationStatus === "granted" ? (
                 <button 
                   disabled
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-widest cursor-not-allowed"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest cursor-not-allowed"
                 >
-                  <CheckCircle2 size={16} /> Notificaciones activadas
+                  <CheckCircle2 size={14} /> Notificaciones activadas
                 </button>
               ) : (
                 <button 
                   onClick={requestNotifications}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500/10 border border-blue-500/30 px-4 py-3 text-[11px] font-bold text-blue-400 uppercase tracking-widest transition-colors hover:bg-blue-500/20"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500/10 border border-blue-500/30 px-3 py-2 text-[10px] font-bold text-blue-400 uppercase tracking-widest transition-colors hover:bg-blue-500/20"
                 >
-                  <BellRing size={16} /> Activar Notificaciones
+                  <BellRing size={14} /> Activar Notificaciones
                 </button>
               )}
             </div>
 
             {/* Barra de progreso */}
-            <div className="w-full max-w-[280px] mx-auto mb-2">
-              <div className="flex justify-between items-end mb-1.5 px-1">
+            <div className="w-full max-w-[280px] mx-auto mb-1">
+              <div className="flex justify-between items-end mb-1 px-1">
                 <span className="text-[9px] font-black uppercase tracking-widest text-green-500">Progreso</span>
                 <span className="text-[10px] font-mono font-bold text-green-400">{progress}%</span>
               </div>
@@ -826,7 +822,7 @@ export function EntregaWizard() {
               <p className="text-[8px] text-gray-500 uppercase tracking-widest text-center">Tiempo estimado: 5 a 120 min</p>
             </div>
 
-            <button onClick={() => setState("input_code")} className="mt-2 text-[9px] text-gray-500 hover:text-white uppercase tracking-widest underline decoration-gray-700 underline-offset-4 transition-colors">
+            <button onClick={() => setState("input_code")} className="mt-1 text-[8px] text-gray-500 hover:text-white uppercase tracking-widest underline decoration-gray-700 underline-offset-4 transition-colors">
               ¿Te equivocaste de código? Volver
             </button>
           </motion.div>
