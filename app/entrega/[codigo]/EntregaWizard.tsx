@@ -266,9 +266,10 @@ export function EntregaWizard() {
     if (["loading", "select_console", "tutorial", "input_code"].includes(state)) return; // No hacer polling si aún no envía el código
     if (["credentials_ready", "tutorial_download", "ready", "support"].includes(state)) return; // No hacer polling si ya terminó
 
-    if (order?.id) {
+    if (order?.id && supabase) {
       pollInterval = setInterval(async () => {
         try {
+          if (!supabase) return;
           const { data, error } = await supabase.from("orders").select("*").eq("id", order.id).maybeSingle();
           if (data && !error) {
             // Si el estado o los datos clave cambiaron, actualizamos.
