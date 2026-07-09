@@ -1045,6 +1045,13 @@ export function EntregaWizard() {
                     Si no te sale este paso no te preocupes, solo dale a continuar.
                   </p>
                 </div>
+              ) : downloadStep === 18 ? (
+                <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-3">
+                  <p className="text-[11px] text-yellow-500 font-bold uppercase tracking-wider mb-1">¡Casi listo!</p>
+                  <p className="text-sm text-gray-300 leading-relaxed">
+                    Ahora solo queda esperar a que se descargue el juego. <b>Continúa con el proceso</b> para ver las recomendaciones y la boleta (no es necesario esperar a que termine la descarga para aceptar).
+                  </p>
+                </div>
               ) : (
                 <p className="text-sm text-gray-300 leading-relaxed">
                   Sigue las indicaciones mostradas en tu consola para descargar el juego.
@@ -1090,7 +1097,7 @@ export function EntregaWizard() {
                   else setDownloadStep(prev => prev + 1);
                 }}
                 className={`flex-1 flex items-center justify-center gap-2 rounded-full py-3.5 text-xs font-black uppercase tracking-widest transition-all ${downloadStep === 18 ? "bg-green-500 text-black hover:bg-green-400" : "bg-white text-black hover:bg-gray-200"}`}>
-                {downloadStep === 18 ? <>Confirmar que quedó listo <Check size={16}/></> : <>Continuar <ArrowRight size={16}/></>}
+                {downloadStep === 18 ? <>Confirmar que empezó a descargar <Check size={16}/></> : <>Continuar <ArrowRight size={16}/></>}
               </button>
             </div>
             
