@@ -297,22 +297,12 @@ function StoreApp({ initial }: { initial: StoreInitialData }) {
     goToWhatsApp(url, event);
 
     // Registrar "Posible Entrega" de forma silenciosa
-    const newOrder = {
+    supabase?.from('orders').insert({
       game_name: item.titulo,
       status: 'draft',
       short_code: code,
-    };
-    supabase?.from('orders').insert(newOrder).then(({ error }) => {
-      if (error) {
-        console.error("Error creating draft order", error);
-      } else {
-        // Notificar por Telegram
-        fetch('/api/notify-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'CREATED', order: newOrder })
-        }).catch(err => console.error("Error sending notification", err));
-      }
+    }).then(({ error }) => {
+      if (error) console.error("Error creating draft order", error);
     });
   }, [goToWhatsApp, format, currency.code, notaInternacional]);
 
@@ -324,22 +314,12 @@ function StoreApp({ initial }: { initial: StoreInitialData }) {
     goToWhatsApp(url, event);
 
     // Registrar "Posible Entrega" de forma silenciosa
-    const newOrder = {
+    supabase?.from('orders').insert({
       game_name: "Nintendo Switch Online 12 Meses",
       status: 'draft',
       short_code: code,
-    };
-    supabase?.from('orders').insert(newOrder).then(({ error }) => {
-      if (error) {
-        console.error("Error creating draft order", error);
-      } else {
-        // Notificar por Telegram
-        fetch('/api/notify-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'CREATED', order: newOrder })
-        }).catch(err => console.error("Error sending notification", err));
-      }
+    }).then(({ error }) => {
+      if (error) console.error("Error creating draft order", error);
     });
   }, [appSettings.nintendoOnlinePrice, goToWhatsApp, format, currency.code, notaInternacional]);
 
