@@ -49,19 +49,44 @@ export function EntregaWizard() {
   const [notificationStatus, setNotificationStatus] = useState<NotificationPermission | "default">("default");
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      setNotificationStatus(Notification.permission);
+    try {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        setNotificationStatus(Notification.permission);
+      }
+    } catch (e) {
+      console.warn("Notifications API not fully supported:", e);
     }
   }, []);
 
   const requestNotifications = () => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      Notification.requestPermission().then(permission => {
-        setNotificationStatus(permission);
-        if (permission === "granted") {
-          new Notification("Notificaciones activadas", { body: "Te avisaremos cuando haya novedades con tu orden.", icon: "/logo.png", badge: "/logo.png" });
+    try {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        const handlePermission = (permission: NotificationPermission) => {
+          setNotificationStatus(permission);
+          if (permission === "granted") {
+            try {
+              new Notification("Notificaciones activadas", { 
+                body: "Te avisaremos cuando haya novedades con tu orden.", 
+                icon: "/logo.png", 
+                badge: "/logo.png" 
+              });
+            } catch (e) {
+              console.warn("Could not show notification:", e);
+            }
+          } else if (permission === "denied") {
+            alert("Las notificaciones están bloqueadas. Debes activarlas desde la configuración de tu navegador.");
+          }
+        };
+
+        const promise = Notification.requestPermission(handlePermission);
+        if (promise && typeof promise.then === "function") {
+          promise.then(handlePermission).catch(() => {});
         }
-      });
+      } else {
+        alert("Tu navegador no soporta notificaciones web.");
+      }
+    } catch (e) {
+      console.warn("Error requesting notifications:", e);
     }
   };
 
@@ -322,8 +347,15 @@ export function EntregaWizard() {
 
       // Pedimos permiso de notificaciones AQUÍ (es un gesto del usuario) para
       // poder avisarle cuando le enviemos las credenciales.
-      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission().then(perm => setNotificationStatus(perm)).catch(() => {});
+      try {
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+          const promise = Notification.requestPermission((perm) => setNotificationStatus(perm));
+          if (promise && typeof promise.then === "function") {
+            promise.then(perm => setNotificationStatus(perm)).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn("Error requesting notifications silently:", e);
       }
 
       setState("waiting_setup");
