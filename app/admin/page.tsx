@@ -591,7 +591,7 @@ export default function AdminPage() {
               showNotice={showNotice} onReload={loadOrders} />
           )}
           {section === "ventas" && (
-            <Ventas sales={sales} adSpend={adSpend}
+            <Ventas sales={sales} adSpend={adSpend} providers={providers}
               salesTableExists={salesTableExists}
               salesError={salesError}
               loading={loading} setLoading={setLoading}

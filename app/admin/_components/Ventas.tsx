@@ -2,11 +2,12 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import {
-  Banknote, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Plus, Receipt, RefreshCw, Trash2, TrendingDown,
+  Banknote, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Pencil, Plus, Receipt, RefreshCw, Trash2, TrendingDown,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
-import type { AdSpend, Sale } from "../_types";
+import type { AdSpend, Provider, Sale } from "../_types";
 import { fmt, fmtDate, fmtTime } from "../_helpers";
+import { EditSaleModal } from "./EditSaleModal";
 
 const LABEL = "mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-600";
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none";
@@ -17,6 +18,7 @@ const AD_PLATFORMS = ["Instagram", "Facebook", "TikTok", "Google", "Twitter / X"
 type Props = {
   sales: Sale[];
   adSpend: AdSpend[];
+  providers: Provider[];
   salesTableExists: boolean | null;
   salesError: string | null;
   loading: boolean;
@@ -27,9 +29,10 @@ type Props = {
 
 type Tab = "ventas" | "publicidad";
 
-export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, setLoading, showNotice, onReload }: Props) {
+export function Ventas({ sales, adSpend, providers, salesTableExists, salesError, loading, setLoading, showNotice, onReload }: Props) {
   const [tab, setTab] = useState<Tab>("ventas");
   const [showAddAd, setShowAddAd] = useState(false);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
 
   /* Ad spend form */
   const [adForm, setAdForm] = useState({ platform: AD_PLATFORMS[0], amount: "", description: "", date: new Date().toISOString().slice(0, 10) });
@@ -193,10 +196,16 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
                             {sale.provider && <p className="truncate text-[10px] text-gray-600">Proveedor: {sale.provider}</p>}
                             {sale.notes && <p className="truncate text-[10px] text-gray-600">{sale.notes}</p>}
                           </div>
-                          <button onClick={() => deleteSale(sale.id)} disabled={loading}
-                            className="shrink-0 rounded p-1 text-gray-700 hover:text-red-400 transition-colors disabled:opacity-40">
-                            <Trash2 size={13} />
-                          </button>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <button onClick={() => setEditingSale(sale)} disabled={loading}
+                              className="rounded p-1 text-gray-700 hover:text-white transition-colors disabled:opacity-40">
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => deleteSale(sale.id)} disabled={loading}
+                              className="rounded p-1 text-gray-700 hover:text-red-400 transition-colors disabled:opacity-40">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         </div>
                         <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5">
                           <div>
@@ -237,9 +246,9 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
 
                 {/* Desktop: table */}
                 <div className="brand-shell hidden overflow-hidden rounded-2xl sm:block">
-                  <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-x-3 border-b border-white/5 px-4 py-2.5">
-                    {["Artículo", "Tipo", "Venta", "Costo", "Ganancia", "Fecha", ""].map(h => (
-                      <p key={h} className="text-[9px] font-black uppercase tracking-widest text-gray-600">{h}</p>
+                  <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto_auto] gap-x-3 border-b border-white/5 px-4 py-2.5">
+                    {["Artículo", "Tipo", "Venta", "Costo", "Ganancia", "Fecha", "", ""].map((h, i) => (
+                      <p key={h || i} className="text-[9px] font-black uppercase tracking-widest text-gray-600">{h}</p>
                     ))}
                   </div>
                   <div className="divide-y divide-white/5">
@@ -247,7 +256,7 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
                       const gain = sale.price_sold - (sale.cost_price ?? 0);
                       const hasCost = (sale.cost_price ?? 0) > 0;
                       return (
-                        <div key={sale.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-x-3 px-4 py-3">
+                        <div key={sale.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto_auto] items-center gap-x-3 px-4 py-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold">{sale.item_title}</p>
                             {sale.provider && <p className="truncate text-[10px] text-gray-600">Proveedor: {sale.provider}</p>}
@@ -274,6 +283,10 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
                             <p className="text-[10px] font-bold text-gray-400">{fmtDate(sale.created_at)}</p>
                             <p className="text-[9px] text-gray-600">{fmtTime(sale.created_at)}</p>
                           </div>
+                          <button onClick={() => setEditingSale(sale)} disabled={loading}
+                            className="rounded p-1 text-gray-700 hover:text-white transition-colors disabled:opacity-40">
+                            <Pencil size={12} />
+                          </button>
                           <button onClick={() => deleteSale(sale.id)} disabled={loading}
                             className="rounded p-1 text-gray-700 hover:text-red-400 transition-colors disabled:opacity-40">
                             <Trash2 size={12} />
@@ -405,6 +418,14 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
             )}
           </div>
         </div>
+      )}
+
+      {editingSale && (
+        <EditSaleModal sale={editingSale} providers={providers}
+          loading={loading} setLoading={setLoading}
+          showNotice={showNotice}
+          onClose={() => setEditingSale(null)}
+          onReload={onReload} />
       )}
     </div>
   );
