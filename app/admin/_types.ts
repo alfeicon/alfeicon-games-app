@@ -24,6 +24,7 @@ export type Sale = {
   payment_method: string;
   provider: string | null;
   notes: string | null;
+  partner_pct: number | null;
   created_at: string;
 };
 
@@ -45,6 +46,7 @@ export type AdSpend = {
 export type SettingsState = {
   nintendoOnlinePrice: string;
   packPriceIncrease: string;
+  partnerSplitPct: string;
 };
 
 export type AdminNews = {

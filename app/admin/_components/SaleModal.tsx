@@ -1,10 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Gamepad2, Gift, Loader2, Search, X } from "lucide-react";
+import { Check, Gamepad2, Gift, Handshake, Loader2, Search, X } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
-import type { AdminGame, AdminPack, Provider } from "../_types";
-import { fmt, toPrice } from "../_helpers";
+import type { AdminGame, AdminPack, Provider, SettingsState } from "../_types";
+import { fmt, toPct, toPrice } from "../_helpers";
 
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none";
 const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Débito", "Crédito", "Otro"];
@@ -13,6 +13,7 @@ type Props = {
   games: AdminGame[];
   packs: AdminPack[];
   providers: Provider[];
+  settings: SettingsState;
   loading: boolean;
   setLoading: (v: boolean) => void;
   showNotice: (type: "success" | "error", text: string) => void;
@@ -22,7 +23,7 @@ type Props = {
 
 type ItemType = "game" | "pack";
 
-export function SaleModal({ games, packs, providers, loading, setLoading, showNotice, onClose, onReload }: Props) {
+export function SaleModal({ games, packs, providers, settings, loading, setLoading, showNotice, onClose, onReload }: Props) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState<ItemType>("game");
   const [selected, setSelected] = useState<{ id: string; title: string; price: number; cost_price: number } | null>(null);
@@ -31,6 +32,8 @@ export function SaleModal({ games, packs, providers, loading, setLoading, showNo
   const [method, setMethod] = useState(PAYMENT_METHODS[0]);
   const [provider, setProvider] = useState("");
   const [notes, setNotes] = useState("");
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [partnerPct, setPartnerPct] = useState(settings.partnerSplitPct || "40");
   const [saved, setSaved] = useState<{ title: string; price: number } | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const activeProviders = providers.filter(p => p.is_active);
@@ -69,6 +72,7 @@ export function SaleModal({ games, packs, providers, loading, setLoading, showNo
       price_sold: finalPrice, cost_price: finalCost,
       payment_method: method, provider: provider || null,
       notes: notes.trim() || null,
+      partner_pct: splitEnabled ? toPct(partnerPct) : null,
     });
     if (!error && type === "pack") {
       await supabase.from("pack_items").delete().eq("pack_id", selected.id);
@@ -195,6 +199,39 @@ export function SaleModal({ games, packs, providers, loading, setLoading, showNo
                   </span>
                 </div>
               )}
+
+              {/* Partner split */}
+              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-xs font-bold text-gray-300">
+                    <input type="checkbox" checked={splitEnabled} onChange={e => setSplitEnabled(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded accent-pink-500" />
+                    <Handshake size={13} className="text-pink-400" /> Dividir ganancia con socio
+                  </label>
+                  {splitEnabled && (
+                    <div className="flex items-center gap-1">
+                      <input value={partnerPct} onChange={e => setPartnerPct(e.target.value.replace(/[^0-9]/g, ""))}
+                        inputMode="numeric"
+                        className="w-14 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-right text-sm font-black text-white outline-none focus:border-pink-500" />
+                      <span className="text-xs font-black text-gray-500">%</span>
+                    </div>
+                  )}
+                </div>
+                {splitEnabled && toPrice(price) > 0 && (
+                  <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2 text-xs">
+                    <span className="text-gray-500">
+                      Socio ({toPct(partnerPct)}%): <span className="font-black text-pink-400">
+                        ${fmt(Math.round((toPrice(price) - toPrice(cost)) * toPct(partnerPct) / 100))}
+                      </span>
+                    </span>
+                    <span className="text-gray-500">
+                      Tú ({100 - toPct(partnerPct)}%): <span className="font-black text-green-400">
+                        ${fmt(Math.round((toPrice(price) - toPrice(cost)) * (100 - toPct(partnerPct)) / 100))}
+                      </span>
+                    </span>
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <label>

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
+import { PARTNER_PCT_KEY } from "./_helpers";
 import type { AdminGame, AdminPack, AdminNews, AdSpend, AdminSection, Provider, Sale, SettingsState } from "./_types";
 import { Inicio } from "./_components/Inicio";
 import { JuegosCatalog } from "./_components/JuegosCatalog";
@@ -22,6 +23,7 @@ import type { Order } from "./_types";
 const defaultSettings: SettingsState = {
   nintendoOnlinePrice: String(DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
   packPriceIncrease: String(DEFAULT_APP_SETTINGS.packPriceIncrease),
+  partnerSplitPct: "40",
 };
 
 const NAV_ITEMS: { id: AdminSection; label: string; Icon: React.ElementType; accent: string }[] = [
@@ -154,7 +156,7 @@ export default function AdminPage() {
     setSalesError(null);
     const { data, error } = await supabase
       .from("sales")
-      .select("id,item_type,item_id,item_title,price_sold,cost_price,payment_method,provider,notes,created_at")
+      .select("id,item_type,item_id,item_title,price_sold,cost_price,payment_method,provider,notes,partner_pct,created_at")
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) {
@@ -196,12 +198,13 @@ export default function AdminPage() {
   const loadSettings = useCallback(async () => {
     if (!supabase) return;
     const { data, error } = await supabase
-      .from("app_settings").select("key,value").in("key", Object.values(SETTING_KEYS));
+      .from("app_settings").select("key,value").in("key", [...Object.values(SETTING_KEYS), PARTNER_PCT_KEY]);
     if (error) { setSettings(defaultSettings); return; }
     const rows = new Map((data || []).map(r => [r.key, r.value]));
     setSettings({
       nintendoOnlinePrice: String(rows.get(SETTING_KEYS.nintendoOnlinePrice) || DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
       packPriceIncrease: String(rows.get(SETTING_KEYS.packPriceIncrease) || DEFAULT_APP_SETTINGS.packPriceIncrease),
+      partnerSplitPct: String(rows.get(PARTNER_PCT_KEY) ?? defaultSettings.partnerSplitPct),
     });
   }, []);
 
@@ -616,7 +619,7 @@ export default function AdminPage() {
       </div>
 
       {showSaleModal && (
-        <SaleModal games={games} packs={packs} providers={providers}
+        <SaleModal games={games} packs={packs} providers={providers} settings={settings}
           loading={loading} setLoading={setLoading}
           showNotice={showNotice}
           onClose={() => setShowSaleModal(false)}

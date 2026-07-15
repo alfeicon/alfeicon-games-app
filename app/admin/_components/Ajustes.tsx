@@ -1,11 +1,11 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Loader2, Plus, Save, Settings, Trash2, Truck } from "lucide-react";
+import { Handshake, Loader2, Plus, Save, Settings, Trash2, Truck } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { SETTING_KEYS } from "@/lib/settings";
 import type { Provider, SettingsState } from "../_types";
-import { toPrice } from "../_helpers";
+import { PARTNER_PCT_KEY, toPct, toPrice } from "../_helpers";
 
 const LABEL = "mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-600";
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none focus:border-white/40";
@@ -35,6 +35,7 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
       await Promise.all([
         saveSetting(SETTING_KEYS.nintendoOnlinePrice, toPrice(form.nintendoOnlinePrice)),
         saveSetting(SETTING_KEYS.packPriceIncrease, toPrice(form.packPriceIncrease)),
+        saveSetting(PARTNER_PCT_KEY, toPct(form.partnerSplitPct)),
       ]);
       showNotice("success", "Configuración guardada.");
     } catch {
@@ -112,6 +113,28 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
                 onChange={e => setForm({ ...form, packPriceIncrease: e.target.value })}
                 inputMode="numeric" className={INPUT} />
               <p className="mt-1 text-[10px] text-gray-700">Sobre el precio base de cada juego</p>
+            </label>
+          </div>
+
+          <div className="border-t border-white/5 pt-4">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-pink-500/12">
+                <Handshake size={14} className="text-pink-400" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-widest">Reparto con socio</h2>
+                <p className="text-[10px] text-gray-600">% del socio sugerido al registrar una venta nueva</p>
+              </div>
+            </div>
+            <label className="block max-w-[10rem]">
+              <span className={LABEL}>Porcentaje del socio</span>
+              <div className="relative">
+                <input value={form.partnerSplitPct}
+                  onChange={e => setForm({ ...form, partnerSplitPct: e.target.value })}
+                  inputMode="numeric" className={INPUT + " pr-8"} />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-gray-500">%</span>
+              </div>
+              <p className="mt-1 text-[10px] text-gray-700">Se puede ajustar en cada venta individual</p>
             </label>
           </div>
 

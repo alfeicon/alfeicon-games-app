@@ -1,7 +1,10 @@
 import { DATA_IMAGENES } from "@/app/data/imagenes";
 
+export const PARTNER_PCT_KEY = "partner_split_pct";
+
 export const fmt = (n: number) => n.toLocaleString("es-CL");
 export const toPrice = (v: string) => Number(v.replace(/[^0-9]/g, "")) || 0;
+export const toPct = (v: string) => Math.min(100, Math.max(0, Number(v.replace(/[^0-9]/g, "")) || 0));
 export const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
 export const fmtTime = (iso: string) =>

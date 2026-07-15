@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import {
-  Banknote, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Loader2, Megaphone, Plus, Receipt, RefreshCw, Trash2, TrendingDown,
+  Banknote, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Plus, Receipt, RefreshCw, Trash2, TrendingDown,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import type { AdSpend, Sale } from "../_types";
@@ -47,6 +47,13 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
   const totalRevenue = thisMonth.reduce((a, s) => a + s.price_sold, 0);
   const totalCost = thisMonth.reduce((a, s) => a + (s.cost_price ?? 0), 0);
   const grossProfit = totalRevenue - totalCost;
+
+  const partnerProfit = thisMonth.reduce((a, s) => {
+    const gain = s.price_sold - (s.cost_price ?? 0);
+    const pct = s.partner_pct ?? 0;
+    return a + gain * pct / 100;
+  }, 0);
+  const myProfit = grossProfit - partnerProfit;
 
   const thisMonthAdSpend = useMemo(() => {
     const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -143,12 +150,14 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
       {tab === "ventas" && (
         <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
           {/* Mini metrics */}
-          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6">
             {[
               { label: "Ventas este mes", value: thisMonth.length, icon: <Receipt size={14} className="text-blue-400" />, color: "" },
               { label: "Ingresos", value: `$${fmt(totalRevenue)}`, icon: <DollarSign size={14} className="text-green-400" />, color: "text-green-400" },
               { label: "Costo total", value: `$${fmt(totalCost)}`, icon: <Banknote size={14} className="text-orange-400" />, color: "text-orange-400" },
               { label: "Ganancia bruta", value: `$${fmt(grossProfit)}`, icon: <TrendingDown size={14} className={grossProfit >= 0 ? "text-green-400" : "text-red-400"} />, color: grossProfit >= 0 ? "text-green-400" : "text-red-400" },
+              { label: "Tu ganancia", value: `$${fmt(Math.round(myProfit))}`, icon: <DollarSign size={14} className="text-green-400" />, color: "text-green-400" },
+              { label: "Ganancia socio", value: `$${fmt(Math.round(partnerProfit))}`, icon: <Handshake size={14} className="text-pink-400" />, color: "text-pink-400" },
             ].map(({ label, value, icon, color }) => (
               <div key={label} className="brand-glass rounded-2xl p-4">
                 <div className="mb-2">{icon}</div>
@@ -209,6 +218,18 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
                             <p className="text-[9px] text-gray-600">{fmtTime(sale.created_at)}</p>
                           </div>
                         </div>
+                        {hasCost && sale.partner_pct != null && (
+                          <div className="mt-2 flex items-center gap-1.5 border-t border-white/5 pt-2 text-[10px]">
+                            <Handshake size={10} className="text-pink-400" />
+                            <span className="text-gray-500">
+                              Socio {sale.partner_pct}%: <span className="font-black text-pink-400">${fmt(Math.round(gain * sale.partner_pct / 100))}</span>
+                            </span>
+                            <span className="text-gray-700">·</span>
+                            <span className="text-gray-500">
+                              Tú: <span className="font-black text-green-400">${fmt(Math.round(gain * (100 - sale.partner_pct) / 100))}</span>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -238,9 +259,17 @@ export function Ventas({ sales, adSpend, salesTableExists, salesError, loading, 
                           </div>
                           <p className="text-sm font-black text-green-400">${fmt(sale.price_sold)}</p>
                           <p className="text-sm text-orange-400/80">{hasCost ? `$${fmt(sale.cost_price)}` : <span className="text-gray-700">—</span>}</p>
-                          <p className={`text-sm font-black ${!hasCost ? "text-gray-700" : gain >= 0 ? "text-green-400" : "text-red-400"}`}>
-                            {hasCost ? `$${fmt(gain)}` : "—"}
-                          </p>
+                          <div>
+                            <p className={`text-sm font-black ${!hasCost ? "text-gray-700" : gain >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {hasCost ? `$${fmt(gain)}` : "—"}
+                            </p>
+                            {hasCost && sale.partner_pct != null && (
+                              <p className="mt-0.5 flex items-center gap-1 text-[9px] text-gray-600">
+                                <Handshake size={9} className="text-pink-400" />
+                                Socio {sale.partner_pct}%: ${fmt(Math.round(gain * sale.partner_pct / 100))}
+                              </p>
+                            )}
+                          </div>
                           <div>
                             <p className="text-[10px] font-bold text-gray-400">{fmtDate(sale.created_at)}</p>
                             <p className="text-[9px] text-gray-600">{fmtTime(sale.created_at)}</p>
