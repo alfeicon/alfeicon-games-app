@@ -12,6 +12,7 @@ const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Débito", "Crédito", "Ot
 type Props = {
   sale: Sale;
   providers: Provider[];
+  partnerName: string;
   loading: boolean;
   setLoading: (v: boolean) => void;
   showNotice: (type: "success" | "error", text: string) => void;
@@ -19,7 +20,7 @@ type Props = {
   onReload: () => Promise<void>;
 };
 
-export function EditSaleModal({ sale, providers, loading, setLoading, showNotice, onClose, onReload }: Props) {
+export function EditSaleModal({ sale, providers, partnerName, loading, setLoading, showNotice, onClose, onReload }: Props) {
   const [price, setPrice] = useState(String(sale.price_sold));
   const [cost, setCost] = useState(sale.cost_price ? String(sale.cost_price) : "");
   const [method, setMethod] = useState(sale.payment_method || PAYMENT_METHODS[0]);
@@ -102,7 +103,7 @@ export function EditSaleModal({ sale, providers, loading, setLoading, showNotice
               <label className="flex items-center gap-2 text-xs font-bold text-gray-300">
                 <input type="checkbox" checked={splitEnabled} onChange={e => setSplitEnabled(e.target.checked)}
                   className="h-3.5 w-3.5 rounded accent-pink-500" />
-                <Handshake size={13} className="text-pink-400" /> Dividir ganancia con socio
+                <Handshake size={13} className="text-pink-400" /> Dividir ganancia con {partnerName}
               </label>
               {splitEnabled && (
                 <div className="flex items-center gap-1">
@@ -116,7 +117,7 @@ export function EditSaleModal({ sale, providers, loading, setLoading, showNotice
             {splitEnabled && toPrice(price) > 0 && (
               <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2 text-xs">
                 <span className="text-gray-500">
-                  Socio ({toPct(partnerPct)}%): <span className="font-black text-pink-400">
+                  {partnerName} ({toPct(partnerPct)}%): <span className="font-black text-pink-400">
                     ${fmt(Math.round(gain * toPct(partnerPct) / 100))}
                   </span>
                 </span>

@@ -4022,3 +4022,48 @@ html {
 .animate-slide-up {
   animation: slideUp 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+/* ── Admin dashboard (Inicio) motion ──────────────────────────────────── */
+@keyframes dashCardIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.965); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.dash-card-in {
+  animation: dashCardIn 680ms var(--ease-standard) both;
+}
+
+@keyframes dashValueIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dash-value-in {
+  animation: dashValueIn 560ms var(--ease-standard) both;
+}
+
+@keyframes dashBarGrow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.dash-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: dashBarGrow 720ms var(--ease-standard) both;
+  transition: filter var(--motion-base) var(--ease-standard), opacity var(--motion-base) var(--ease-standard);
+}
+.dash-bar:hover {
+  filter: brightness(1.25);
+}
+.dash-bar-label {
+  animation: dashValueIn 500ms var(--ease-standard) both;
+}
+
+.dash-donut-arc {
+  transition: stroke-dasharray 900ms var(--ease-standard), filter var(--motion-base) var(--ease-standard);
+}
+.dash-donut-arc:hover {
+  filter: brightness(1.2);
+}
+
+.dash-progress-fill {
+  transition: width 900ms var(--ease-standard);
+}

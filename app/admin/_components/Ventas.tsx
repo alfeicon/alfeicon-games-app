@@ -5,7 +5,7 @@ import {
   Banknote, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Pencil, Plus, Receipt, RefreshCw, Trash2, TrendingDown,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
-import type { AdSpend, Provider, Sale } from "../_types";
+import type { AdSpend, Provider, Sale, SettingsState } from "../_types";
 import { fmt, fmtDate, fmtTime } from "../_helpers";
 import { EditSaleModal } from "./EditSaleModal";
 
@@ -19,6 +19,7 @@ type Props = {
   sales: Sale[];
   adSpend: AdSpend[];
   providers: Provider[];
+  settings: SettingsState;
   salesTableExists: boolean | null;
   salesError: string | null;
   loading: boolean;
@@ -29,7 +30,8 @@ type Props = {
 
 type Tab = "ventas" | "publicidad";
 
-export function Ventas({ sales, adSpend, providers, salesTableExists, salesError, loading, setLoading, showNotice, onReload }: Props) {
+export function Ventas({ sales, adSpend, providers, settings, salesTableExists, salesError, loading, setLoading, showNotice, onReload }: Props) {
+  const partnerName = settings.partnerName || "Socio";
   const [tab, setTab] = useState<Tab>("ventas");
   const [showAddAd, setShowAddAd] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
@@ -66,7 +68,8 @@ export function Ventas({ sales, adSpend, providers, salesTableExists, salesError
   }, [adSpend]);
 
   const totalAdSpend = thisMonthAdSpend.reduce((a, s) => a + s.amount, 0);
-  const profit = totalRevenue - totalAdSpend;
+  // La publicidad la paga el socio, así que se descuenta de su parte del reparto.
+  const partnerNet = partnerProfit - totalAdSpend;
 
   const deleteSale = async (id: string) => {
     if (!supabase) return;
@@ -153,14 +156,15 @@ export function Ventas({ sales, adSpend, providers, salesTableExists, salesError
       {tab === "ventas" && (
         <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
           {/* Mini metrics */}
-          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
             {[
               { label: "Ventas este mes", value: thisMonth.length, icon: <Receipt size={14} className="text-blue-400" />, color: "" },
               { label: "Ingresos", value: `$${fmt(totalRevenue)}`, icon: <DollarSign size={14} className="text-green-400" />, color: "text-green-400" },
               { label: "Costo total", value: `$${fmt(totalCost)}`, icon: <Banknote size={14} className="text-orange-400" />, color: "text-orange-400" },
               { label: "Ganancia bruta", value: `$${fmt(grossProfit)}`, icon: <TrendingDown size={14} className={grossProfit >= 0 ? "text-green-400" : "text-red-400"} />, color: grossProfit >= 0 ? "text-green-400" : "text-red-400" },
               { label: "Tu ganancia", value: `$${fmt(Math.round(myProfit))}`, icon: <DollarSign size={14} className="text-green-400" />, color: "text-green-400" },
-              { label: "Ganancia socio", value: `$${fmt(Math.round(partnerProfit))}`, icon: <Handshake size={14} className="text-pink-400" />, color: "text-pink-400" },
+              { label: `Ganancia ${partnerName}`, value: `$${fmt(Math.round(partnerProfit))}`, icon: <Handshake size={14} className="text-pink-400" />, color: "text-pink-400" },
+              { label: `Pago a ${partnerName}`, value: `$${fmt(Math.round(partnerNet))}`, icon: <Megaphone size={14} className={partnerNet >= 0 ? "text-pink-400" : "text-red-400"} />, color: partnerNet >= 0 ? "text-pink-400" : "text-red-400" },
             ].map(({ label, value, icon, color }) => (
               <div key={label} className="brand-glass rounded-2xl p-4">
                 <div className="mb-2">{icon}</div>
@@ -231,7 +235,7 @@ export function Ventas({ sales, adSpend, providers, salesTableExists, salesError
                           <div className="mt-2 flex items-center gap-1.5 border-t border-white/5 pt-2 text-[10px]">
                             <Handshake size={10} className="text-pink-400" />
                             <span className="text-gray-500">
-                              Socio {sale.partner_pct}%: <span className="font-black text-pink-400">${fmt(Math.round(gain * sale.partner_pct / 100))}</span>
+                              {partnerName} {sale.partner_pct}%: <span className="font-black text-pink-400">${fmt(Math.round(gain * sale.partner_pct / 100))}</span>
                             </span>
                             <span className="text-gray-700">·</span>
                             <span className="text-gray-500">
@@ -275,7 +279,7 @@ export function Ventas({ sales, adSpend, providers, salesTableExists, salesError
                             {hasCost && sale.partner_pct != null && (
                               <p className="mt-0.5 flex items-center gap-1 text-[9px] text-gray-600">
                                 <Handshake size={9} className="text-pink-400" />
-                                Socio {sale.partner_pct}%: ${fmt(Math.round(gain * sale.partner_pct / 100))}
+                                {partnerName} {sale.partner_pct}%: ${fmt(Math.round(gain * sale.partner_pct / 100))}
                               </p>
                             )}
                           </div>
@@ -305,11 +309,12 @@ export function Ventas({ sales, adSpend, providers, salesTableExists, salesError
       {tab === "publicidad" && (
         <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
           {/* Mini metrics */}
-          <div className="grid grid-cols-3 gap-3 p-4">
+          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
             {[
               { label: "Ingresos este mes", value: `$${fmt(totalRevenue)}`, icon: <DollarSign size={14} className="text-green-400" />, c: "text-green-400" },
-              { label: "Gasto en publicidad", value: `$${fmt(totalAdSpend)}`, icon: <Megaphone size={14} className="text-orange-400" />, c: "text-orange-400" },
-              { label: "Ganancia neta", value: `$${fmt(profit)}`, icon: <TrendingDown size={14} className={profit >= 0 ? "text-green-400" : "text-red-400"} />, c: profit >= 0 ? "text-green-400" : "text-red-400" },
+              { label: `Ganancia bruta ${partnerName}`, value: `$${fmt(Math.round(partnerProfit))}`, icon: <Handshake size={14} className="text-pink-400" />, c: "text-pink-400" },
+              { label: `Gasto en publicidad (paga ${partnerName})`, value: `$${fmt(totalAdSpend)}`, icon: <Megaphone size={14} className="text-orange-400" />, c: "text-orange-400" },
+              { label: `Pago a ${partnerName}`, value: `$${fmt(Math.round(partnerNet))}`, icon: <TrendingDown size={14} className={partnerNet >= 0 ? "text-green-400" : "text-red-400"} />, c: partnerNet >= 0 ? "text-green-400" : "text-red-400" },
             ].map(({ label, value, icon, c }) => (
               <div key={label} className="brand-glass rounded-2xl p-4">
                 <div className="mb-2">{icon}</div>
@@ -421,7 +426,7 @@ export function Ventas({ sales, adSpend, providers, salesTableExists, salesError
       )}
 
       {editingSale && (
-        <EditSaleModal sale={editingSale} providers={providers}
+        <EditSaleModal sale={editingSale} providers={providers} partnerName={partnerName}
           loading={loading} setLoading={setLoading}
           showNotice={showNotice}
           onClose={() => setEditingSale(null)}

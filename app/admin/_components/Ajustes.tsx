@@ -5,7 +5,7 @@ import { Handshake, Loader2, Plus, Save, Settings, Trash2, Truck } from "lucide-
 import { supabase } from "@/lib/supabase/client";
 import { SETTING_KEYS } from "@/lib/settings";
 import type { Provider, SettingsState } from "../_types";
-import { PARTNER_PCT_KEY, toPct, toPrice } from "../_helpers";
+import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY, toPct, toPrice } from "../_helpers";
 
 const LABEL = "mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-600";
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none focus:border-white/40";
@@ -28,6 +28,11 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
     await supabase.from("app_settings").upsert({ key, value }, { onConflict: "key" });
   };
 
+  const saveTextSetting = async (key: string, value: string) => {
+    if (!supabase) return;
+    await supabase.from("app_settings").upsert({ key, value: 0, value_text: value }, { onConflict: "key" });
+  };
+
   const save = async (e: FormEvent) => {
     e.preventDefault(); if (!supabase) return;
     setLoading(true);
@@ -36,6 +41,7 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
         saveSetting(SETTING_KEYS.nintendoOnlinePrice, toPrice(form.nintendoOnlinePrice)),
         saveSetting(SETTING_KEYS.packPriceIncrease, toPrice(form.packPriceIncrease)),
         saveSetting(PARTNER_PCT_KEY, toPct(form.partnerSplitPct)),
+        saveTextSetting(PARTNER_NAME_KEY, form.partnerName.trim() || DEFAULT_PARTNER_NAME),
       ]);
       showNotice("success", "Configuración guardada.");
     } catch {
@@ -123,19 +129,28 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
               </div>
               <div>
                 <h2 className="text-xs font-black uppercase tracking-widest">Reparto con socio</h2>
-                <p className="text-[10px] text-gray-600">% del socio sugerido al registrar una venta nueva</p>
+                <p className="text-[10px] text-gray-600">Nombre y % sugerido al registrar una venta nueva</p>
               </div>
             </div>
-            <label className="block max-w-[10rem]">
-              <span className={LABEL}>Porcentaje del socio</span>
-              <div className="relative">
-                <input value={form.partnerSplitPct}
-                  onChange={e => setForm({ ...form, partnerSplitPct: e.target.value })}
-                  inputMode="numeric" className={INPUT + " pr-8"} />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-gray-500">%</span>
-              </div>
-              <p className="mt-1 text-[10px] text-gray-700">Se puede ajustar en cada venta individual</p>
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className={LABEL}>Nombre del socio</span>
+                <input value={form.partnerName}
+                  onChange={e => setForm({ ...form, partnerName: e.target.value })}
+                  placeholder={DEFAULT_PARTNER_NAME} className={INPUT} />
+                <p className="mt-1 text-[10px] text-gray-700">Aparece en el reparto de ganancia y en el pago de publicidad</p>
+              </label>
+              <label className="block max-w-[10rem]">
+                <span className={LABEL}>Porcentaje del socio</span>
+                <div className="relative">
+                  <input value={form.partnerSplitPct}
+                    onChange={e => setForm({ ...form, partnerSplitPct: e.target.value })}
+                    inputMode="numeric" className={INPUT + " pr-8"} />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-gray-500">%</span>
+                </div>
+                <p className="mt-1 text-[10px] text-gray-700">Se puede ajustar en cada venta individual</p>
+              </label>
+            </div>
           </div>
 
           <button disabled={loading}

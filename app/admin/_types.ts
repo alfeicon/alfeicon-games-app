@@ -47,6 +47,7 @@ export type SettingsState = {
   nintendoOnlinePrice: string;
   packPriceIncrease: string;
   partnerSplitPct: string;
+  partnerName: string;
 };
 
 export type AdminNews = {

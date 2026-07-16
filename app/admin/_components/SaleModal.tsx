@@ -34,6 +34,7 @@ export function SaleModal({ games, packs, providers, settings, loading, setLoadi
   const [notes, setNotes] = useState("");
   const [splitEnabled, setSplitEnabled] = useState(false);
   const [partnerPct, setPartnerPct] = useState(settings.partnerSplitPct || "40");
+  const partnerName = settings.partnerName || "Socio";
   const [saved, setSaved] = useState<{ title: string; price: number } | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const activeProviders = providers.filter(p => p.is_active);
@@ -206,7 +207,7 @@ export function SaleModal({ games, packs, providers, settings, loading, setLoadi
                   <label className="flex items-center gap-2 text-xs font-bold text-gray-300">
                     <input type="checkbox" checked={splitEnabled} onChange={e => setSplitEnabled(e.target.checked)}
                       className="h-3.5 w-3.5 rounded accent-pink-500" />
-                    <Handshake size={13} className="text-pink-400" /> Dividir ganancia con socio
+                    <Handshake size={13} className="text-pink-400" /> Dividir ganancia con {partnerName}
                   </label>
                   {splitEnabled && (
                     <div className="flex items-center gap-1">
@@ -220,7 +221,7 @@ export function SaleModal({ games, packs, providers, settings, loading, setLoadi
                 {splitEnabled && toPrice(price) > 0 && (
                   <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2 text-xs">
                     <span className="text-gray-500">
-                      Socio ({toPct(partnerPct)}%): <span className="font-black text-pink-400">
+                      {partnerName} ({toPct(partnerPct)}%): <span className="font-black text-pink-400">
                         ${fmt(Math.round((toPrice(price) - toPrice(cost)) * toPct(partnerPct) / 100))}
                       </span>
                     </span>

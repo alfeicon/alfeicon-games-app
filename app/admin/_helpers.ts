@@ -1,6 +1,8 @@
 import { DATA_IMAGENES } from "@/app/data/imagenes";
 
 export const PARTNER_PCT_KEY = "partner_split_pct";
+export const PARTNER_NAME_KEY = "partner_name";
+export const DEFAULT_PARTNER_NAME = "Diego";
 
 export const fmt = (n: number) => n.toLocaleString("es-CL");
 export const toPrice = (v: string) => Number(v.replace(/[^0-9]/g, "")) || 0;

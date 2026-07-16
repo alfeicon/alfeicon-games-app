@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
-import { PARTNER_PCT_KEY } from "./_helpers";
+import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY } from "./_helpers";
 import type { AdminGame, AdminPack, AdminNews, AdSpend, AdminSection, Provider, Sale, SettingsState } from "./_types";
 import { Inicio } from "./_components/Inicio";
 import { JuegosCatalog } from "./_components/JuegosCatalog";
@@ -24,6 +24,7 @@ const defaultSettings: SettingsState = {
   nintendoOnlinePrice: String(DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
   packPriceIncrease: String(DEFAULT_APP_SETTINGS.packPriceIncrease),
   partnerSplitPct: "40",
+  partnerName: DEFAULT_PARTNER_NAME,
 };
 
 const NAV_ITEMS: { id: AdminSection; label: string; Icon: React.ElementType; accent: string }[] = [
@@ -198,13 +199,14 @@ export default function AdminPage() {
   const loadSettings = useCallback(async () => {
     if (!supabase) return;
     const { data, error } = await supabase
-      .from("app_settings").select("key,value").in("key", [...Object.values(SETTING_KEYS), PARTNER_PCT_KEY]);
+      .from("app_settings").select("key,value,value_text").in("key", [...Object.values(SETTING_KEYS), PARTNER_PCT_KEY, PARTNER_NAME_KEY]);
     if (error) { setSettings(defaultSettings); return; }
-    const rows = new Map((data || []).map(r => [r.key, r.value]));
+    const rows = new Map((data || []).map(r => [r.key, r]));
     setSettings({
-      nintendoOnlinePrice: String(rows.get(SETTING_KEYS.nintendoOnlinePrice) || DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
-      packPriceIncrease: String(rows.get(SETTING_KEYS.packPriceIncrease) || DEFAULT_APP_SETTINGS.packPriceIncrease),
-      partnerSplitPct: String(rows.get(PARTNER_PCT_KEY) ?? defaultSettings.partnerSplitPct),
+      nintendoOnlinePrice: String(rows.get(SETTING_KEYS.nintendoOnlinePrice)?.value || DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
+      packPriceIncrease: String(rows.get(SETTING_KEYS.packPriceIncrease)?.value || DEFAULT_APP_SETTINGS.packPriceIncrease),
+      partnerSplitPct: String(rows.get(PARTNER_PCT_KEY)?.value ?? defaultSettings.partnerSplitPct),
+      partnerName: rows.get(PARTNER_NAME_KEY)?.value_text || defaultSettings.partnerName,
     });
   }, []);
 
@@ -568,7 +570,7 @@ export default function AdminPage() {
       <div className="relative flex flex-1 flex-col overflow-hidden">
         <div key={sectionKey} className="flex h-full flex-col animate-soft-in">
           {section === "inicio" && (
-            <Inicio games={games} packs={packs} sales={sales}
+            <Inicio games={games} packs={packs} sales={sales} adSpend={adSpend} settings={settings}
               salesTableExists={salesTableExists}
               firstLoadDone={firstLoadDone}
               onNavigate={navigate}
@@ -591,7 +593,7 @@ export default function AdminPage() {
               showNotice={showNotice} onReload={loadOrders} />
           )}
           {section === "ventas" && (
-            <Ventas sales={sales} adSpend={adSpend} providers={providers}
+            <Ventas sales={sales} adSpend={adSpend} providers={providers} settings={settings}
               salesTableExists={salesTableExists}
               salesError={salesError}
               loading={loading} setLoading={setLoading}

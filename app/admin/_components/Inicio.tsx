@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  BarChart2, DollarSign, Gamepad2, Gift, Percent, Plus, Receipt, TrendingUp, Wallet, Zap,
+  BarChart2, DollarSign, Gamepad2, Gift, Handshake, Percent, Plus, Receipt, TrendingUp, Wallet, Zap,
 } from "lucide-react";
-import type { AdminGame, AdminPack, AdminSection, Sale } from "../_types";
+import type { AdminGame, AdminPack, AdminSection, AdSpend, Sale, SettingsState } from "../_types";
 import { fmt, fmtDate } from "../_helpers";
 
 type Props = {
   games: AdminGame[];
   packs: AdminPack[];
   sales: Sale[];
+  adSpend: AdSpend[];
+  settings: SettingsState;
   salesTableExists: boolean | null;
   firstLoadDone?: boolean;
   onNavigate: (s: AdminSection) => void;
@@ -24,8 +26,16 @@ const compact = (n: number) => {
   return `$${n}`;
 };
 
-export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = true, onNavigate, onRegisterSale }: Props) {
+export function Inicio({ games, packs, sales, adSpend, settings, salesTableExists, firstLoadDone = true, onNavigate, onRegisterSale }: Props) {
   const now = new Date();
+  const partnerName = settings.partnerName || "Socio";
+
+  // Dispara las animaciones de "dibujado" de los gráficos tras el primer paint.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 40);
+    return () => clearTimeout(t);
+  }, []);
 
   const thisMonth = useMemo(
     () =>
@@ -41,6 +51,22 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
   const totalCost = thisMonth.reduce((a, s) => a + (s.cost_price || 0), 0);
   const totalProfit = totalRevenue - totalCost;
   const margin = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
+
+  const partnerProfit = thisMonth.reduce((a, s) => {
+    const gain = s.price_sold - (s.cost_price ?? 0);
+    const pct = s.partner_pct ?? 0;
+    return a + gain * pct / 100;
+  }, 0);
+  const myShare = totalProfit - partnerProfit;
+
+  const totalAdSpend = useMemo(() => {
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const y = String(now.getFullYear());
+    return adSpend.filter(a => a.date.startsWith(`${y}-${m}`)).reduce((a, s) => a + s.amount, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adSpend]);
+  // La publicidad la paga el socio, se descuenta de su parte del reparto.
+  const partnerNet = partnerProfit - totalAdSpend;
 
   // ── Serie mensual (últimos 6 meses) para el gráfico de barras ──────────────
   const monthly = useMemo(() => {
@@ -96,10 +122,6 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
       Icon: DollarSign, color: "text-blue-400", bg: "bg-blue-500/10",
     },
     {
-      label: "Ganancia", value: noSales ? "—" : `$${fmt(totalProfit)}`, sub: "utilidad este mes",
-      Icon: Wallet, color: "text-green-400", bg: "bg-green-500/10", highlight: true,
-    },
-    {
       label: "Margen", value: noSales || totalRevenue === 0 ? "—" : `${margin}%`, sub: "sobre ingresos",
       Icon: Percent, color: "text-emerald-400", bg: "bg-emerald-500/10",
     },
@@ -129,27 +151,61 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
   const packFrac = typeTotal > 0 ? byType.pack / typeTotal : 0;
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 pb-32 pt-16 space-y-7 md:pb-6 md:pt-6">
+    <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col overflow-y-auto px-6 pb-32 pt-16 space-y-8 md:pb-10 md:pt-8 lg:px-10">
       {/* Title */}
-      <div>
-        <h1 className="text-xl font-black uppercase tracking-widest">Inicio</h1>
-        <p className="mt-1 text-xs text-gray-500 capitalize">
-          {now.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-        </p>
+      <div className="dash-card-in flex items-start gap-3.5">
+        <span className="mt-1 h-9 w-1.5 shrink-0 rounded-full bg-green-400" />
+        <div>
+          <h1 className="text-2xl font-black uppercase tracking-tight sm:text-3xl">Inicio</h1>
+          <p className="mt-1 text-xs text-gray-500 capitalize">
+            {now.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </p>
+        </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {metrics.map(({ label, value, sub, Icon, color, bg, highlight }) => (
-          <div
-            key={label}
-            className={`rounded-[1.4rem] p-5 ${highlight ? "border border-green-500/25 bg-green-500/[0.07]" : "brand-shell"}`}
-          >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {/* Hero: ganancia total + reparto */}
+        <div style={{ animationDelay: "60ms" }}
+          className="dash-card-in relative overflow-hidden rounded-[1.75rem] border border-green-500/20 bg-gradient-to-br from-green-500/[0.14] via-green-500/[0.04] to-transparent p-6 lg:col-span-2">
+          <div className="mb-5 flex items-center justify-between">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-green-500/15">
+              <Wallet size={20} className="text-green-400" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">este mes</span>
+          </div>
+          {firstLoadDone ? (
+            <p key={totalProfit} className="dash-value-in text-4xl font-black leading-none tracking-tight text-green-400">{noSales ? "—" : `$${fmt(totalProfit)}`}</p>
+          ) : (
+            <div className="h-9 w-32 animate-pulse rounded-lg bg-white/10" />
+          )}
+          <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500">Ganancia total</p>
+
+          {!noSales && firstLoadDone && (
+            <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Tu parte</p>
+                <p className="mt-0.5 text-sm font-black text-white">${fmt(Math.round(myShare))}</p>
+              </div>
+              <div>
+                <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-pink-400">
+                  <Handshake size={10} /> Pago a {partnerName}
+                </p>
+                <p className={`mt-0.5 text-sm font-black ${partnerNet >= 0 ? "text-pink-300" : "text-red-400"}`}>
+                  ${fmt(Math.round(partnerNet))}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {metrics.map(({ label, value, sub, Icon, color, bg }, i) => (
+          <div key={label} style={{ animationDelay: `${120 + i * 70}ms` }} className="dash-card-in brand-shell rounded-[1.75rem] p-5">
             <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-2xl ${bg}`}>
               <Icon size={18} className={color} />
             </div>
             {firstLoadDone ? (
-              <p className={`text-3xl font-black leading-none tracking-tight ${highlight ? "text-green-400" : ""}`}>{value}</p>
+              <p className="text-3xl font-black leading-none tracking-tight">{value}</p>
             ) : (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-white/10" />
             )}
@@ -162,10 +218,12 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
       {/* Charts row */}
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Bar chart — revenue vs profit */}
-        <div className="brand-shell rounded-[1.4rem] p-5 lg:col-span-3">
+        <div style={{ animationDelay: "260ms" }} className="dash-card-in brand-shell rounded-[1.75rem] p-5 lg:col-span-3">
           <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <BarChart2 size={15} className="text-green-400" />
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-500/12">
+                <BarChart2 size={15} className="text-green-400" />
+              </div>
               <h3 className="text-sm font-black uppercase tracking-widest">Ingresos y ganancia</h3>
             </div>
             <span className="text-[10px] text-gray-600">últimos 6 meses</span>
@@ -192,6 +250,16 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
             </div>
           ) : (
             <svg viewBox={`0 0 ${CW} ${CH}`} className="w-full" role="img" aria-label="Ingresos y ganancia por mes">
+              <defs>
+                <linearGradient id="dashProfitGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6ee7b7" />
+                  <stop offset="100%" stopColor="#10b981" />
+                </linearGradient>
+                <linearGradient id="dashCostGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(255,255,255,0.28)" />
+                  <stop offset="100%" stopColor="rgba(255,255,255,0.1)" />
+                </linearGradient>
+              </defs>
               {/* Gridlines */}
               {[0, 0.5, 1].map(t => {
                 const y = padT + plotH * (1 - t);
@@ -210,16 +278,20 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
                 const profitH = (m.profit / maxRevenue) * plotH;
                 const costY = baseY - costH;
                 const profitY = costY - profitH;
+                const delay = `${i * 65}ms`;
                 return (
                   <g key={i}>
                     {m.cost > 0 && (
-                      <rect x={x} y={costY} width={barW} height={costH} rx={2} fill="rgba(255,255,255,0.16)" />
+                      <rect className="dash-bar" style={{ animationDelay: delay }}
+                        x={x} y={costY} width={barW} height={costH} rx={2} fill="url(#dashCostGrad)" />
                     )}
                     {m.profit > 0 && (
-                      <rect x={x} y={profitY} width={barW} height={profitH} rx={2} fill="#34d399" />
+                      <rect className="dash-bar" style={{ animationDelay: delay }}
+                        x={x} y={profitY} width={barW} height={profitH} rx={2} fill="url(#dashProfitGrad)" />
                     )}
                     {m.revenue > 0 && (
-                      <text x={x + barW / 2} y={profitY - 5} fill="#e5e7eb" fontSize={8.5} fontWeight={800} textAnchor="middle">
+                      <text className="dash-bar-label" style={{ animationDelay: `${i * 65 + 260}ms` }}
+                        x={x + barW / 2} y={profitY - 5} fill="#e5e7eb" fontSize={8.5} fontWeight={800} textAnchor="middle">
                         {compact(m.revenue)}
                       </text>
                     )}
@@ -234,9 +306,11 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
         </div>
 
         {/* Donut — profit by type */}
-        <div className="brand-shell rounded-[1.4rem] p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2">
-            <Wallet size={15} className="text-green-400" />
+        <div style={{ animationDelay: "330ms" }} className="dash-card-in brand-shell rounded-[1.75rem] p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-500/12">
+              <Wallet size={15} className="text-green-400" />
+            </div>
             <h3 className="text-sm font-black uppercase tracking-widest">Ganancia por tipo</h3>
           </div>
 
@@ -251,29 +325,34 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
             <>
               <div className="relative mx-auto h-40 w-40">
                 <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+                  <defs>
+                    <filter id="dashArcGlow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feDropShadow dx="0" dy="0" stdDeviation="2.2" floodColor="#34d399" floodOpacity="0.45" />
+                    </filter>
+                  </defs>
                   <circle cx="60" cy="60" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={14} />
                   {gameFrac > 0 && (
-                    <circle cx="60" cy="60" r={R} fill="none" stroke="#3b82f6" strokeWidth={14}
-                      strokeDasharray={`${gameFrac * DC} ${DC}`} strokeLinecap="round" />
+                    <circle className="dash-donut-arc" cx="60" cy="60" r={R} fill="none" stroke="#3b82f6" strokeWidth={14}
+                      strokeDasharray={`${mounted ? gameFrac * DC : 0} ${DC}`} strokeLinecap="round" filter="url(#dashArcGlow)" />
                   )}
                   {packFrac > 0 && (
-                    <circle cx="60" cy="60" r={R} fill="none" stroke="#a855f7" strokeWidth={14}
-                      strokeDasharray={`${packFrac * DC} ${DC}`} strokeDashoffset={`${-gameFrac * DC}`} strokeLinecap="round" />
+                    <circle className="dash-donut-arc" cx="60" cy="60" r={R} fill="none" stroke="#a855f7" strokeWidth={14}
+                      strokeDasharray={`${mounted ? packFrac * DC : 0} ${DC}`} strokeDashoffset={`${-gameFrac * DC}`} strokeLinecap="round" filter="url(#dashArcGlow)" />
                   )}
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-lg font-black leading-none text-green-400">{compact(typeTotal)}</span>
+                  <span className="dash-value-in text-lg font-black leading-none text-green-400" style={{ animationDelay: "500ms" }}>{compact(typeTotal)}</span>
                   <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-600">Ganancia</span>
                 </div>
               </div>
               <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="dash-value-in flex items-center justify-between" style={{ animationDelay: "560ms" }}>
                   <span className="flex items-center gap-2 text-xs font-bold text-gray-300">
                     <span className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]" /> Juegos
                   </span>
                   <span className="text-xs font-black">${fmt(byType.game)}</span>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="dash-value-in flex items-center justify-between" style={{ animationDelay: "620ms" }}>
                   <span className="flex items-center gap-2 text-xs font-bold text-gray-300">
                     <span className="h-2.5 w-2.5 rounded-full bg-[#a855f7]" /> Packs
                   </span>
@@ -289,9 +368,9 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
       <div>
         <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-gray-600">Accesos rápidos</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {quickActions.map(({ label, Icon, onClick, border, bg, iconBg, iconColor }) => (
-            <button key={label} onClick={onClick}
-              className={`magnetic flex items-center gap-4 rounded-2xl border px-5 py-4 text-left transition-all ${border} ${bg}`}>
+          {quickActions.map(({ label, Icon, onClick, border, bg, iconBg, iconColor }, i) => (
+            <button key={label} onClick={onClick} style={{ animationDelay: `${400 + i * 70}ms` }}
+              className={`dash-card-in magnetic flex items-center gap-4 rounded-2xl border px-5 py-4 text-left transition-all ${border} ${bg}`}>
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
                 <Icon size={18} className={iconColor} />
               </div>
@@ -304,10 +383,12 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
       {/* Top items + recent sales */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Top selling */}
-        <div className="brand-shell rounded-[1.4rem] p-5">
+        <div style={{ animationDelay: "420ms" }} className="dash-card-in brand-shell rounded-[1.75rem] p-5">
           <div className="mb-5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingUp size={15} className="text-blue-400" />
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/12">
+                <TrendingUp size={15} className="text-blue-400" />
+              </div>
               <h3 className="text-sm font-black uppercase tracking-widest">Más vendido</h3>
             </div>
             <span className="text-[10px] text-gray-600">este mes</span>
@@ -336,7 +417,7 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
               {topItems.map((item, i) => {
                 const pct = topItems[0].count ? Math.round((item.count / topItems[0].count) * 100) : 0;
                 return (
-                  <div key={item.title}>
+                  <div key={item.title} className="dash-value-in" style={{ animationDelay: `${i * 70}ms` }}>
                     <div className="mb-1.5 flex items-center gap-3">
                       <span className="w-4 shrink-0 text-[10px] font-black text-gray-600">#{i + 1}</span>
                       <p className="min-w-0 flex-1 truncate text-sm font-bold">{item.title}</p>
@@ -344,7 +425,7 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
                       <span className="text-xs font-black">${fmt(item.revenue)}</span>
                     </div>
                     <div className="ml-7 h-1 overflow-hidden rounded-full bg-white/10">
-                      <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                      <div className="dash-progress-fill h-full rounded-full bg-blue-500" style={{ width: mounted ? `${pct}%` : "0%" }} />
                     </div>
                   </div>
                 );
@@ -354,10 +435,12 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
         </div>
 
         {/* Recent sales */}
-        <div className="brand-shell rounded-[1.4rem] p-5">
+        <div style={{ animationDelay: "480ms" }} className="dash-card-in brand-shell rounded-[1.75rem] p-5">
           <div className="mb-5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Receipt size={15} className="text-green-400" />
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-500/12">
+                <Receipt size={15} className="text-green-400" />
+              </div>
               <h3 className="text-sm font-black uppercase tracking-widest">Últimas ventas</h3>
             </div>
             <button onClick={() => onNavigate("ventas")}
@@ -383,10 +466,10 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
             </div>
           ) : (
             <div className="divide-y divide-white/5">
-              {sales.slice(0, 6).map(sale => {
+              {sales.slice(0, 6).map((sale, i) => {
                 const profit = sale.price_sold - (sale.cost_price || 0);
                 return (
-                  <div key={sale.id} className="flex items-center gap-3 py-2.5">
+                  <div key={sale.id} className="dash-value-in flex items-center gap-3 py-2.5" style={{ animationDelay: `${i * 55}ms` }}>
                     <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
                       sale.item_type === "pack" ? "bg-purple-500/15" : "bg-blue-500/15"
                     }`}>
@@ -419,15 +502,15 @@ export function Inicio({ games, packs, sales, salesTableExists, firstLoadDone = 
             { label: "Juegos inactivos", value: games.length - activeGames, total: games.length || 1, bar: "bg-gray-600", nav: "juegos" as const },
             { label: "Packs activos", value: activePacks, total: packs.length || 1, bar: "bg-purple-500", nav: "packs" as const },
             { label: "En oferta", value: games.filter(g => g.is_offer).length, total: games.length || 1, bar: "bg-orange-500", nav: "juegos" as const },
-          ].map(({ label, value, total, bar, nav }) => (
-            <button key={label} onClick={() => onNavigate(nav)}
-              className="brand-glass rounded-2xl p-4 text-left transition-all hover:bg-white/8">
+          ].map(({ label, value, total, bar, nav }, i) => (
+            <button key={label} onClick={() => onNavigate(nav)} style={{ animationDelay: `${540 + i * 60}ms` }}
+              className="dash-card-in brand-glass rounded-2xl p-4 text-left transition-all hover:bg-white/8">
               {firstLoadDone
                 ? <p className="text-2xl font-black">{value}</p>
                 : <div className="h-6 w-10 animate-pulse rounded bg-white/10" />}
               <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-gray-600">{label}</p>
               <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-white/10">
-                <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.round((value / total) * 100)}%` }} />
+                <div className={`dash-progress-fill h-full rounded-full ${bar}`} style={{ width: mounted ? `${Math.round((value / total) * 100)}%` : "0%" }} />
               </div>
             </button>
           ))}
