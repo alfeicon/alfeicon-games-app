@@ -3,10 +3,10 @@
 import { FormEvent, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle
+  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
-import type { Order, AdminGame, AdminPack, Provider } from "../_types";
+import type { Order, AdminGame, AdminPack, Provider, SettingsState } from "../_types";
 import { fmtDate } from "../_helpers";
 
 type OrderForm = {
@@ -17,6 +17,7 @@ type OrderForm = {
   sale_price: number | "";
   cost_price: number | "";
   provider: string;
+  partner_pct: number | "";
 };
 
 const emptyForm: OrderForm = {
@@ -27,6 +28,7 @@ const emptyForm: OrderForm = {
   sale_price: "",
   cost_price: "",
   provider: "",
+  partner_pct: "",
 };
 
 const toForm = (o: Order): OrderForm => ({
@@ -37,6 +39,7 @@ const toForm = (o: Order): OrderForm => ({
   sale_price: o.sale_price ?? "",
   cost_price: o.cost_price ?? "",
   provider: o.provider || "",
+  partner_pct: o.partner_pct ?? "",
 });
 
 const STATUS_LABELS: Record<Order["status"], string> = {
@@ -76,6 +79,7 @@ type Props = {
   games: AdminGame[];
   packs: AdminPack[];
   providers: Provider[];
+  settings: SettingsState;
   loading: boolean;
   setLoading: (v: boolean) => void;
   showNotice: (type: "success" | "error", text: string) => void;
@@ -92,9 +96,11 @@ function generateShortCode() {
   return result;
 }
 
-export function Entregas({ orders, games, packs, providers, loading, setLoading, showNotice, onReload }: Props) {
+export function Entregas({ orders, games, packs, providers, settings, loading, setLoading, showNotice, onReload }: Props) {
+  const partnerName = settings.partnerName || "Socio";
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [form, setForm] = useState<OrderForm>(emptyForm);
+  const [splitEnabled, setSplitEnabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
   
@@ -154,8 +160,14 @@ export function Entregas({ orders, games, packs, providers, loading, setLoading,
   // Índice del paso actual en el stepper (‑1 si es "issue", que no está en STEPS).
   const currentStepIndex = STEPS.findIndex(s => s.key === form.status);
 
-  const select = (o: Order) => { setSelectedOrder(o); setForm(toForm(o)); setQuery(""); setShowSuggestions(false); setCreatedCode(null); setModalOpen(true); };
-  const newOrder = () => { setSelectedOrder(null); setForm(emptyForm); setQuery(""); setShowSuggestions(false); setCreatedCode(null); setModalOpen(true); };
+  const select = (o: Order) => {
+    setSelectedOrder(o); setForm(toForm(o)); setSplitEnabled(o.partner_pct != null);
+    setQuery(""); setShowSuggestions(false); setCreatedCode(null); setModalOpen(true);
+  };
+  const newOrder = () => {
+    setSelectedOrder(null); setForm({ ...emptyForm, partner_pct: Number(settings.partnerSplitPct) || 40 }); setSplitEnabled(false);
+    setQuery(""); setShowSuggestions(false); setCreatedCode(null); setModalOpen(true);
+  };
   const close = () => { setModalOpen(false); setSelectedOrder(null); setShowSuggestions(false); setCreatedCode(null); };
 
   const save = async (e: FormEvent) => {
@@ -168,6 +180,7 @@ export function Entregas({ orders, games, packs, providers, loading, setLoading,
       sale_price: form.sale_price === "" ? null : form.sale_price,
       cost_price: form.cost_price === "" ? null : form.cost_price,
       provider: form.provider || null,
+      partner_pct: splitEnabled ? Math.min(100, Math.max(0, Number(form.partner_pct) || 0)) : null,
     };
     if (!payload.game_name) { showNotice("error", "Falta el nombre del juego."); return; }
 
@@ -631,6 +644,39 @@ export function Entregas({ orders, games, packs, providers, loading, setLoading,
                             </select>
                           </label>
                         </div>
+
+                        <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 text-xs font-bold text-gray-300">
+                              <input type="checkbox" checked={splitEnabled} onChange={e => setSplitEnabled(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded accent-pink-500" />
+                              <Handshake size={13} className="text-pink-400" /> Dividir ganancia con {partnerName}
+                            </label>
+                            {splitEnabled && (
+                              <div className="flex items-center gap-1">
+                                <input value={form.partner_pct} onChange={e => setForm({ ...form, partner_pct: e.target.value === "" ? "" : Number(e.target.value.replace(/[^0-9]/g, "")) })}
+                                  inputMode="numeric"
+                                  className="w-14 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-right text-sm font-black text-white outline-none focus:border-pink-500" />
+                                <span className="text-xs font-black text-gray-500">%</span>
+                              </div>
+                            )}
+                          </div>
+                          {splitEnabled && Number(form.sale_price) > 0 && (
+                            <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2 text-xs">
+                              <span className="text-gray-500">
+                                {partnerName} ({Number(form.partner_pct) || 0}%): <span className="font-black text-pink-400">
+                                  ${Math.round((Number(form.sale_price) - Number(form.cost_price || 0)) * (Number(form.partner_pct) || 0) / 100).toLocaleString("es-CL")}
+                                </span>
+                              </span>
+                              <span className="text-gray-500">
+                                Tú ({100 - (Number(form.partner_pct) || 0)}%): <span className="font-black text-green-400">
+                                  ${Math.round((Number(form.sale_price) - Number(form.cost_price || 0)) * (100 - (Number(form.partner_pct) || 0)) / 100).toLocaleString("es-CL")}
+                                </span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
                         <p className="mt-2.5 text-[10px] text-gray-600">Al pasar a estado "Completada", estos datos se registrarán automáticamente en tus Ventas.</p>
                       </div>
 

@@ -72,6 +72,7 @@ export type Order = {
   sale_price?: number;
   cost_price?: number;
   provider?: string | null;
+  partner_pct?: number | null;
   created_at: string;
 };
 
