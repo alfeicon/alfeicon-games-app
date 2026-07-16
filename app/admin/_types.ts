@@ -73,6 +73,7 @@ export type Order = {
   cost_price?: number;
   provider?: string | null;
   partner_pct?: number | null;
+  pack_ids?: string[] | null;
   created_at: string;
 };
 

@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import type { Order, AdminGame, AdminPack, Provider, SettingsState } from "../_types";
-import { fmtDate } from "../_helpers";
+import { fmt, fmtDate } from "../_helpers";
 
 type OrderForm = {
   game_name: string;
@@ -18,6 +18,7 @@ type OrderForm = {
   cost_price: number | "";
   provider: string;
   partner_pct: number | "";
+  pack_ids: string[];
 };
 
 const emptyForm: OrderForm = {
@@ -29,6 +30,7 @@ const emptyForm: OrderForm = {
   cost_price: "",
   provider: "",
   partner_pct: "",
+  pack_ids: [],
 };
 
 const toForm = (o: Order): OrderForm => ({
@@ -40,6 +42,7 @@ const toForm = (o: Order): OrderForm => ({
   cost_price: o.cost_price ?? "",
   provider: o.provider || "",
   partner_pct: o.partner_pct ?? "",
+  pack_ids: o.pack_ids || [],
 });
 
 const STATUS_LABELS: Record<Order["status"], string> = {
@@ -106,14 +109,17 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   
   // Tabs: Nuevas (drafts), Activas, Historial
   const [activeTab, setActiveTab] = useState<'drafts' | 'active' | 'history'>('active');
-  
+
+  // Búsqueda dentro del Historial
+  const [historySearch, setHistorySearch] = useState("");
+
   // Para sugerencias de autocompletado
   const [query, setQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   const pool = useMemo(() => {
-    const allGames = (games || []).filter(g => g.is_active).map(g => ({ title: g.title, type: "game" as const, price: g.is_offer ? g.offer_price : g.price, cost: g.cost_price }));
-    const allPacks = (packs || []).filter(p => p.is_active).map(p => ({ title: p.title, type: "pack" as const, price: p.price, cost: p.cost_price }));
+    const allGames = (games || []).filter(g => g.is_active).map(g => ({ id: g.id, title: g.title, type: "game" as const, price: g.is_offer ? g.offer_price : g.price, cost: g.cost_price }));
+    const allPacks = (packs || []).filter(p => p.is_active).map(p => ({ id: p.id, title: p.title, type: "pack" as const, price: p.price, cost: p.cost_price }));
     return [...allGames, ...allPacks];
   }, [games, packs]);
 
@@ -124,19 +130,26 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     return pool.filter(t => t.title.toLowerCase().includes(currentSearch)).slice(0, 5);
   }, [pool, form.game_name]);
 
-  const addSuggestion = (item: { title: string, price: number | null, cost: number | null }) => {
+  const addSuggestion = (item: { id: string, title: string, type: "game" | "pack", price: number | null, cost: number | null }) => {
     const parts = form.game_name.split('+').map(p => p.trim()).filter(Boolean);
     if (form.game_name.includes('+') || parts.length > 0) {
        parts.pop();
     }
     parts.push(item.title);
-    
+
+    // Se guarda el id del pack elegido para poder eliminarlo del catálogo al
+    // completar la orden sin depender de matchear el nombre por texto.
+    const pack_ids = item.type === "pack" && !form.pack_ids.includes(item.id)
+      ? [...form.pack_ids, item.id]
+      : form.pack_ids;
+
     // Auto-fill prices if empty
-    setForm({ 
-      ...form, 
+    setForm({
+      ...form,
       game_name: parts.join(' + ') + ' + ',
       sale_price: form.sale_price === "" ? (item.price || "") : form.sale_price,
-      cost_price: form.cost_price === "" ? (item.cost || "") : form.cost_price
+      cost_price: form.cost_price === "" ? (item.cost || "") : form.cost_price,
+      pack_ids,
     });
   };
 
@@ -147,7 +160,31 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const counts = {
     drafts: draftOrders.length,
     active: activeOrders.length,
+    history: historyOrders.length,
   };
+
+  // Historial filtrado por búsqueda (juego, número de orden, código corto o código del cliente)
+  const filteredHistoryOrders = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    if (!q) return historyOrders;
+    return historyOrders.filter(o =>
+      o.game_name.toLowerCase().includes(q) ||
+      o.short_code.toLowerCase().includes(q) ||
+      String(o.order_number ?? "").includes(q) ||
+      (o.console_code || "").toLowerCase().includes(q)
+    );
+  }, [historyOrders, historySearch]);
+
+  // Historial agrupado por mes para que no sea una lista infinita
+  const historyGroups = useMemo(() => {
+    const groups = new Map<string, Order[]>();
+    filteredHistoryOrders.forEach(o => {
+      const key = new Date(o.created_at).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(o);
+    });
+    return Array.from(groups.entries());
+  }, [filteredHistoryOrders]);
 
   // Secciones para "Activas"
   const activeSections = [
@@ -172,8 +209,18 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
   const save = async (e: FormEvent) => {
     e.preventDefault(); if (!supabase) return;
+    const finalGameName = form.game_name.replace(/\+\s*$/, '').trim();
+
+    // Solo se guardan los ids de packs cuyo título siga apareciendo en el texto
+    // final — si el admin borró esa parte a mano, no se arrastra un id viejo.
+    const finalGameNameLower = finalGameName.toLowerCase();
+    const validPackIds = form.pack_ids.filter(id => {
+      const pack = (packs || []).find(p => p.id === id);
+      return pack && finalGameNameLower.includes(pack.title.toLowerCase());
+    });
+
     const payload = {
-      game_name: form.game_name.replace(/\+\s*$/, '').trim(),
+      game_name: finalGameName,
       status: form.status,
       account_email: form.account_email.trim() || null,
       account_password: form.account_password.trim() || null,
@@ -181,6 +228,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       cost_price: form.cost_price === "" ? null : form.cost_price,
       provider: form.provider || null,
       partner_pct: splitEnabled ? Math.min(100, Math.max(0, Number(form.partner_pct) || 0)) : null,
+      pack_ids: validPackIds.length ? validPackIds : null,
     };
     if (!payload.game_name) { showNotice("error", "Falta el nombre del juego."); return; }
 
@@ -261,7 +309,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   // Componente interno para renderizar cada item de la lista
   const OrderItem = ({ item }: { item: Order }) => (
     <div className="group relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]">
-      
+
       <button onClick={() => select(item)} className="flex items-center gap-4 flex-1 min-w-0 text-left">
         <div className={`flex shrink-0 items-center justify-center rounded-xl border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[item.status]}`}>
           {item.status === 'ready' || item.status === 'completed' ? <CheckCircle2 size={11} className="mr-1" /> :
@@ -316,6 +364,48 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     </div>
   );
 
+  // Tabla de Historial para desktop: aprovecha el ancho disponible mostrando
+  // precio y ganancia sin tener que abrir cada orden.
+  const HistoryTable = ({ items }: { items: Order[] }) => (
+    <table className="hidden w-full md:table">
+      <thead>
+        <tr className="border-b border-white/10 text-left text-[9px] font-black uppercase tracking-widest text-gray-600">
+          <th className="px-4 py-2 font-black">Orden</th>
+          <th className="px-2 py-2 font-black">Juego</th>
+          <th className="px-2 py-2 font-black">Fecha</th>
+          <th className="px-2 py-2 font-black">Código cliente</th>
+          <th className="px-2 py-2 text-right font-black">Precio</th>
+          <th className="px-2 py-2 text-right font-black">Ganancia</th>
+          <th className="px-4 py-2 text-right font-black">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map(item => {
+          const profit = (item.sale_price ?? 0) - (item.cost_price ?? 0);
+          const yourCut = item.partner_pct != null ? Math.round(profit * (100 - item.partner_pct) / 100) : profit;
+          const isIssue = item.status === "issue";
+          return (
+            <tr key={item.id} onClick={() => select(item)}
+              className="cursor-pointer border-b border-white/[0.04] transition-colors hover:bg-white/[0.04]">
+              <td className="px-4 py-2.5 text-[11px] font-bold text-gray-400">{item.order_number ? `#${item.order_number}` : item.short_code}</td>
+              <td className="max-w-[240px] truncate px-2 py-2.5 text-[12px] font-bold text-white">{item.game_name}</td>
+              <td className="px-2 py-2.5 text-[11px] text-gray-500">{fmtDate(item.created_at)}</td>
+              <td className="px-2 py-2.5 text-[11px] text-gray-500">{item.console_code || "—"}</td>
+              <td className="px-2 py-2.5 text-right text-[11px] font-bold text-gray-300">{item.sale_price ? `$${fmt(item.sale_price)}` : "—"}</td>
+              <td className="px-2 py-2.5 text-right text-[11px] font-bold text-green-400">{item.sale_price ? `$${fmt(yourCut)}` : "—"}</td>
+              <td className="px-4 py-2.5 text-right">
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[item.status]}`}>
+                  {isIssue ? <AlertCircle size={10} /> : <CheckCircle2 size={10} />}
+                  {isIssue ? "Problema" : "Completa"}
+                </span>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+
   return (
     <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
       {/* Header */}
@@ -342,8 +432,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
           <button onClick={() => setActiveTab('active')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'active' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
             <span className="flex items-center gap-1.5">Activas {counts.active > 0 && <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-full text-[8px]">{counts.active}</span>}</span>
           </button>
-          <button onClick={() => setActiveTab('history')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'history' ? 'bg-white/10 text-white border border-white/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
-            Historial
+          <button onClick={() => setActiveTab('history')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'history' ? 'bg-slate-400/10 text-slate-300 border border-slate-400/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+            <span className="flex items-center gap-1.5">Historial {counts.history > 0 && <span className="bg-slate-400 text-black px-1.5 py-0.5 rounded-full text-[8px]">{counts.history}</span>}</span>
           </button>
         </div>
       </div>
@@ -396,13 +486,39 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
         {/* Vista: Historial */}
         {activeTab === 'history' && (
           <div>
-            {historyOrders.length === 0 ? (
+            {historyOrders.length > 0 && (
+              <div className="sticky top-0 z-10 border-b border-white/5 bg-[rgb(9,9,11)] px-4 py-3">
+                <div className="relative">
+                  <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                  <input
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    placeholder="Buscar por juego, orden o código..."
+                    className="w-full rounded-xl border border-white/8 bg-white/5 py-2 pl-9 pr-3 text-[12px] text-white outline-none placeholder:text-gray-700 focus:border-yellow-500/40"
+                  />
+                </div>
+              </div>
+            )}
+
+            {filteredHistoryOrders.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-16 text-center">
                 <CheckCircle2 size={24} className="text-gray-800" />
-                <p className="text-xs text-gray-700">No hay historial</p>
+                <p className="text-xs text-gray-700">
+                  {historySearch ? "Sin resultados para tu búsqueda" : "No hay historial"}
+                </p>
               </div>
             ) : (
-              historyOrders.map(item => <OrderItem key={item.id} item={item} />)
+              historyGroups.map(([month, items]) => (
+                <div key={month}>
+                  <div className="flex items-center gap-2 px-6 py-2 bg-[rgb(12,12,14)] border-y border-white/5">
+                    <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-400 capitalize">{month} ({items.length})</h2>
+                  </div>
+                  <div className="md:hidden">
+                    {items.map(item => <OrderItem key={item.id} item={item} />)}
+                  </div>
+                  <HistoryTable items={items} />
+                </div>
+              ))
             )}
           </div>
         )}
@@ -411,7 +527,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       {/* Edit modal */}
       {modalOpen && createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-6">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={close} />
 
           <div className="animate-soft-in relative z-10 flex h-full w-full max-w-2xl flex-col overflow-hidden sm:h-auto sm:min-h-[500px] sm:max-h-[90vh] sm:rounded-3xl sm:border sm:border-white/[0.07]"
             style={{ background: "rgb(9,9,11)" }}>
@@ -556,7 +672,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Catálogo</p>
                         <div className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1">
                           {suggestions.map(item => (
-                            <button key={item.title} type="button" onClick={() => addSuggestion(item)}
+                            <button key={`${item.type}-${item.id}`} type="button" onClick={() => addSuggestion(item)}
                               className="flex items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-white/10 transition-colors">
                               {item.type === "pack" ? <Gift size={13} className="text-purple-400 shrink-0" /> : <Gamepad2 size={13} className="text-blue-400 shrink-0" />}
                               <span className="text-[12px] font-bold text-gray-300 leading-tight">{item.title}</span>
@@ -677,7 +793,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                           )}
                         </div>
 
-                        <p className="mt-2.5 text-[10px] text-gray-600">Al pasar a estado "Completada", estos datos se registrarán automáticamente en tus Ventas.</p>
+                        <p className="mt-2.5 text-[10px] text-gray-600">Al pasar a estado "Completada", estos datos se registrarán automáticamente en tus Ventas. Si lo vendido es un pack, se eliminará del catálogo.</p>
                       </div>
 
                       <div className="rounded-xl border border-yellow-500/15 bg-yellow-500/[0.03] p-4 mt-2">

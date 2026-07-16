@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { Fragment, FormEvent, useMemo, useState } from "react";
 import {
-  Banknote, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Pencil, Plus, Receipt, RefreshCw, Trash2, TrendingDown,
+  Banknote, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Pencil, Plus, Receipt, RefreshCw, Search, Trash2, TrendingDown,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import type { AdSpend, Provider, Sale, SettingsState } from "../_types";
@@ -35,6 +35,7 @@ export function Ventas({ sales, adSpend, providers, settings, salesTableExists, 
   const [tab, setTab] = useState<Tab>("ventas");
   const [showAddAd, setShowAddAd] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [salesSearch, setSalesSearch] = useState("");
 
   /* Ad spend form */
   const [adForm, setAdForm] = useState({ platform: AD_PLATFORMS[0], amount: "", description: "", date: new Date().toISOString().slice(0, 10) });
@@ -70,6 +71,27 @@ export function Ventas({ sales, adSpend, providers, settings, salesTableExists, 
   const totalAdSpend = thisMonthAdSpend.reduce((a, s) => a + s.amount, 0);
   // La publicidad la paga el socio, así que se descuenta de su parte del reparto.
   const partnerNet = partnerProfit - totalAdSpend;
+
+  // Búsqueda + agrupado por mes para que el listado de ventas no crezca sin estructura.
+  const filteredSales = useMemo(() => {
+    const q = salesSearch.trim().toLowerCase();
+    if (!q) return sales;
+    return sales.filter(s =>
+      s.item_title.toLowerCase().includes(q) ||
+      (s.provider || "").toLowerCase().includes(q) ||
+      (s.notes || "").toLowerCase().includes(q)
+    );
+  }, [sales, salesSearch]);
+
+  const salesGroups = useMemo(() => {
+    const groups = new Map<string, Sale[]>();
+    filteredSales.forEach(s => {
+      const key = new Date(s.created_at).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(s);
+    });
+    return Array.from(groups.entries());
+  }, [filteredSales]);
 
   const deleteSale = async (id: string) => {
     if (!supabase) return;
@@ -183,9 +205,29 @@ export function Ventas({ sales, adSpend, providers, settings, salesTableExists, 
               </div>
             ) : (
               <>
+                <div className="relative mb-3">
+                  <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                  <input
+                    value={salesSearch}
+                    onChange={e => setSalesSearch(e.target.value)}
+                    placeholder="Buscar por artículo, proveedor o nota..."
+                    className={INPUT + " pl-9"}
+                  />
+                </div>
+
+                {filteredSales.length === 0 ? (
+                  <div className="flex flex-col items-center py-12 text-center">
+                    <Receipt size={28} className="mb-3 text-gray-700" />
+                    <p className="text-sm font-bold text-gray-600">Sin resultados para tu búsqueda.</p>
+                  </div>
+                ) : (
+              <>
                 {/* Mobile: stacked cards */}
                 <div className="space-y-2 sm:hidden">
-                  {sales.map(sale => {
+                  {salesGroups.map(([month, items]) => (
+                    <Fragment key={month}>
+                      <p className="px-1 pt-2 text-[10px] font-black uppercase tracking-widest text-gray-500 capitalize first:pt-0">{month} ({items.length})</p>
+                      {items.map(sale => {
                     const gain = sale.price_sold - (sale.cost_price ?? 0);
                     const hasCost = (sale.cost_price ?? 0) > 0;
                     return (
@@ -246,6 +288,8 @@ export function Ventas({ sales, adSpend, providers, settings, salesTableExists, 
                       </div>
                     );
                   })}
+                    </Fragment>
+                  ))}
                 </div>
 
                 {/* Desktop: table */}
@@ -256,7 +300,12 @@ export function Ventas({ sales, adSpend, providers, settings, salesTableExists, 
                     ))}
                   </div>
                   <div className="divide-y divide-white/5">
-                    {sales.map(sale => {
+                    {salesGroups.map(([month, items]) => (
+                      <Fragment key={month}>
+                        <div className="bg-white/[0.02] px-4 py-1.5">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 capitalize">{month} ({items.length})</p>
+                        </div>
+                        {items.map(sale => {
                       const gain = sale.price_sold - (sale.cost_price ?? 0);
                       const hasCost = (sale.cost_price ?? 0) > 0;
                       return (
@@ -298,8 +347,12 @@ export function Ventas({ sales, adSpend, providers, settings, salesTableExists, 
                         </div>
                       );
                     })}
+                      </Fragment>
+                    ))}
                   </div>
                 </div>
+              </>
+                )}
               </>
             )}
           </div>
