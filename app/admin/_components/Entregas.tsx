@@ -79,6 +79,52 @@ const STEPS: { key: Order["status"]; label: string }[] = [
   { key: "completed", label: "Completa" },
 ];
 
+// Tabla de Historial para desktop: aprovecha el ancho disponible mostrando
+// precio y ganancia sin tener que abrir cada orden. Vive fuera de Entregas
+// para no perder su identidad (y remontar toda la tabla) en cada tecla que
+// se escribe en el buscador de Historial.
+function HistoryTable({ items, onSelect }: { items: Order[]; onSelect: (item: Order) => void }) {
+  return (
+    <table className="hidden w-full md:table">
+      <thead>
+        <tr className="border-b border-white/10 text-left text-[9px] font-black uppercase tracking-widest text-gray-600">
+          <th className="px-4 py-2 font-black">Orden</th>
+          <th className="px-2 py-2 font-black">Juego</th>
+          <th className="px-2 py-2 font-black">Fecha</th>
+          <th className="px-2 py-2 font-black">Código cliente</th>
+          <th className="px-2 py-2 text-right font-black">Precio</th>
+          <th className="px-2 py-2 text-right font-black">Ganancia</th>
+          <th className="px-4 py-2 text-right font-black">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map(item => {
+          const profit = (item.sale_price ?? 0) - (item.cost_price ?? 0);
+          const yourCut = item.partner_pct != null ? Math.round(profit * (100 - item.partner_pct) / 100) : profit;
+          const isIssue = item.status === "issue";
+          return (
+            <tr key={item.id} onClick={() => onSelect(item)}
+              className="cursor-pointer border-b border-white/[0.04] transition-colors hover:bg-white/[0.04]">
+              <td className="px-4 py-2.5 text-[11px] font-bold text-gray-400">{item.order_number ? `#${item.order_number}` : item.short_code}</td>
+              <td className="max-w-[240px] truncate px-2 py-2.5 text-[12px] font-bold text-white">{item.game_name}</td>
+              <td className="px-2 py-2.5 text-[11px] text-gray-500">{fmtDate(item.created_at)}</td>
+              <td className="px-2 py-2.5 text-[11px] text-gray-500">{item.console_code || "—"}</td>
+              <td className="px-2 py-2.5 text-right text-[11px] font-bold text-gray-300">{item.sale_price != null ? `$${fmt(item.sale_price)}` : "—"}</td>
+              <td className="px-2 py-2.5 text-right text-[11px] font-bold text-green-400">{item.sale_price != null ? `$${fmt(yourCut)}` : "—"}</td>
+              <td className="px-4 py-2.5 text-right">
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[item.status]}`}>
+                  {isIssue ? <AlertCircle size={10} /> : <CheckCircle2 size={10} />}
+                  {isIssue ? "Problema" : "Completa"}
+                </span>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 type Props = {
   orders: Order[];
   games: AdminGame[];
@@ -111,6 +157,9 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const partnerName = settings.partnerName || "Socio";
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [form, setForm] = useState<OrderForm>(emptyForm);
+  // Copia del form tal como quedó al abrir el modal, para detectar cambios sin
+  // guardar antes de cerrarlo por accidente (click afuera o la X).
+  const [openedForm, setOpenedForm] = useState<OrderForm>(emptyForm);
   const [splitEnabled, setSplitEnabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -211,28 +260,40 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const currentStepIndex = STEPS.findIndex(s => s.key === form.status);
 
   const select = (o: Order) => {
-    setSelectedOrder(o); setForm(toForm(o)); setSplitEnabled(o.partner_pct != null);
+    const f = toForm(o);
+    setSelectedOrder(o); setForm(f); setOpenedForm(f); setSplitEnabled(o.partner_pct != null);
     setQuery(""); setShowSuggestions(false); setCreatedCode(null); setModalOpen(true);
   };
   const newOrder = () => {
-    setSelectedOrder(null); setForm({ ...emptyForm, partner_pct: Number(settings.partnerSplitPct) || 40 }); setSplitEnabled(false);
+    const f = { ...emptyForm, partner_pct: Number(settings.partnerSplitPct) || 40 };
+    setSelectedOrder(null); setForm(f); setOpenedForm(f); setSplitEnabled(false);
     setQuery(""); setShowSuggestions(false); setCreatedCode(null); setModalOpen(true);
   };
   const close = () => { setModalOpen(false); setSelectedOrder(null); setShowSuggestions(false); setCreatedCode(null); };
+  // Antes de cerrar por click afuera o por la X, avisa si hay cambios sin guardar
+  // (el botón "Cerrar" tras crear la orden no pasa por acá: ya quedó guardada).
+  const closeIfConfirmed = () => {
+    const dirty = JSON.stringify(form) !== JSON.stringify(openedForm);
+    if (dirty && !window.confirm("Tienes cambios sin guardar en esta orden. ¿Cerrar de todas formas?")) return;
+    close();
+  };
 
   const save = async (e: FormEvent) => {
     e.preventDefault(); if (!supabase) return;
     const finalGameName = form.game_name.replace(/\+\s*$/, '').trim();
 
-    // Solo se guardan los ids de packs cuyo título siga apareciendo en el texto
-    // final — si el admin borró esa parte a mano, no se arrastra un id viejo.
-    // Si pack_ids es null (orden vieja, nunca se supo con certeza) se mantiene
-    // null: así el trigger sigue usando el respaldo por texto solo para ella,
-    // en vez de asumir "cero packs" y saltarse ese respaldo por error.
-    const finalGameNameLower = finalGameName.toLowerCase();
+    // Solo se guardan los ids de packs cuyo título siga siendo, exactamente,
+    // uno de los segmentos separados por "+" del nombre final (mismo criterio
+    // que usa el respaldo por texto del trigger) — si el admin reescribió esa
+    // parte a mano y el título del pack quedó solo como substring de otra
+    // frase, no se arrastra el id viejo. Si pack_ids es null (orden vieja,
+    // nunca se supo con certeza) se mantiene null: así el trigger sigue
+    // usando el respaldo por texto solo para ella, en vez de asumir "cero
+    // packs" y saltarse ese respaldo por error.
+    const finalGameNameSegments = finalGameName.split('+').map(s => s.trim().toLowerCase());
     const validPackIds = form.pack_ids === null ? null : form.pack_ids.filter(id => {
       const pack = (packs || []).find(p => p.id === id);
-      return pack && finalGameNameLower.includes(pack.title.toLowerCase());
+      return pack && finalGameNameSegments.includes(pack.title.toLowerCase());
     });
 
     const payload = {
@@ -392,48 +453,6 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     </div>
   );
 
-  // Tabla de Historial para desktop: aprovecha el ancho disponible mostrando
-  // precio y ganancia sin tener que abrir cada orden.
-  const HistoryTable = ({ items }: { items: Order[] }) => (
-    <table className="hidden w-full md:table">
-      <thead>
-        <tr className="border-b border-white/10 text-left text-[9px] font-black uppercase tracking-widest text-gray-600">
-          <th className="px-4 py-2 font-black">Orden</th>
-          <th className="px-2 py-2 font-black">Juego</th>
-          <th className="px-2 py-2 font-black">Fecha</th>
-          <th className="px-2 py-2 font-black">Código cliente</th>
-          <th className="px-2 py-2 text-right font-black">Precio</th>
-          <th className="px-2 py-2 text-right font-black">Ganancia</th>
-          <th className="px-4 py-2 text-right font-black">Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map(item => {
-          const profit = (item.sale_price ?? 0) - (item.cost_price ?? 0);
-          const yourCut = item.partner_pct != null ? Math.round(profit * (100 - item.partner_pct) / 100) : profit;
-          const isIssue = item.status === "issue";
-          return (
-            <tr key={item.id} onClick={() => select(item)}
-              className="cursor-pointer border-b border-white/[0.04] transition-colors hover:bg-white/[0.04]">
-              <td className="px-4 py-2.5 text-[11px] font-bold text-gray-400">{item.order_number ? `#${item.order_number}` : item.short_code}</td>
-              <td className="max-w-[240px] truncate px-2 py-2.5 text-[12px] font-bold text-white">{item.game_name}</td>
-              <td className="px-2 py-2.5 text-[11px] text-gray-500">{fmtDate(item.created_at)}</td>
-              <td className="px-2 py-2.5 text-[11px] text-gray-500">{item.console_code || "—"}</td>
-              <td className="px-2 py-2.5 text-right text-[11px] font-bold text-gray-300">{item.sale_price ? `$${fmt(item.sale_price)}` : "—"}</td>
-              <td className="px-2 py-2.5 text-right text-[11px] font-bold text-green-400">{item.sale_price ? `$${fmt(yourCut)}` : "—"}</td>
-              <td className="px-4 py-2.5 text-right">
-                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[item.status]}`}>
-                  {isIssue ? <AlertCircle size={10} /> : <CheckCircle2 size={10} />}
-                  {isIssue ? "Problema" : "Completa"}
-                </span>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-
   return (
     <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
       {/* Header */}
@@ -544,7 +563,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                   <div className="md:hidden">
                     {items.map(item => <OrderItem key={item.id} item={item} />)}
                   </div>
-                  <HistoryTable items={items} />
+                  <HistoryTable items={items} onSelect={select} />
                 </div>
               ))
             )}
@@ -555,7 +574,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       {/* Edit modal */}
       {modalOpen && createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-6">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={close} />
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={closeIfConfirmed} />
 
           <div className="animate-soft-in relative z-10 flex h-full w-full max-w-2xl flex-col overflow-hidden sm:h-auto sm:min-h-[500px] sm:max-h-[90vh] sm:rounded-3xl sm:border sm:border-white/[0.07]"
             style={{ background: "rgb(9,9,11)" }}>
@@ -585,7 +604,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                     <Trash2 size={13} />
                   </button>
                 )}
-                <button onClick={close} type="button"
+                <button onClick={closeIfConfirmed} type="button"
                   className="rounded-xl border border-white/8 p-2 text-gray-600 transition-all hover:border-white/14 hover:bg-white/5 hover:text-white active:scale-95">
                   <X size={13} />
                 </button>
