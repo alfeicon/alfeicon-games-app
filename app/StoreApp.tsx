@@ -296,11 +296,14 @@ function StoreApp({ initial }: { initial: StoreInitialData }) {
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
     goToWhatsApp(url, event);
 
-    // Registrar "Posible Entrega" de forma silenciosa
+    // Registrar "Posible Entrega" de forma silenciosa.
+    // pack_ids se manda siempre (aunque sea []) para que el trigger sepa con
+    // certeza qué se vendió y no tenga que adivinar matcheando el nombre por texto.
     supabase?.from('orders').insert({
       game_name: item.titulo,
       status: 'draft',
       short_code: code,
+      pack_ids: item.esPack ? [item.id] : [],
     }).then(({ error }) => {
       if (error) console.error("Error creating draft order", error);
     });
@@ -313,11 +316,13 @@ function StoreApp({ initial }: { initial: StoreInitialData }) {
     const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
     goToWhatsApp(url, event);
 
-    // Registrar "Posible Entrega" de forma silenciosa
+    // Registrar "Posible Entrega" de forma silenciosa (no es un pack, así que
+    // pack_ids se manda como [] con certeza, no como null/ambiguo).
     supabase?.from('orders').insert({
       game_name: "Nintendo Switch Online 12 Meses",
       status: 'draft',
       short_code: code,
+      pack_ids: [],
     }).then(({ error }) => {
       if (error) console.error("Error creating draft order", error);
     });

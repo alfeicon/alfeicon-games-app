@@ -6,10 +6,13 @@
 -- venta todavia (misma condicion que ya exigia la version anterior de este
 -- trigger para registrar la venta).
 --
--- Entregas ahora guarda en `pack_ids` los ids exactos de los packs elegidos
--- desde el autocompletado, asi el trigger no depende de matchear el nombre
--- del pack por texto (fragil ante typos o titulos parecidos). Para ordenes
--- viejas sin `pack_ids` se mantiene el matching por texto como respaldo.
+-- Entregas y la tienda publica ahora guardan en `pack_ids` los ids exactos de
+-- los packs elegidos (o un arreglo vacio si se sabe con certeza que no hay
+-- ningun pack), asi el trigger no depende de matchear el nombre por texto
+-- (fragil ante typos o titulos parecidos). El respaldo por texto solo corre
+-- cuando `pack_ids` es NULL, es decir, para ordenes verdaderamente viejas
+-- creadas antes de que existiera esta columna (un arreglo vacio ya cuenta
+-- como "se sabe que no hay pack", no activa el respaldo).
 --
 -- Ejecutar una vez en el SQL Editor de Supabase (reemplaza la version anterior
 -- de este mismo script; no hace falta correr la anterior si no se corrio aun).
@@ -31,8 +34,9 @@ BEGIN
     -- sigue en el catalogo hasta que se complete la orden con precio.
     IF NEW.sale_price IS NOT NULL THEN
 
-      IF NEW.pack_ids IS NOT NULL AND array_length(NEW.pack_ids, 1) > 0 THEN
-        -- Camino robusto: se sabe exactamente que packs se vendieron.
+      IF NEW.pack_ids IS NOT NULL THEN
+        -- Camino robusto: se sabe con certeza que packs se vendieron (puede
+        -- ser un arreglo vacio si la orden no incluye ningun pack).
         FOR matched_pack_id IN SELECT unnest(NEW.pack_ids)
         LOOP
           sold_item_type := 'pack';
@@ -40,9 +44,10 @@ BEGIN
           DELETE FROM public.packs WHERE id = matched_pack_id;
         END LOOP;
       ELSE
-        -- Respaldo para ordenes creadas antes de que existiera pack_ids: el
-        -- nombre de la orden puede combinar varios items separados por "+"
-        -- (mismo formato que usa el autocompletado de Entregas).
+        -- Respaldo SOLO para ordenes verdaderamente viejas (pack_ids nunca
+        -- se llego a fijar, ni siquiera como arreglo vacio): el nombre de la
+        -- orden puede combinar varios items separados por "+" (mismo formato
+        -- que usa el autocompletado de Entregas).
         FOR item_name IN SELECT trim(unnest(string_to_array(NEW.game_name, '+')))
         LOOP
           SELECT id INTO matched_pack_id

@@ -18,7 +18,9 @@ type OrderForm = {
   cost_price: number | "";
   provider: string;
   partner_pct: number | "";
-  pack_ids: string[];
+  // null = no se sabe (orden creada antes de que existiera este seguimiento).
+  // [] = se sabe con certeza que no incluye ningún pack.
+  pack_ids: string[] | null;
 };
 
 const emptyForm: OrderForm = {
@@ -42,7 +44,7 @@ const toForm = (o: Order): OrderForm => ({
   cost_price: o.cost_price ?? "",
   provider: o.provider || "",
   partner_pct: o.partner_pct ?? "",
-  pack_ids: o.pack_ids || [],
+  pack_ids: o.pack_ids ?? null,
 });
 
 const STATUS_LABELS: Record<Order["status"], string> = {
@@ -144,10 +146,15 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     parts.push(item.title);
 
     // Se guarda el id del pack elegido para poder eliminarlo del catálogo al
-    // completar la orden sin depender de matchear el nombre por texto.
-    const pack_ids = item.type === "pack" && !form.pack_ids.includes(item.id)
-      ? [...form.pack_ids, item.id]
-      : form.pack_ids;
+    // completar la orden sin depender de matchear el nombre por texto. Elegir
+    // un pack aquí es lo que nos permite pasar de "no se sabe" (null) a
+    // "se sabe con certeza" (array), aunque la orden fuera vieja.
+    const currentPackIds = form.pack_ids || [];
+    const pack_ids = item.type !== "pack"
+      ? form.pack_ids
+      : currentPackIds.includes(item.id)
+        ? form.pack_ids
+        : [...currentPackIds, item.id];
 
     // Auto-fill prices if empty
     setForm({
@@ -219,8 +226,11 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
     // Solo se guardan los ids de packs cuyo título siga apareciendo en el texto
     // final — si el admin borró esa parte a mano, no se arrastra un id viejo.
+    // Si pack_ids es null (orden vieja, nunca se supo con certeza) se mantiene
+    // null: así el trigger sigue usando el respaldo por texto solo para ella,
+    // en vez de asumir "cero packs" y saltarse ese respaldo por error.
     const finalGameNameLower = finalGameName.toLowerCase();
-    const validPackIds = form.pack_ids.filter(id => {
+    const validPackIds = form.pack_ids === null ? null : form.pack_ids.filter(id => {
       const pack = (packs || []).find(p => p.id === id);
       return pack && finalGameNameLower.includes(pack.title.toLowerCase());
     });
@@ -234,7 +244,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       cost_price: form.cost_price === "" ? null : form.cost_price,
       provider: form.provider || null,
       partner_pct: splitEnabled ? Math.min(100, Math.max(0, Number(form.partner_pct) || 0)) : null,
-      pack_ids: validPackIds.length ? validPackIds : null,
+      pack_ids: validPackIds,
     };
     if (!payload.game_name) { showNotice("error", "Falta el nombre del juego."); return; }
 
