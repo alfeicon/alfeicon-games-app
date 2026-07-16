@@ -99,6 +99,12 @@ function generateShortCode() {
   return result;
 }
 
+// Postgres error 42703 = undefined_column. Permite seguir guardando la orden
+// (sin id de pack) si todavía no se corrió orders-delete-pack-on-sale.sql.
+function isMissingPackIdsColumn(error: { code?: string; message?: string }) {
+  return error?.code === "42703" && (error.message || "").includes("pack_ids");
+}
+
 export function Entregas({ orders, games, packs, providers, settings, loading, setLoading, showNotice, onReload }: Props) {
   const partnerName = settings.partnerName || "Socio";
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -238,21 +244,33 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     if (firstCredentialSave && payload.status === "preparing") payload.status = "ready";
 
     setLoading(true);
+    let missingPackIdsColumn = false;
     try {
       if (selectedOrder) {
-        const { error } = await supabase.from("orders").update(payload).eq("id", selectedOrder.id);
+        let { error } = await supabase.from("orders").update(payload).eq("id", selectedOrder.id);
+        if (error && isMissingPackIdsColumn(error)) {
+          missingPackIdsColumn = true;
+          const { pack_ids: _omit, ...payloadWithoutPackIds } = payload;
+          ({ error } = await supabase.from("orders").update(payloadWithoutPackIds).eq("id", selectedOrder.id));
+        }
         if (error) throw error;
-        showNotice("success", firstCredentialSave ? "Datos guardados — orden marcada como Lista." : "Orden actualizada.");
+        showNotice("success", missingPackIdsColumn
+          ? "Orden actualizada — falta correr orders-delete-pack-on-sale.sql en Supabase para el borrado automático de packs."
+          : (firstCredentialSave ? "Datos guardados — orden marcada como Lista." : "Orden actualizada."));
         close();
         await onReload();
       } else {
         const generatedCode = generateShortCode();
-        const { error } = await supabase.from("orders").insert({
-          ...payload,
-          short_code: generatedCode,
-        });
+        let { error } = await supabase.from("orders").insert({ ...payload, short_code: generatedCode });
+        if (error && isMissingPackIdsColumn(error)) {
+          missingPackIdsColumn = true;
+          const { pack_ids: _omit, ...payloadWithoutPackIds } = payload;
+          ({ error } = await supabase.from("orders").insert({ ...payloadWithoutPackIds, short_code: generatedCode }));
+        }
         if (error) throw error;
-        showNotice("success", "Orden creada.");
+        showNotice(missingPackIdsColumn ? "error" : "success", missingPackIdsColumn
+          ? "Orden creada — falta correr orders-delete-pack-on-sale.sql en Supabase para el borrado automático de packs."
+          : "Orden creada.");
         setCreatedCode(generatedCode);
         await onReload();
       }
