@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { memo, useId, useState, type MouseEvent } from 'react';
-import { Tag, Gift, ChevronDown, ChevronUp, Zap, HardDrive, Gamepad2, Heart, ArrowUpRight } from 'lucide-react'; 
+import { Tag, Gift, ChevronDown, ChevronUp, Zap, HardDrive, Gamepad2, Heart, ArrowUpRight, Plus } from 'lucide-react'; 
 
 // 1. Definimos los tipos para que TypeScript no se queje en page.tsx
 interface GameCardProps {
@@ -51,7 +51,7 @@ function GameCard({
   const hasMeta = Boolean(storageRequired) || Boolean(consoleLabel);
 
   return (
-    <article className="render-window animate-soft-in liquid-glass group relative mx-auto flex h-full w-full max-w-[350px] flex-col rounded-[1.55rem] p-1.5 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg">
+    <article className="render-window animate-soft-in liquid-glass group relative mx-auto flex h-full w-full max-w-[350px] flex-col rounded-[1.55rem] p-1.5">
       
       {/* 1. SECCIÓN DE IMAGEN */}
       <div className="relative h-[236px] w-full shrink-0 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[#101417]/80 shadow-inner shadow-white/5">
@@ -60,7 +60,7 @@ function GameCard({
             src={img} 
             alt={titulo} 
             fill 
-            className="object-contain transition duration-200 ease-out group-hover:scale-[1.025] group-hover:brightness-110"
+            className="object-contain"
             sizes="(max-width: 768px) 100vw, 350px"
           />
         ) : (
@@ -102,7 +102,7 @@ function GameCard({
             } ${
               saved
                 ? "border-[#e5e4e2]/70 bg-[#e5e4e2] text-[#0a0a0a] shadow-lg shadow-[#e5e4e2]/10"
-                : "border-white/10 bg-black/55 text-white hover:bg-white/15"
+                : "border-white/10 bg-black/55 text-white active:bg-white/15"
             }`}
           >
             <Heart size={18} fill={saved ? "currentColor" : "none"} strokeWidth={2.5} />
@@ -143,7 +143,7 @@ function GameCard({
                                 e.stopPropagation();
                                 setExpandido(!expandido);
                             }}
-                            className="magnetic mt-3 flex w-full items-center justify-center gap-1 border-t border-white/10 pt-2.5 text-[10px] font-black uppercase tracking-wide text-[#d5dde1] hover:text-white"
+                            className="magnetic mt-3 flex w-full items-center justify-center gap-1 border-t border-white/10 pt-2.5 text-[10px] font-black uppercase tracking-wide text-[#d5dde1] active:text-white"
                         >
                             {expandido ? <>Ver menos <ChevronUp size={12} aria-hidden="true" /></> : <>+ {juegosIncluidos.length - 4} juegos más <ChevronDown size={12} aria-hidden="true" /></>}
                         </button>
@@ -195,12 +195,12 @@ function GameCard({
             {/* BOTÓN UNIFICADO */}
             <button 
                 onClick={onAdd}
-                className="magnetic group/cta flex h-11 items-center gap-2 rounded-full bg-[#25d366] pl-4 pr-1.5 text-xs font-black uppercase tracking-wide text-[#06130a] shadow-lg shadow-[#25d366]/20 hover:bg-[#36e477]"
+                className="magnetic group/cta flex h-11 items-center gap-2 rounded-full bg-white pl-4 pr-1.5 text-xs font-black uppercase tracking-wide text-black shadow-lg shadow-white/10 active:scale-[0.98] transition-transform"
             >
                 {esPack ? <Gift size={15} strokeWidth={2.5} aria-hidden="true" /> : <Zap size={15} strokeWidth={2.5} fill="currentColor" className="opacity-55" aria-hidden="true" />}
-                {ctaLabel}
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#06130a]/10 transition-transform duration-500 group-hover/cta:translate-x-0.5">
-                  <ArrowUpRight size={14} strokeWidth={2.6} aria-hidden="true" />
+                {ctaLabel === 'Comprar' ? 'Añadir al carrito' : ctaLabel}
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/10 transition-transform duration-500 group-active/cta:rotate-90">
+                  <Plus size={14} strokeWidth={2.6} aria-hidden="true" />
                 </span>
             </button>
         </div>

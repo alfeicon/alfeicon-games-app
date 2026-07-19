@@ -187,6 +187,19 @@ function doPost(e) {
     throw new Error("Telegram no envio chat.id en el evento.");
   }
 
+  // ── RESPONDER AL CLIENTE DESDE TELEGRAM ──────────────────────────────────
+  // Basta con usar "Responder" sobre cualquier aviso que traiga el código de
+  // la orden (ALF-XXXX). Lo escrito se inserta en order_messages como si lo
+  // hubieras escrito desde el admin, y le llega al cliente al instante.
+  if (message.reply_to_message && mensajeCrudo) {
+    const citado = message.reply_to_message.text || message.reply_to_message.caption || "";
+    const match = citado.match(/ALF-[A-Z0-9]{4}/i);
+    if (match) {
+      responderAlCliente(match[0].toUpperCase(), mensajeCrudo, chatID);
+      return;
+    }
+  }
+
   if (esMensajeReenviado(message) && pareceMensajeDePack(mensajeCrudo)) {
     subirPackLogica(mensajeCrudo, chatID);
     return;
@@ -769,6 +782,33 @@ function limpiarBaseDeDatos(chatID) {
 function limpiarBaseDeDatosManual() {
   limpiarBaseDeDatos(null);
 }
+// Inserta un mensaje del admin en el chat de soporte de una orden. El cliente
+// lo recibe en su burbuja por realtime, sin recargar.
+function responderAlCliente(shortCode, texto, chatID) {
+  try {
+    const orders = supabaseRequest(
+      `orders?short_code=eq.${encodeURIComponent(shortCode)}&select=id,game_name&limit=1`,
+      "get",
+    );
+
+    if (!orders || orders.length === 0) {
+      enviarMensaje(chatID, `⚠️ No encontré la orden ${shortCode}. ¿Sigue existiendo?`);
+      return;
+    }
+
+    supabaseRequest("order_messages", "post", {
+      order_id: orders[0].id,
+      sender: "admin",
+      body: texto,
+    });
+
+    enviarMensaje(chatID, `✅ Enviado al cliente de ${shortCode} (${orders[0].game_name}).`);
+  } catch (error) {
+    Logger.log(`responderAlCliente: ${error.message}`);
+    enviarMensaje(chatID, `❌ No se pudo enviar: ${error.message}`);
+  }
+}
+
 function enviarMensaje(chatId, texto, borrarTeclado = false) {
   if (!TELEGRAM_BOT_TOKEN) {
     throw new Error("Falta TELEGRAM_BOT_TOKEN en Script Properties.");

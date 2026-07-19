@@ -355,8 +355,8 @@
 .pack3-footer {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 5px;
+  justify-content: space-between;
+  margin-top: auto;
 }
 .pack3-price {
   font-size: 21px;
@@ -409,3 +409,248 @@
 .theme-light .pack3-visual {
   background: linear-gradient(135deg, rgba(124,58,237,0.14) 0%, rgba(79,42,163,0.08) 100%);
 }
+
+/* ════════════════════════════════════════════════════
+   Cards más anchas + botón "+" destacado
+   ════════════════════════════════════════════════════ */
+
+/* Se comen parte del padding lateral del main (px-4) para ganar ancho.
+   (.game3-card lo trae en su propia regla; .cat2-card queda fuera porque
+   el admin sigue usándola en contenedores sin ese padding) */
+.pack3-card {
+  margin-inline: -6px;
+  width: calc(100% + 12px);
+}
+
+/* Botón "+" añadir al carrito — rojo Nintendo (mismo del badge de ofertas),
+   destaca sobre el fondo neutro de la card */
+.cat2-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+}
+
+.cat2-add-btn:active {
+  transform: scale(0.88);
+}
+
+/* ══════════════════════════════════════════════
+   GAME3 – Card de juego individual con el mismo
+   diseño que los packs (pack3), en tonos neutros
+   ══════════════════════════════════════════════ */
+.game3-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255,255,255,0.048);
+  border: 1px solid rgba(255,255,255,0.075);
+  border-radius: 20px;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.18s cubic-bezier(0.22,1,0.36,1),
+              background 0.15s ease;
+  will-change: transform;
+  animation: cat2In 0.44s cubic-bezier(0.22,1,0.36,1) both;
+  margin-inline: -6px;
+  width: calc(100% + 12px);
+}
+.game3-card:active {
+  transform: scale(0.982);
+  background: rgba(255,255,255,0.07);
+}
+
+.game3-card:nth-child(1) { animation-delay: 0ms; }
+.game3-card:nth-child(2) { animation-delay: 65ms; }
+.game3-card:nth-child(3) { animation-delay: 130ms; }
+.game3-card:nth-child(4) { animation-delay: 195ms; }
+.game3-card:nth-child(5) { animation-delay: 260ms; }
+.game3-card:nth-child(6) { animation-delay: 325ms; }
+
+/* Imagen superior a lo ancho, 16:9 nativo */
+.game3-visual {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(255,255,255,0.055);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Gradiente inferior para que chips y corazón se lean sobre la carátula */
+.game3-visual::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.48) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.game3-placeholder-ico {
+  color: rgba(255,255,255,0.22);
+}
+
+/* Chip de consola sobre la imagen (como el contador de los packs) */
+.game3-console-badge {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 2;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.92);
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.16);
+}
+
+/* Cuerpo con aire: tipografía idéntica a los packs */
+.game3-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 13px 15px 15px;
+  gap: 4px;
+}
+
+.game3-label {
+  font-size: 9.5px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.38);
+  margin-bottom: 2px;
+}
+
+.game3-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.game3-footer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.game3-price-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.game3-old-price {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.32);
+  text-decoration: line-through;
+  text-decoration-color: rgba(230,0,18,0.6);
+  line-height: 1;
+}
+
+.game3-price {
+  font-size: 21px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.game3-price.game3-price-sale {
+  color: #4ade80;
+}
+
+.game3-clp {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.45);
+  vertical-align: super;
+  margin-left: 2px;
+  letter-spacing: 0;
+}
+
+.game3-price.game3-price-sale .game3-clp {
+  color: rgba(74,222,128,0.55);
+}
+
+/* ── Corazón presionable (juegos y packs): 38px de área táctil ── */
+.game3-heart-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  transition: color 0.2s ease,
+              background 0.2s ease,
+              transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.game3-heart-btn:active {
+  transform: scale(0.82);
+}
+
+.game3-heart-btn.game3-heart-saved {
+  color: #ff3b30;
+  background: rgba(230,0,18,0.22);
+  border-color: rgba(230,0,18,0.35);
+}
+
+/* ── Light theme ── */
+.theme-light .game3-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.07);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.05);
+}
+.theme-light .game3-card:active {
+  background: rgba(124,58,237,0.04);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.theme-light .game3-visual { background: rgba(0,0,0,0.04); }
+.theme-light .game3-label { color: rgba(0,0,0,0.38); }
+.theme-light .game3-title { color: #0a0a0a; }
+.theme-light .game3-price { color: #0a0a0a; }
+.theme-light .game3-price.game3-price-sale { color: #15803d; }
+.theme-light .game3-old-price { color: rgba(0,0,0,0.28); }
+.theme-light .game3-clp { color: rgba(0,0,0,0.32); }

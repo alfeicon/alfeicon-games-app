@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  BarChart2, DollarSign, Gamepad2, Gift, Handshake, Percent, Plus, Receipt, TrendingUp, Wallet, Zap,
+  BarChart2, CalendarDays, DollarSign, Eye, Megaphone, Gamepad2, Gift, Handshake, Percent, Plus, Receipt, TrendingUp, Wallet, Zap,
 } from "lucide-react";
 import type { AdminGame, AdminPack, AdminSection, AdSpend, Sale, SettingsState } from "../_types";
 import { fmt, fmtDate } from "../_helpers";
@@ -12,6 +12,8 @@ type Props = {
   packs: AdminPack[];
   sales: Sale[];
   adSpend: AdSpend[];
+  /** Visitas de los últimos 30 días (tabla page_views). */
+  views: { created_at: string; item_id: string | null; source: string | null }[];
   settings: SettingsState;
   salesTableExists: boolean | null;
   firstLoadDone?: boolean;
@@ -26,7 +28,7 @@ const compact = (n: number) => {
   return `$${n}`;
 };
 
-export function Inicio({ games, packs, sales, adSpend, settings, salesTableExists, firstLoadDone = true, onNavigate, onRegisterSale }: Props) {
+export function Inicio({ games, packs, sales, adSpend, views, settings, salesTableExists, firstLoadDone = true, onNavigate, onRegisterSale }: Props) {
   const now = new Date();
   const partnerName = settings.partnerName || "Socio";
 
@@ -67,6 +69,156 @@ export function Inicio({ games, packs, sales, adSpend, settings, salesTableExist
   }, [adSpend]);
   // La publicidad la paga el socio, se descuenta de su parte del reparto.
   const partnerNet = partnerProfit - totalAdSpend;
+
+  // ── Rendimiento de la publicidad (este mes) ────────────────────────────────
+  // ROAS: cuántos pesos de venta trae cada peso invertido en anuncios. Bajo 1
+  // significa que la publicidad cuesta más de lo que genera.
+  const roas = totalAdSpend > 0 ? totalRevenue / totalAdSpend : null;
+  const costPerSale = totalAdSpend > 0 && thisMonth.length > 0 ? Math.round(totalAdSpend / thisMonth.length) : null;
+  // Cuánto de la ganancia se va en publicidad.
+  const adShareOfProfit = totalProfit > 0 ? Math.round((totalAdSpend / totalProfit) * 100) : null;
+
+  // ── Hoy y los últimos 7 días ───────────────────────────────────────────────
+  // Se comparan las fechas en local (es-CL), no en UTC: con UTC, una venta de
+  // las 22:00 en Chile caería en el día siguiente.
+  const dayKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const todayKey = dayKey(now);
+
+  const todaySales = useMemo(
+    () => sales.filter(s => dayKey(new Date(s.created_at)) === todayKey),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sales, todayKey],
+  );
+  const todayRevenue = todaySales.reduce((a, s) => a + s.price_sold, 0);
+  const todayProfit = todaySales.reduce((a, s) => a + s.price_sold - (s.cost_price || 0), 0);
+
+  const last7 = useMemo(() => {
+    const buckets = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - i));
+      return {
+        key: dayKey(d),
+        label: d.toLocaleDateString("es-CL", { weekday: "short" }).replace(".", ""),
+        revenue: 0,
+        profit: 0,
+        count: 0,
+      };
+    });
+    sales.forEach(s => {
+      const b = buckets.find(x => x.key === dayKey(new Date(s.created_at)));
+      if (b) {
+        b.revenue += s.price_sold;
+        b.profit += s.price_sold - (s.cost_price || 0);
+        b.count += 1;
+      }
+    });
+    return buckets;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sales]);
+
+  const week7Revenue = last7.reduce((a, d) => a + d.revenue, 0);
+  const week7Profit = last7.reduce((a, d) => a + d.profit, 0);
+  const avg7 = Math.round(week7Revenue / 7);
+  const maxDay = Math.max(...last7.map(d => d.revenue), 1);
+  // Ayer es el penúltimo bucket; sirve de comparación directa con hoy.
+  const yesterdayRevenue = last7[last7.length - 2]?.revenue ?? 0;
+
+  // ── Visitas a la tienda ────────────────────────────────────────────────────
+  const viewsToday = useMemo(
+    () => views.filter(v => dayKey(new Date(v.created_at)) === todayKey).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [views, todayKey],
+  );
+
+  const views7 = useMemo(() => {
+    const keys = new Set(last7.map(d => d.key));
+    return views.filter(v => keys.has(dayKey(new Date(v.created_at)))).length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views, last7]);
+
+  // Conversión: de cada 100 visitas de los últimos 7 días, cuántas terminaron
+  // en venta. Es aproximada — una visita y su compra pueden caer en días
+  // distintos — pero sirve para ver la tendencia.
+  const sales7 = useMemo(() => {
+    const keys = new Set(last7.map(d => d.key));
+    return sales.filter(s => keys.has(dayKey(new Date(s.created_at)))).length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sales, last7]);
+  const conversion = views7 > 0 ? (sales7 / views7) * 100 : null;
+
+  // Lo más mirado de los últimos 30 días, cruzado con el catálogo.
+  const topViewed = useMemo(() => {
+    const counts = new Map<string, number>();
+    views.forEach(v => {
+      if (!v.item_id) return;
+      counts.set(v.item_id, (counts.get(v.item_id) ?? 0) + 1);
+    });
+    const nameOf = (id: string) =>
+      games.find(g => g.id === id)?.title ?? packs.find(p => p.id === id)?.title ?? null;
+    return [...counts.entries()]
+      .map(([id, count]) => ({ id, count, title: nameOf(id) }))
+      .filter(x => x.title)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [views, games, packs]);
+
+  const maxViewed = Math.max(...topViewed.map(t => t.count), 1);
+
+  // De dónde llega la gente (últimos 30 días).
+  const bySource = useMemo(() => {
+    const counts = new Map<string, number>();
+    views.forEach(v => {
+      const k = v.source || "directo";
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    });
+    return [...counts.entries()]
+      .map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [views]);
+  const totalBySource = bySource.reduce((a, x) => a + x.count, 0);
+
+  // Visitas por día de los últimos 30 días, para el gráfico.
+  const viewsDaily = useMemo(() => {
+    const buckets = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (29 - i));
+      return { key: dayKey(d), date: d, count: 0 };
+    });
+    const index = new Map(buckets.map(b => [b.key, b]));
+    views.forEach(v => {
+      const b = index.get(dayKey(new Date(v.created_at)));
+      if (b) b.count += 1;
+    });
+    return buckets;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views]);
+
+  const maxViewsDay = Math.max(...viewsDaily.map(d => d.count), 1);
+
+  // Mes actual vs mes anterior (por eso se traen 60 días de visitas).
+  const viewsThisMonth = useMemo(
+    () => views.filter(v => {
+      const d = new Date(v.created_at);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [views],
+  );
+
+  const viewsLastMonth = useMemo(() => {
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return views.filter(v => {
+      const d = new Date(v.created_at);
+      return d.getMonth() === prev.getMonth() && d.getFullYear() === prev.getFullYear();
+    }).length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views]);
+
+  const monthDelta = viewsLastMonth > 0
+    ? Math.round(((viewsThisMonth - viewsLastMonth) / viewsLastMonth) * 100)
+    : null;
+
 
   // ── Serie mensual (últimos 6 meses) para el gráfico de barras ──────────────
   const monthly = useMemo(() => {
@@ -163,6 +315,99 @@ export function Inicio({ games, packs, sales, adSpend, settings, salesTableExist
         </div>
       </div>
 
+      {/* ── HOY: cuánto se vendió en el día, con la semana de contexto ── */}
+      <div style={{ animationDelay: "30ms" }}
+        className="dash-card-in grid grid-cols-1 gap-5 rounded-[1.75rem] border border-white/[0.07] bg-white/[0.02] p-6 lg:grid-cols-[minmax(0,320px)_1fr]">
+        <div>
+          <div className="mb-4 flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-500/15">
+              <CalendarDays size={17} className="text-yellow-500" />
+            </span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-white">Hoy</p>
+              <p className="text-[10px] text-gray-600 capitalize">
+                {now.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
+              </p>
+            </div>
+          </div>
+
+          {firstLoadDone ? (
+            <p key={todayRevenue} className="dash-value-in text-4xl font-black leading-none tracking-tight text-white">
+              {noSales ? "—" : `$${fmt(todayRevenue)}`}
+            </p>
+          ) : (
+            <div className="h-9 w-32 animate-pulse rounded-lg bg-white/10" />
+          )}
+          <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500">
+            {todaySales.length === 0 ? "Sin ventas todavía" : `${todaySales.length} ${todaySales.length === 1 ? "venta" : "ventas"} · $${fmt(todayProfit)} de ganancia`}
+          </p>
+
+          {!noSales && firstLoadDone && (
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3.5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Ayer</p>
+                <p className="mt-0.5 text-sm font-black text-gray-300">${fmt(yesterdayRevenue)}</p>
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Promedio 7 días</p>
+                <p className="mt-0.5 text-sm font-black text-gray-300">${fmt(avg7)}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Últimos 7 días: ingresos (barra completa) con la ganancia marcada
+            dentro, para ver de un vistazo cuánto de lo vendido quedó. */}
+        <div className="flex flex-col justify-end">
+          <div className="mb-2 flex items-center justify-end gap-3">
+            <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-gray-500">
+              <span className="h-2 w-2 rounded-sm bg-white/20" /> Ingresos
+            </span>
+            <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-gray-500">
+              <span className="h-2 w-2 rounded-sm bg-emerald-400" /> Ganancia
+            </span>
+          </div>
+
+          {/* h-full en la columna: sin una altura definida, el % de la barra
+              no resuelve contra nada y se colapsa a cero. */}
+          <div className="flex h-[132px] items-end gap-2">
+            {last7.map(d => {
+              const isToday = d.key === todayKey;
+              const barPct = Math.round((d.revenue / maxDay) * 100);
+              const profitPct = d.revenue > 0 ? Math.round((Math.max(d.profit, 0) / d.revenue) * 100) : 0;
+              return (
+                <div key={d.key} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
+                  <span className={`text-[9px] font-black leading-none ${isToday ? "text-yellow-500" : "text-gray-600"}`}>
+                    {d.revenue > 0 ? `$${fmt(d.revenue)}` : ""}
+                  </span>
+                  <div
+                    title={`${d.label}: $${fmt(d.revenue)} en ${d.count} ${d.count === 1 ? "venta" : "ventas"} · $${fmt(d.profit)} de ganancia`}
+                    className={`relative flex w-full items-end justify-center overflow-hidden rounded-t-lg transition-[height] duration-700 ${
+                      isToday ? "bg-yellow-500/25" : "bg-white/12"
+                    }`}
+                    style={{ height: mounted ? `${Math.max(barPct, d.revenue > 0 ? 8 : 3)}%` : "3%" }}
+                  >
+                    {/* Porción de ganancia, pintada desde abajo */}
+                    <div
+                      className={`w-full transition-[height] duration-700 ${isToday ? "bg-yellow-500" : "bg-emerald-400"}`}
+                      style={{ height: mounted ? `${profitPct}%` : "0%" }}
+                    />
+                  </div>
+                  <span className={`text-[9px] font-black uppercase leading-none ${isToday ? "text-yellow-500" : "text-gray-600"}`}>
+                    {d.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/5 pt-2.5 text-[10px] text-gray-600">
+            <span>Últimos 7 días: <b className="text-gray-400">${fmt(week7Revenue)}</b></span>
+            <span>Ganancia: <b className="text-emerald-400">${fmt(week7Profit)}</b></span>
+          </p>
+        </div>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {/* Hero: ganancia total + reparto */}
@@ -213,6 +458,223 @@ export function Inicio({ games, packs, sales, adSpend, settings, salesTableExist
             <p className="mt-0.5 text-[11px] text-gray-700">{sub}</p>
           </div>
         ))}
+      </div>
+
+      {/* ── VISITAS: cuánta gente mira la tienda y qué mira ── */}
+      <div style={{ animationDelay: "180ms" }}
+        className="dash-card-in grid grid-cols-1 gap-6 rounded-[1.75rem] border border-white/[0.07] bg-white/[0.02] p-6 lg:grid-cols-[minmax(0,300px)_1fr]">
+        <div>
+          <div className="mb-5 flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/12">
+              <Eye size={15} className="text-sky-400" />
+            </span>
+            <h3 className="text-sm font-black uppercase tracking-widest">Visitas</h3>
+          </div>
+
+          <p className="text-4xl font-black leading-none tracking-tight text-white">{viewsToday}</p>
+          <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500">visitas hoy</p>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3.5">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Últimos 7 días</p>
+              <p className="mt-0.5 text-sm font-black text-gray-300">{views7}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Conversión</p>
+              <p className="mt-0.5 text-sm font-black text-sky-300">
+                {conversion === null ? "—" : `${conversion.toFixed(1)}%`}
+              </p>
+            </div>
+          </div>
+          {conversion !== null && (
+            <p className="mt-2 text-[10px] leading-relaxed text-gray-600">
+              {sales7} {sales7 === 1 ? "venta" : "ventas"} sobre {views7} visitas en la semana.
+            </p>
+          )}
+
+          {/* Mes actual contra el anterior */}
+          <div className="mt-4 border-t border-white/10 pt-3.5">
+            <div className="flex items-baseline gap-2">
+              <p className="text-xl font-black leading-none text-white">{viewsThisMonth}</p>
+              {monthDelta !== null && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                  monthDelta >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                }`}>
+                  {monthDelta >= 0 ? "+" : ""}{monthDelta}%
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-600">
+              este mes {viewsLastMonth > 0 && `· ${viewsLastMonth} el anterior`}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-6">
+          {/* Visitas por día. Barras finas: con 30 días, etiquetar cada una es
+              ilegible, así que el detalle va en el tooltip. */}
+          <div>
+            <p className="mb-3 text-[9px] font-black uppercase tracking-widest text-gray-600">
+              Visitas por día · últimos 30 días
+            </p>
+            {views.length === 0 ? (
+              <p className="text-[11px] text-gray-700">Sin visitas registradas todavía.</p>
+            ) : (
+              <>
+                <div className="flex h-24 items-end gap-[3px]">
+                  {viewsDaily.map(d => {
+                    const isToday = d.key === todayKey;
+                    return (
+                      <div
+                        key={d.key}
+                        title={`${d.date.toLocaleDateString("es-CL", { day: "numeric", month: "short" })}: ${d.count} ${d.count === 1 ? "visita" : "visitas"}`}
+                        className={`flex-1 rounded-t transition-[height] duration-700 ${
+                          isToday ? "bg-yellow-500" : "bg-sky-400/60"
+                        }`}
+                        style={{ height: mounted ? `${Math.max(Math.round((d.count / maxViewsDay) * 100), d.count > 0 ? 6 : 2)}%` : "2%" }}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="mt-1.5 flex justify-between text-[9px] font-black uppercase text-gray-700">
+                  <span>{viewsDaily[0].date.toLocaleDateString("es-CL", { day: "numeric", month: "short" })}</span>
+                  <span>máx {maxViewsDay}/día</span>
+                  <span>hoy</span>
+                </div>
+              </>
+            )}
+          </div>
+
+        {/* Lo más mirado + de dónde llegan */}
+        <div className="grid gap-6 sm:grid-cols-2">
+          {/* Cada columna del grid necesita su propio contenedor, o el título
+              y la lista caen en celdas distintas. */}
+          <div>
+          <p className="mb-3 text-[9px] font-black uppercase tracking-widest text-gray-600">
+            Lo más visto · últimos 30 días
+          </p>
+          {topViewed.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+              <Eye size={22} className="mb-3 text-gray-700" />
+              <p className="text-xs font-bold text-gray-600">Todavía no hay visitas registradas</p>
+              <p className="mt-1 max-w-[280px] text-[10px] text-gray-700">
+                Si acabas de activar el registro, corre <code className="rounded bg-white/10 px-1 py-0.5 font-mono">page-views.sql</code> en Supabase.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {topViewed.map(item => (
+                <div key={item.id} className="flex items-center gap-3">
+                  <span className="w-[45%] shrink-0 truncate text-[11.5px] font-bold text-gray-300">{item.title}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                    <div
+                      className="h-full rounded-full bg-sky-400/70 transition-[width] duration-700"
+                      style={{ width: mounted ? `${Math.round((item.count / maxViewed) * 100)}%` : "0%" }}
+                    />
+                  </div>
+                  <span className="w-10 shrink-0 text-right text-[11px] font-black text-white">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
+
+          <div>
+            <p className="mb-3 text-[9px] font-black uppercase tracking-widest text-gray-600">
+              De dónde llegan
+            </p>
+            {bySource.length === 0 ? (
+              <p className="text-[11px] text-gray-700">Sin datos todavía.</p>
+            ) : (
+              <div className="space-y-2">
+                {bySource.map(s => (
+                  <div key={s.source} className="flex items-center gap-2 text-[11.5px]">
+                    <span className="w-24 shrink-0 truncate font-bold capitalize text-gray-300">{s.source}</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className="h-full rounded-full bg-violet-400/70 transition-[width] duration-700"
+                        style={{ width: mounted ? `${Math.round((s.count / (totalBySource || 1)) * 100)}%` : "0%" }} />
+                    </div>
+                    <span className="w-16 shrink-0 text-right font-black text-white">
+                      {Math.round((s.count / (totalBySource || 1)) * 100)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        </div>
+      </div>
+
+      {/* ── PUBLICIDAD: qué tan bien rinde lo invertido este mes ── */}
+      <div style={{ animationDelay: "200ms" }}
+        className="dash-card-in rounded-[1.75rem] border border-white/[0.07] bg-white/[0.02] p-6">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-500/12">
+              <Megaphone size={15} className="text-orange-400" />
+            </span>
+            <h3 className="text-sm font-black uppercase tracking-widest">Publicidad</h3>
+          </div>
+          <button type="button" onClick={() => onNavigate("ventas")}
+            className="text-[9px] font-black uppercase tracking-widest text-gray-600 hover:text-white">
+            Registrar gasto
+          </button>
+        </div>
+
+        {totalAdSpend === 0 ? (
+          <div className="flex flex-col items-center py-8 text-center">
+            <Megaphone size={24} className="mb-3 text-gray-700" />
+            <p className="text-xs font-bold text-gray-600">Sin gastos de publicidad este mes</p>
+            <p className="mt-1 text-[10px] text-gray-700">Regístralos en Ventas para ver cuánto te rinden.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Invertido</p>
+              <p className="mt-1 text-2xl font-black leading-none text-orange-400">${fmt(totalAdSpend)}</p>
+              <p className="mt-1.5 text-[10px] text-gray-600">este mes</p>
+            </div>
+
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Retorno</p>
+              <p className={`mt-1 text-2xl font-black leading-none ${
+                roas === null ? "text-gray-500" : roas >= 1 ? "text-emerald-400" : "text-red-400"
+              }`}>
+                {roas === null ? "—" : `${roas.toFixed(1)}x`}
+              </p>
+              <p className="mt-1.5 text-[10px] text-gray-600">
+                {roas === null ? "sin datos" : `$${fmt(Math.round(roas))} de venta por cada $1`}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Costo por venta</p>
+              <p className="mt-1 text-2xl font-black leading-none text-white">
+                {costPerSale === null ? "—" : `$${fmt(costPerSale)}`}
+              </p>
+              <p className="mt-1.5 text-[10px] text-gray-600">
+                {thisMonth.length} {thisMonth.length === 1 ? "venta" : "ventas"} este mes
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Se lleva de la ganancia</p>
+              <p className="mt-1 text-2xl font-black leading-none text-white">
+                {adShareOfProfit === null ? "—" : `${adShareOfProfit}%`}
+              </p>
+              {/* Barra: cuánto de la ganancia se va en anuncios */}
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-700 ${
+                    (adShareOfProfit ?? 0) > 50 ? "bg-red-400" : "bg-orange-400"
+                  }`}
+                  style={{ width: mounted ? `${Math.min(adShareOfProfit ?? 0, 100)}%` : "0%" }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Charts row */}

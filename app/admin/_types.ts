@@ -74,7 +74,32 @@ export type Order = {
   provider?: string | null;
   partner_pct?: number | null;
   pack_ids?: string[] | null;
+  payment_method?: 'transferencia' | 'mercadopago' | null;
+  payment_status?: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'refunded' | null;
+  receipt_url?: string | null;
+  mp_preference_id?: string | null;
+  mp_payment_id?: string | null;
   created_at: string;
 };
 
-export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "ventas" | "entregas" | "ajustes";
+export type OrderMessage = {
+  id: string;
+  order_id: string;
+  sender: 'customer' | 'admin';
+  body: string;
+  created_at: string;
+  /** Cuándo lo vio la contraparte (null = aún no). Requiere order-messages-read.sql. */
+  read_at?: string | null;
+};
+
+export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "ventas" | "entregas" | "soporte" | "ajustes";
+
+/** Consulta enviada desde la sección Soporte de la tienda (sin orden detrás). */
+export type SupportRequest = {
+  id: string;
+  name: string;
+  contact: string;
+  message: string;
+  status: "nueva" | "atendida";
+  created_at: string;
+};

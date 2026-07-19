@@ -358,9 +358,18 @@ html {
   justify-content: center;
   padding: 1rem;
   padding-bottom: calc(5.9rem + env(safe-area-inset-bottom));
-  background: rgba(0, 0, 0, 0.42);
-  animation: catalogDetailBackdropIn 180ms ease-out both;
+  background: rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(18px) saturate(115%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
 }
+
+/* Blur the actual page content when the detail modal is open */
+.modal-blur-active {
+  filter: blur(14px) brightness(0.7);
+  transition: filter 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
 
 .catalog-detail-panel {
   width: min(390px, 100%);
@@ -378,7 +387,6 @@ html {
     0 24px 70px rgba(0, 0, 0, 0.48);
   -webkit-backdrop-filter: blur(18px) saturate(110%);
   backdrop-filter: blur(18px) saturate(110%);
-  animation: catalogDetailPanelIn 280ms var(--ease-standard) both;
 }
 
 /* Packs: hoja alta para revisar los juegos con calma (sin quedar pegada arriba) */
@@ -2779,7 +2787,9 @@ html {
   color: #0a0a0a;
 }
 .theme-light .catalog-detail-backdrop {
-  background: rgba(0,0,0,0.28);
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 /* ── Guide section – full redesign ── */
@@ -4066,4 +4076,103 @@ html {
 
 .dash-progress-fill {
   transition: width 900ms var(--ease-standard);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Botón flotante de soporte en /entrega/[code].
+   Mismo lenguaje que .liquid-glass pero SIN las variables del tema
+   (--theme-*), porque esa página no monta .alfeicon-theme y los
+   color-mix() quedarían inválidos. Es deliberadamente tenue: es un
+   salvavidas, no una acción que queramos empujar.
+   ────────────────────────────────────────────────────────────── */
+.support-fab {
+  /* Sin `position` aquí: esta regla va al final del archivo y pisaría la
+     utilidad `fixed` de Tailwind. El botón ya trae su propio posicionamiento,
+     que además sirve de ancla para el ::after. */
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background:
+    radial-gradient(circle at 26% 12%, rgba(255, 255, 255, 0.22), transparent 42%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.12), rgba(120, 140, 155, 0.10) 48%, rgba(10, 10, 10, 0.30) 100%),
+    rgba(18, 22, 26, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.38),
+    0 10px 30px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+/* Brillo especular arriba: es lo que lo hace leer como vidrio y no
+   como un círculo translúcido. */
+.support-fab::after {
+  content: "";
+  position: absolute;
+  inset: -40% 18% auto 18%;
+  height: 60%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.20);
+  filter: blur(16px);
+  transform: rotate(-8deg);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.support-fab > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Burbuja del chat de soporte: mismo vidrio que .support-fab pero teñido de
+   ámbar, para que siga leyéndose como el color de la marca sin ser un círculo
+   sólido que tape el contenido. Tampoco declara `position` (ver nota arriba). */
+.chat-fab {
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  background:
+    radial-gradient(circle at 26% 12%, rgba(255, 255, 255, 0.32), transparent 44%),
+    linear-gradient(150deg, rgba(250, 204, 21, 0.42), rgba(234, 179, 8, 0.30) 52%, rgba(120, 80, 10, 0.34) 100%),
+    rgba(60, 45, 8, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.32),
+    0 10px 30px rgba(0, 0, 0, 0.45),
+    0 0 22px rgba(234, 179, 8, 0.16);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+
+.chat-fab::after {
+  content: "";
+  position: absolute;
+  inset: -40% 18% auto 18%;
+  height: 60%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.28);
+  filter: blur(16px);
+  transform: rotate(-8deg);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* El badge de no leídos queda fuera: debe verse sólido y por encima. */
+.chat-fab > *:not(.chat-fab-badge) {
+  position: relative;
+  z-index: 1;
+}
+
+/* El panel del chat comparte el vidrio, en versión neutra y más opaca para
+   que el texto de los mensajes siga siendo legible. */
+.chat-panel-glass {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02) 42%, rgba(10, 10, 10, 0.30) 100%),
+    rgba(12, 15, 18, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 24px 60px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
 }

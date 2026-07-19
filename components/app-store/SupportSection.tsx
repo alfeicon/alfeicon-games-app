@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Check, ChevronRight, Facebook, Instagram, MessageCircle, ShieldCheck, Youtube } from 'lucide-react';
+import { Check, ChevronRight, Facebook, Instagram, Loader2, MessageCircle, Send, ShieldCheck, Youtube } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
 
 // Toques sobre el logo necesarios para abrir el modo admin (atajo oculto).
 const ADMIN_TAPS = 5;
@@ -38,6 +39,41 @@ export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTe
   const router = useRouter();
   const tapCount = useRef(0);
   const tapTimer = useRef<number | null>(null);
+
+  // Formulario de consulta: queda guardado para revisarlo desde el admin, a
+  // diferencia del botón de WhatsApp donde la consulta se pierde si no la ves.
+  const [form, setForm] = useState({ name: '', contact: '', message: '' });
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const enviarConsulta = async () => {
+    const name = form.name.trim();
+    const contact = form.contact.trim();
+    const message = form.message.trim();
+    if (!name || !contact || !message || sending) return;
+
+    setSending(true);
+    const { error: err } = await (supabase?.from('support_requests').insert({ name, contact, message })
+      ?? Promise.resolve({ error: new Error('sin conexión') as any }));
+    setSending(false);
+
+    if (err) {
+      console.error('[soporte] no se pudo enviar', err);
+      setError('No pudimos enviar tu consulta. Escríbenos por WhatsApp y te respondemos igual.');
+      return;
+    }
+
+    setError(null);
+    setSent(true);
+    setForm({ name: '', contact: '', message: '' });
+
+    fetch('/api/notify-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'SUPPORT_REQUEST', order: { game_name: name, short_code: contact }, message }),
+    }).catch(err2 => console.error('[soporte] error notificando', err2));
+  };
 
   // Atajo oculto: ADMIN_TAPS toques seguidos sobre el logo abren /admin.
   const handleLogoTap = () => {
@@ -84,6 +120,59 @@ export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTe
               <span className="support-check__label">{s.label}</span>
             </div>
           ))}
+        </div>
+
+        {/* ── FORMULARIO DE CONSULTA ── */}
+        <div className="support-section-label">Déjanos tu consulta</div>
+        <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-4">
+          {sent ? (
+            <div className="flex flex-col items-center gap-2 py-6 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-green-500/15 text-green-400">
+                <Check size={22} strokeWidth={3} />
+              </span>
+              <p className="text-sm font-black text-white">¡Consulta enviada!</p>
+              <p className="max-w-[260px] text-xs leading-relaxed text-gray-400">
+                Te responderemos al contacto que dejaste. Si es urgente, escríbenos por WhatsApp.
+              </p>
+              <button type="button" onClick={() => setSent(false)}
+                className="mt-1 text-[10px] font-black uppercase tracking-widest text-gray-500 underline">
+                Enviar otra
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              <input
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                placeholder="Tu nombre"
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-gray-600 focus:border-white/25"
+              />
+              <input
+                value={form.contact}
+                onChange={e => setForm({ ...form, contact: e.target.value })}
+                placeholder="Tu WhatsApp o correo"
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-gray-600 focus:border-white/25"
+              />
+              <textarea
+                value={form.message}
+                onChange={e => setForm({ ...form, message: e.target.value })}
+                rows={3}
+                placeholder="¿En qué te ayudamos?"
+                className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-gray-600 focus:border-white/25"
+              />
+
+              {error && <p className="text-[11px] font-semibold text-red-400">{error}</p>}
+
+              <button
+                type="button"
+                onClick={enviarConsulta}
+                disabled={sending || !form.name.trim() || !form.contact.trim() || !form.message.trim()}
+                className="motion-press flex w-full items-center justify-center gap-2 rounded-full bg-white py-3 text-xs font-black uppercase tracking-widest text-black disabled:opacity-40"
+              >
+                {sending ? <><Loader2 size={14} className="animate-spin" /> Enviando…</> : <><Send size={14} /> Enviar consulta</>}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── REDES SOCIALES ── */}

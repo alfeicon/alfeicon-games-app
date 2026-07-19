@@ -72,7 +72,7 @@ export default function GameStoreCard({
       </span>
 
       <span className="cat2-body">
-        <span className="cat2-title">{titulo}</span>
+        <span className="cat2-title pr-8">{titulo}</span>
         <span className="cat2-platform">{consoleLabel}</span>
 
         <span className="cat2-bottom">
@@ -85,19 +85,19 @@ export default function GameStoreCard({
               <sup className="cat2-clp">{code}</sup>
             </span>
           </span>
-          {onToggleSaved && (
-            <span
-              className={`cat2-heart${saved ? " cat2-heart-saved" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleSaved();
-              }}
-            >
-              <Heart size={15} strokeWidth={2.5} fill={saved ? "currentColor" : "none"} />
-            </span>
-          )}
         </span>
       </span>
+      {onToggleSaved && (
+        <span
+          className={`absolute top-3 right-3 flex items-center justify-center h-8 w-8 rounded-full bg-black/40 backdrop-blur-md transition-colors ${saved ? 'text-red-500' : 'text-white/50 active:text-white'} z-20`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSaved();
+          }}
+        >
+          <Heart size={15} strokeWidth={2.5} fill={saved ? "currentColor" : "none"} />
+        </span>
+      )}
     </button>
   );
 }

@@ -51,19 +51,42 @@
   /* width y border-radius los controla Motion */
 }
 
-/* ── Dock morfeable ── */
+/* ── Contenedor del dock (morfea entre dock completo y píldora) ──
+   El liquid glass vive aquí y no en el nav interno: así el vidrio se contrae
+   de forma continua hacia la izquierda junto con el morph, sin apilar dos
+   capas de fondo que lo vuelvan opaco. */
 .dock-morph-wrap {
   position: relative;
   height: 66px;
   overflow: hidden;
-  background: rgba(28, 28, 32, 0.88);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255,255,255,0.10);
-  box-shadow: 0 4px 24px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset;
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Tinte al ~58%: translúcido pero con cuerpo suficiente para que los
+     iconos y etiquetas se lean sobre contenido brillante. brightness < 1
+     atenúa lo que pasa por detrás. */
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.1), transparent 32%),
+    radial-gradient(circle at 84% 110%, rgba(83, 104, 120, 0.14), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01) 52%, rgba(6, 6, 10, 0.22)),
+    rgba(17, 17, 23, 0.58);
+  -webkit-backdrop-filter: blur(28px) saturate(160%) brightness(0.92);
+  backdrop-filter: blur(28px) saturate(160%) brightness(0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24),
+    0 14px 38px rgba(0, 0, 0, 0.34);
+}
+
+/* Brillo especular superior; hereda el border-radius animado del morph */
+.dock-morph-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04) 40%, transparent 62%);
 }
 
 .dock-pill-icon {
@@ -85,18 +108,550 @@
   z-index: 1;
 }
 
-/* ── Light mode pill ── */
-.theme-light .dock-morph-wrap {
-  background: linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(250,250,253,0.9) 100%);
-  border: 1px solid rgba(0,0,0,0.07);
+/* ════════════════════════════════════════════════════
+   Carrito emergente — panel anclado sobre el dock
+   ════════════════════════════════════════════════════ */
+
+/* El backdrop y el panel se renderizan como hermanos del wrapper (no hijos):
+   el wrapper tiene transform de Motion y un position:fixed interno quedaría
+   anclado al dock en vez de al viewport. */
+.dock-cart-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: rgba(4, 4, 8, 0.6);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
+}
+
+.dock-cart-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  bottom: calc(0.38rem + env(safe-area-inset-bottom) + 76px);
+  z-index: 50;
+  width: min(374px, calc(100vw - 1.25rem));
+  /* Emerge desde el botón del carrito (esquina inferior derecha del dock) */
+  transform-origin: 88% 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.75rem;
+  padding: 1.05rem 1.05rem 1rem;
+  color: #fff;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01) 45%, rgba(6, 6, 10, 0.2)),
+    rgba(15, 15, 21, 0.72);
+  -webkit-backdrop-filter: blur(30px) saturate(160%) brightness(0.92);
+  backdrop-filter: blur(30px) saturate(160%) brightness(0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,1),
-    0 4px 20px rgba(0,0,0,0.09),
-    0 1px 4px rgba(0,0,0,0.06);
-  -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.02);
-  backdrop-filter: blur(28px) saturate(200%) brightness(1.02);
+    0 24px 60px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  will-change: transform, opacity;
+}
+
+.dock-cart-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+
+.dock-cart-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dock-cart-title {
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  flex: 1;
+}
+
+.dock-cart-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+/* ── Lista scrolleable (el scroll de la página queda bloqueado) ── */
+.dock-cart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.dock-cart-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dock-cart-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+
+.dock-cart-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem;
+  border-radius: 1.1rem;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dock-cart-item-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 0.85rem;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.dock-cart-item-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dock-cart-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dock-cart-item-info h4 {
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-cart-item-info p {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 1px;
+}
+
+.dock-cart-item-info strong {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 900;
+  margin-top: 2px;
+}
+
+.dock-cart-item-info strong span {
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.dock-cart-item-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  color: rgba(248, 113, 113, 0.55);
+}
+
+.dock-cart-item-remove:active {
+  color: rgb(248, 113, 113);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* ── Estado vacío ── */
+.dock-cart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 1.6rem 0 1.1rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.dock-cart-empty p {
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.dock-cart-explore {
+  padding: 0.5rem 1.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.dock-cart-explore:active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+/* ── Footer: total + checkout ── */
+.dock-cart-footer {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dock-cart-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.dock-cart-total > span {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dock-cart-total strong {
+  font-size: 1.3rem;
+  font-weight: 900;
+}
+
+.dock-cart-total strong span {
+  font-size: 0.66rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.dock-cart-checkout {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 999px;
+  background: #fff;
+  color: #0a0a0a;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.22);
+}
+
+.dock-cart-checkout:active {
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.32);
+}
+
+/* ── Badge del botón del carrito ── */
+.dock-cart-badge {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.45);
+}
+
+/* ── Botón del carrito: mismo liquid glass que el dock ── */
+.dock-cart-btn {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 0%, rgba(255, 255, 255, 0.1), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01) 52%, rgba(6, 6, 10, 0.22)),
+    rgba(17, 17, 23, 0.58);
+  -webkit-backdrop-filter: blur(28px) saturate(160%) brightness(0.92);
+  backdrop-filter: blur(28px) saturate(160%) brightness(0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24),
+    0 14px 38px rgba(0, 0, 0, 0.34);
+}
+
+/* Brillo especular superior, igual que el del dock */
+.dock-cart-btn::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04) 40%, transparent 62%);
+}
+
+.theme-light .dock-cart-btn {
+  background:
+    radial-gradient(circle at 30% 0%, rgba(255, 255, 255, 0.75), transparent 46%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(250, 250, 253, 0.64) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 4px 22px rgba(0, 0, 0, 0.1),
+    0 1px 4px rgba(0, 0, 0, 0.05);
+  -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.06);
+  backdrop-filter: blur(32px) saturate(200%) brightness(1.06);
+}
+
+.theme-light .dock-cart-btn::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.15) 45%, transparent 65%);
+}
+
+/* En claro el icono blanco no contrasta sobre el vidrio blanco */
+.theme-light .dock-cart-btn svg {
+  color: rgba(20, 20, 26, 0.55);
+}
+
+.theme-light .dock-cart-btn:active svg {
+  color: rgba(20, 20, 26, 0.85);
+}
+
+/* ── Botón del carrito abierto: se invierte ── */
+.alfeicon-theme .dock-cart-btn-open {
+  background: #fff !important;
+  border-color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow:
+    0 8px 28px rgba(255, 255, 255, 0.2),
+    0 4px 14px rgba(0, 0, 0, 0.3) !important;
+}
+
+.alfeicon-theme .dock-cart-btn-open svg {
+  color: #0a0a0a;
+}
+
+/* ════════════════════════════════════════════════════
+   Light mode del carrito emergente
+   ════════════════════════════════════════════════════ */
+.theme-light .dock-cart-backdrop {
+  background: rgba(235, 235, 242, 0.45);
+}
+
+.theme-light .dock-cart-panel {
+  color: #14141a;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.85), transparent 40%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(250, 250, 253, 0.6) 100%);
+  border-color: rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: blur(34px) saturate(200%) brightness(1.05);
+  backdrop-filter: blur(34px) saturate(200%) brightness(1.05);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.theme-light .dock-cart-header-icon {
+  background: rgba(124, 58, 237, 0.1);
+  border-color: rgba(124, 58, 237, 0.16);
+  color: #7c3aed;
+}
+
+.theme-light .dock-cart-count {
+  background: rgba(124, 58, 237, 0.12);
+  border-color: rgba(124, 58, 237, 0.18);
+  color: #7c3aed;
+}
+
+.theme-light .dock-cart-list {
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+
+.theme-light .dock-cart-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.theme-light .dock-cart-item {
+  background: rgba(0, 0, 0, 0.035);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+.theme-light .dock-cart-item-img {
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.3);
+}
+
+.theme-light .dock-cart-item-info p {
+  color: rgba(0, 0, 0, 0.42);
+}
+
+.theme-light .dock-cart-item-info strong span {
+  color: rgba(0, 0, 0, 0.38);
+}
+
+.theme-light .dock-cart-empty {
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.theme-light .dock-cart-explore {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.theme-light .dock-cart-explore:active {
+  background: rgba(0, 0, 0, 0.09);
+  color: #000;
+}
+
+.theme-light .dock-cart-footer {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+.theme-light .dock-cart-total > span {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.theme-light .dock-cart-total strong span {
+  color: rgba(0, 0, 0, 0.38);
+}
+
+.theme-light .dock-cart-checkout {
+  background: #7c3aed;
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.35);
+}
+
+.theme-light .dock-cart-checkout:active {
+  box-shadow: 0 8px 26px rgba(124, 58, 237, 0.45);
+}
+
+.theme-light .dock-cart-btn-open {
+  background: #7c3aed !important;
+  border-color: rgba(124, 58, 237, 0.5) !important;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.35) !important;
+}
+
+.theme-light .dock-cart-btn-open svg {
+  color: #fff !important;
 }
 
 .theme-light .dock-pill-icon {
   color: #7c3aed;
+}
+
+/* ════════════════════════════════════════════════════
+   Liquid glass — dock más transparente
+   Gana a globals.css: mismo selector + !important,
+   pero este archivo carga después.
+   ════════════════════════════════════════════════════ */
+
+/* El nav interno no pinta vidrio propio: el glass está en .dock-morph-wrap
+   (ver arriba) para que acompañe al morph. Esto anula el glass de globals. */
+.alfeicon-theme .app-glass-dock {
+  background: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.alfeicon-theme .app-glass-dock::before {
+  display: none;
+}
+
+/* Indicador activo: vidrio claro flotante en vez de bloque negro opaco */
+.alfeicon-theme .app-glass-dock-indicator {
+  -webkit-backdrop-filter: blur(12px) saturate(150%) brightness(1.1);
+  backdrop-filter: blur(12px) saturate(150%) brightness(1.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.07));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -8px 14px rgba(255, 255, 255, 0.05),
+    0 8px 20px rgba(0, 0, 0, 0.24);
+}
+
+/* Light mode: el nav tampoco pinta vidrio; el glass blanco va en el wrap */
+.theme-light .app-glass-dock {
+  background: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.theme-light .app-glass-dock::before {
+  display: none !important;
+}
+
+/* Light mode: vidrio blanco translúcido en vez de blanco casi sólido */
+.theme-light .dock-morph-wrap {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.75), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(250, 250, 253, 0.64) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 4px 22px rgba(0, 0, 0, 0.1),
+    0 1px 4px rgba(0, 0, 0, 0.05);
+  -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.06);
+  backdrop-filter: blur(32px) saturate(200%) brightness(1.06);
+}
+
+.theme-light .dock-morph-wrap::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.15) 45%, transparent 65%);
+}
+
+/* ── Miniatura que "vuela" al carrito al añadir un item ──
+   La renderiza StoreApp con position:fixed; vive aquí porque AppDock.css
+   siempre está cargado (CatalogSection es dynamic). */
+.fly-to-cart {
+  position: fixed;
+  z-index: 95;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  overflow: hidden;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #ff4d41, #e60012);
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  will-change: transform, opacity;
+}
+
+.fly-to-cart img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

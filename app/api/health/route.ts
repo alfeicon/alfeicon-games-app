@@ -25,9 +25,18 @@ async function checkDatabase(): Promise<{ ok: boolean; error?: string }> {
   const client = createClient(url, key, { auth: { persistSession: false } });
 
   try {
-    // 1. Limpieza automática de "Posibles Entregas" (Borradores) abandonadas > 15 minutos
+    // 1. Limpieza de borradores abandonados (consultas viejas de WhatsApp).
+    //    IMPORTANTE: se excluye todo lo que tenga método de pago. Las órdenes
+    //    por transferencia y Mercado Pago también nacen en 'draft', y borrarlas
+    //    dejaría sin portal a un cliente que ya pagó (o que está por subir su
+    //    comprobante). `payment_method is null` = el flujo viejo, sin pago.
     const limitDate = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-    await client.from("orders").delete().eq("status", "draft").lt("created_at", limitDate);
+    await client
+      .from("orders")
+      .delete()
+      .eq("status", "draft")
+      .is("payment_method", null)
+      .lt("created_at", limitDate);
 
     // 2. Consulta mínima y barata contra una tabla de lectura pública para chequeo de salud.
     const { error } = await client.from("app_settings").select("key").limit(1);

@@ -42,3 +42,4 @@ next-env.d.ts
 
 # claude code (local agent settings & memory)
 .claude/
+scripts/test-mp.mjs

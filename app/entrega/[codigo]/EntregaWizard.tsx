@@ -4,10 +4,17 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
-import { ArrowRight, ArrowLeft, Smartphone, Maximize, X, CheckCircle2, Copy, Gamepad2, Loader2, PackageCheck, MonitorSmartphone, KeyRound, Check, AlertCircle, Hash, Camera, LifeBuoy, BellRing } from "lucide-react";
+import { ArrowRight, ArrowLeft, Smartphone, Maximize, X, CheckCircle2, Copy, Gamepad2, Loader2, PackageCheck, MonitorSmartphone, KeyRound, Check, AlertCircle, Hash, Camera, LifeBuoy, BellRing, Send, ChevronDown, MessageCircle, CheckCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import TransferDetailsPanel from "@/components/app-store/TransferDetailsPanel";
 import { playNotificationSound, playSuccessSound, playErrorSound } from "@/lib/sounds";
-import type { Order } from "../../../app/admin/_types"; // we can redefine it here to be safe
+import type { Order, OrderMessage } from "../../../app/admin/_types"; // we can redefine it here to be safe
+
+// Cada cuánto se puede repetir el aviso de Telegram por mensajes del chat.
+const MSG_NOTIFY_COOLDOWN_MS = 10 * 60 * 1000;
+// Cuánto puede esperar un cliente (con su código ya enviado) antes de que
+// avisemos por Telegram que sigue ahí.
+const WAITING_ALERT_MS = 20 * 60 * 1000;
 
 // Soporte por WhatsApp (mismo número de la tienda).
 const WHATSAPP = "56926411278";
@@ -15,18 +22,20 @@ const WHATSAPP = "56926411278";
 type WizardState =
   | "loading"
   | "error"
+  | "payment"
   | "select_console"
   | "tutorial"
   | "input_code"
   | "waiting_setup"
   | "credentials_ready"
   | "tutorial_download"
-  | "ready"
-  | "support";
+  | "ready";
 
 export function EntregaWizard() {
   const params = useParams<{ codigo: string }>();
   const [order, setOrder] = useState<Order | null>(null);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [state, setState] = useState<WizardState>("loading");
   const [consoleType, setConsoleType] = useState<"switch1" | "switch2" | null>(null);
   const [tutorialStep, setTutorialStep] = useState(1);
@@ -43,6 +52,26 @@ export function EntregaWizard() {
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [showSupportConfirm, setShowSupportConfirm] = useState(false);
+  // Chat de soporte tipo burbuja (estilo Messenger): vive por encima del wizard,
+  // así el cliente sigue con su instalación con la conversación abierta.
+  // `chatOpen` = panel desplegado. La burbuja en sí está siempre presente
+  // mientras haya una orden cargada.
+  const [chatOpen, setChatOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [adminTyping, setAdminTyping] = useState(false);
+  const chatChannelRef = useRef<any>(null);
+  const typingTimerRef = useRef<number | null>(null);
+  const chatOpenRef = useRef(false);
+  const [messages, setMessages] = useState<OrderMessage[]>([]);
+  const [messageInput, setMessageInput] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  // Momento del último aviso de chat enviado (0 = nunca).
+  const lastMsgNotifyRef = useRef(0);
+  // Aviso de cliente esperando, para no repetirlo.
+  const notifiedWaitingRef = useRef(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const progressRef = useRef(0);
   const subscriptionRef = useRef<any>(null);
   const playedPreparingSound = useRef(false);
@@ -95,8 +124,6 @@ export function EntregaWizard() {
   useEffect(() => {
     if (state === "credentials_ready") {
       playSuccessSound();
-    } else if (state === "support") {
-      playErrorSound();
     }
   }, [state]);
 
@@ -107,6 +134,34 @@ export function EntregaWizard() {
       playNotificationSound();
     }
   }, [state, tutorialStep]);
+
+  // Si el cliente lleva demasiado rato esperando sus credenciales con la
+  // página abierta, se avisa por Telegram. El aviso inicial (CODE_SUBMITTED)
+  // pudo perderse entre otros mensajes, y acá sabemos algo que un cron no
+  // sabría: que la persona sigue ahí, esperando en vivo.
+  useEffect(() => {
+    if (state !== "waiting_setup" || !order || notifiedWaitingRef.current) return;
+
+    const desde = new Date(order.created_at).getTime();
+    const restante = Math.max(WAITING_ALERT_MS - (Date.now() - desde), 0);
+
+    const t = window.setTimeout(() => {
+      if (notifiedWaitingRef.current) return;
+      notifiedWaitingRef.current = true;
+      const minutos = Math.round((Date.now() - desde) / 60000);
+      fetch("/api/notify-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "WAITING_TOO_LONG",
+          order,
+          message: minutos >= 60 ? `${Math.floor(minutos / 60)} h ${minutos % 60} min` : `${minutos} min`,
+        }),
+      }).catch(err => console.error("Error sending notification", err));
+    }, restante);
+
+    return () => window.clearTimeout(t);
+  }, [state, order?.id, order?.created_at]);
 
   // Mantener la pantalla encendida (Wake Lock) durante la espera
   useEffect(() => {
@@ -181,6 +236,12 @@ export function EntregaWizard() {
     }
     return () => clearInterval(interval);
   }, [state, order?.status]);
+
+  useEffect(() => {
+    if (order?.payment_status === "rejected") {
+      setShowRejectModal(true);
+    }
+  }, [order?.payment_status]);
 
   useEffect(() => {
     if (!params.codigo) return;
@@ -264,7 +325,7 @@ export function EntregaWizard() {
   useEffect(() => {
     let pollInterval: any;
     if (["loading", "select_console", "tutorial", "input_code"].includes(state)) return; // No hacer polling si aún no envía el código
-    if (["credentials_ready", "tutorial_download", "ready", "support"].includes(state)) return; // No hacer polling si ya terminó
+    if (["credentials_ready", "tutorial_download", "ready"].includes(state)) return; // No hacer polling si ya terminó
 
     if (order?.id && supabase) {
       pollInterval = setInterval(async () => {
@@ -289,11 +350,169 @@ export function EntregaWizard() {
     };
   }, [state, order?.id, order?.status, order?.account_email]);
 
+  // Chat de soporte: carga el historial y se suscribe a mensajes nuevos en
+  // tiempo real mientras la burbuja está activa (mismo patrón de canal/limpieza
+  // que setupRealtime, arriba). Si llega un mensaje del admin con el panel
+  // cerrado, se cuenta como no leído para el badge de la burbuja.
+  useEffect(() => {
+    if (!order?.id || !supabase) return;
+    const client = supabase;
+    const orderId = order.id;
+    let cancelled = false;
+
+    client
+      .from("order_messages")
+      .select("*")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        const list = data as OrderMessage[];
+        setMessages(list);
+        // Lo que nos escribió y todavía no ve entra al badge de la burbuja.
+        setUnreadCount(list.filter(m => m.sender === "admin" && !m.read_at).length);
+      });
+
+    const channel = client
+      .channel(`order-messages-${orderId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "order_messages", filter: `order_id=eq.${orderId}` },
+        (payload) => {
+          const msg = payload.new as OrderMessage;
+          setMessages((prev) => [...prev, msg]);
+          if (msg.sender === "admin" && !chatOpenRef.current) {
+            setUnreadCount((n) => n + 1);
+            playNotificationSound();
+          }
+        },
+      )
+      // El "visto" del admin llega como UPDATE de read_at.
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "order_messages", filter: `order_id=eq.${orderId}` },
+        (payload) => {
+          const msg = payload.new as OrderMessage;
+          setMessages((prev) => prev.map(m => (m.id === msg.id ? msg : m)));
+        },
+      )
+      // "Escribiendo…" del admin: efímero, va por broadcast y no toca la BD.
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.from !== "admin") return;
+        setAdminTyping(true);
+        if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = window.setTimeout(() => setAdminTyping(false), 3000);
+      })
+      .subscribe();
+
+    chatChannelRef.current = channel;
+    return () => {
+      cancelled = true;
+      if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+      client.removeChannel(channel);
+    };
+  }, [order?.id]);
+
+  // Marca como leídos los mensajes del admin cuando el panel está abierto.
+  // Si falta correr order-messages-read.sql, el update falla sin romper nada.
+  useEffect(() => {
+    if (!chatOpen || !supabase || messages.length === 0) return;
+    const ids = messages.filter(m => m.sender === "admin" && !m.read_at).map(m => m.id);
+    if (ids.length === 0) return;
+    supabase.from("order_messages").update({ read_at: new Date().toISOString() }).in("id", ids)
+      .then(({ error }) => { if (error) console.warn("[entrega] no se pudo marcar leído", error.message); });
+  }, [chatOpen, messages]);
+
+  // Auto-scroll al último mensaje del chat de soporte.
+  useEffect(() => {
+    if (chatOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, chatOpen]);
+
+  // Abrir el panel marca todo como leído.
+  const openChat = () => {
+    chatOpenRef.current = true;
+    setChatOpen(true);
+    setUnreadCount(0);
+  };
+
+  const closeChat = () => {
+    chatOpenRef.current = false;
+    setChatOpen(false);
+  };
+
+  const sendSupportMessage = async () => {
+    const body = messageInput.trim();
+    if (!body || !supabase || !order || sendingMessage) return;
+    setSendingMessage(true);
+    const { error } = await supabase.from("order_messages").insert({ order_id: order.id, sender: "customer", body });
+    setSendingMessage(false);
+    if (error) {
+      // Antes esto solo iba a la consola: el cliente veía que "no pasaba nada".
+      console.error("Error enviando mensaje de soporte", error);
+      setChatError("No pudimos enviar tu mensaje. Escríbenos por WhatsApp y te ayudamos igual.");
+      return;
+    }
+    setChatError(null);
+    setMessageInput("");
+
+    // Avisar por Telegram con enfriamiento: el primer mensaje siempre, y los
+    // siguientes solo si pasaron MSG_NOTIFY_COOLDOWN_MS desde el último aviso.
+    // Antes solo se avisaba del primero: si el cliente insistía porque no le
+    // respondían, ese mensaje no llegaba a ninguna parte.
+    const ahora = Date.now();
+    if (ahora - lastMsgNotifyRef.current > MSG_NOTIFY_COOLDOWN_MS) {
+      lastMsgNotifyRef.current = ahora;
+      fetch('/api/notify-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'NEW_MESSAGE', order, message: body })
+      }).catch(err => console.error("Error sending notification", err));
+    }
+  };
+
+  // Sube la foto del comprobante al bucket `comprobantes` y la asocia a la orden.
+  // Deja payment_status en 'pending' (a la espera de que el admin apruebe/rechace).
+  const subirComprobante = async (file: File) => {
+    if (!supabase || !order || uploadingReceipt) return;
+    setUploadingReceipt(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${order.short_code}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("comprobantes").upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("comprobantes").getPublicUrl(path);
+      const url = pub.publicUrl;
+      const { error: updErr } = await supabase.from("orders").update({ receipt_url: url, payment_status: "pending" }).eq("id", order.id);
+      if (updErr) throw updErr;
+      setOrder({ ...order, receipt_url: url, payment_status: "pending" });
+
+      // Avisar por Telegram: esto sí requiere que el admin entre a validar.
+      fetch("/api/notify-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "RECEIPT_UPLOADED", order }),
+      }).catch(err => console.error("Error sending notification", err));
+    } catch (e) {
+      console.error("[entrega] error subiendo comprobante", e);
+      alert("No pudimos subir el comprobante. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
   const determineNextState = (o: Order) => {
+    // Gate de pago: una orden por transferencia que aún no está aprobada muestra
+    // la pantalla de pago (datos + subir comprobante), antes de la instalación.
+    // Las órdenes de siempre (payment_method null) saltan el gate y siguen igual.
+    // Vale tanto para transferencia (comprobante) como para Mercado Pago
+    // (confirmación del webhook). Las órdenes viejas, sin payment_method,
+    // siguen pasando derecho como siempre.
+    if ((o.payment_method === "transferencia" || o.payment_method === "mercadopago") && o.payment_status !== "approved") {
+      setState("payment");
+      return;
+    }
     if (o.status === "completed") {
       setState("ready"); // boleta final (estado 5: entrega completa)
-    } else if (o.status === "issue") {
-      setState("support"); // soporte activado / problema durante la instalación
     } else if (o.status === "ready") {
       // Estado 4: credenciales entregadas → check, luego pasos de descarga.
       // Si ya está en el flujo (check / pasos / boleta), se respeta.
@@ -337,7 +556,9 @@ export function EntregaWizard() {
     });
   };
 
-  // Soporte: marca la orden con problema (para que el admin lo vea) y abre WhatsApp.
+  // Soporte: marca la orden con problema (para que el admin lo vea) y abre la
+  // burbuja de chat. El cliente NO pierde su paso: sigue instalando con el chat
+  // encima. WhatsApp queda como enlace secundario dentro del panel.
   const openSupport = async () => {
     if (supabase && order) {
       await supabase.from("orders").update({ status: "issue" }).eq("id", order.id);
@@ -350,12 +571,8 @@ export function EntregaWizard() {
         body: JSON.stringify({ action: 'ISSUE', order })
       }).catch(err => console.error("Error sending notification", err));
     }
-    const code = order?.short_code || "";
-    const juego = order?.game_name ? ` (${order.game_name})` : "";
-    const msg = `Hola, necesito ayuda con mi orden ${code}${juego}.`;
-    window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`, "_blank");
     setShowSupportConfirm(false);
-    setState("support");
+    openChat();
   };
 
   // Maneja lo que escribe/pega el cliente: deja solo letras A–Z y, si intentó
@@ -485,9 +702,11 @@ export function EntregaWizard() {
   );
 
   return (
-    <div className="relative mx-auto flex h-[100dvh] w-full max-w-md flex-col overflow-y-auto overflow-x-hidden bg-[#090b0d] p-6 text-white">
-      {/* HEADER LOGO + SOPORTE */}
-      <div className="flex items-center justify-between shrink-0 mb-4 mt-2 w-full">
+    // pb-24: deja aire abajo para que la burbuja de soporte no tape los
+    // botones principales de cada paso en pantallas angostas.
+    <div className="relative mx-auto flex h-[100dvh] w-full max-w-md flex-col overflow-y-auto overflow-x-hidden bg-[#090b0d] px-5 pb-24 pt-4 text-white">
+      {/* HEADER LOGO */}
+      <div className="flex items-center justify-between shrink-0 mb-2 w-full">
         {/* Logo pegado a la izquierda */}
         <div className="flex items-center gap-2.5">
           <div className="h-9 w-9 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex items-center justify-center shadow-lg shadow-yellow-500/10">
@@ -499,13 +718,6 @@ export function EntregaWizard() {
           </div>
         </div>
 
-        {/* Soporte pegado a la derecha */}
-        {state !== "loading" && state !== "error" && state !== "support" && (
-          <button onClick={() => setShowSupportConfirm(true)}
-            className="flex h-9 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 text-[10px] font-black uppercase tracking-widest text-gray-300 shadow-lg transition-colors hover:bg-white/10 hover:text-white">
-            <LifeBuoy size={14} /> Soporte
-          </button>
-        )}
       </div>
 
       {/* MODAL: confirmación de soporte */}
@@ -516,21 +728,156 @@ export function EntregaWizard() {
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-500/15 text-yellow-500">
               <LifeBuoy size={26} />
             </div>
-            <h2 className="text-lg font-black uppercase tracking-widest text-white">¿Contactar soporte?</h2>
+            <h2 className="text-lg font-black uppercase tracking-widest text-white">¿Tienes problemas o dudas con la instalación?</h2>
             <p className="mt-2 text-sm leading-relaxed text-gray-400">
-              Esto <b className="text-white">pausará tu proceso actual</b> y te llevará a hablar con nosotros por WhatsApp. ¿Estás seguro?
+              Te abrimos un chat con nosotros aquí mismo. <b className="text-white">No pierdes tu avance</b>: sigues con la instalación y el chat queda flotando.
             </p>
             <div className="mt-6 flex flex-col gap-2.5">
               <button onClick={openSupport}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-green-500 py-3.5 text-xs font-black uppercase tracking-widest text-black transition-colors hover:bg-green-400">
-                <LifeBuoy size={14} /> Sí, hablar con soporte
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-green-500 py-3.5 text-xs font-black uppercase tracking-widest text-black">
+                <LifeBuoy size={14} /> Sí, necesito ayuda
               </button>
               <button onClick={() => setShowSupportConfirm(false)}
-                className="w-full rounded-full border border-white/10 py-3.5 text-xs font-black uppercase tracking-widest text-gray-400 transition-colors hover:bg-white/5 hover:text-white">
+                className="w-full rounded-full border border-white/10 py-3.5 text-xs font-black uppercase tracking-widest text-gray-400">
                 No, seguir con el proceso
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* BURBUJA DE SOPORTE — acompaña toda la instalación: el cliente puede
+          escribirnos en cualquier paso y nosotros a él. */}
+      {order && state !== "loading" && state !== "error" && (
+        <div className="fixed bottom-5 right-5 z-[70] flex flex-col items-end gap-3">
+          <AnimatePresence>
+            {chatOpen && (
+              <motion.div
+                key="chat-panel"
+                initial={{ opacity: 0, y: 16, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.94 }}
+                transition={{ type: "spring", stiffness: 360, damping: 28 }}
+                className="chat-panel-glass flex h-[26rem] w-[min(21rem,calc(100vw-2.5rem))] origin-bottom-right flex-col overflow-hidden rounded-3xl"
+              >
+                <div className="flex items-center gap-2.5 border-b border-white/10 px-4 py-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-500/15 text-yellow-500">
+                    <LifeBuoy size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-black text-white">Soporte Alfeicon</p>
+                    <p className="text-[10px] font-bold text-gray-500">Te respondemos aquí mismo</p>
+                  </div>
+                  <button onClick={closeChat} aria-label="Minimizar chat"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 active:bg-white/10">
+                    <ChevronDown size={18} />
+                  </button>
+                </div>
+
+                <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
+                  {messages.length === 0 ? (
+                    <div className="py-6 text-center">
+                      <p className="text-xs text-gray-600">Escríbenos cuando quieras, en cualquier paso.</p>
+                      {/* Escalar: marca la orden como problema y nos avisa por
+                          Telegram, para lo que no es solo una duda. */}
+                      {order?.status !== "issue" && (
+                        <button
+                          type="button"
+                          onClick={() => setShowSupportConfirm(true)}
+                          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 active:bg-white/5"
+                        >
+                          <LifeBuoy size={12} /> Tengo un problema
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    messages.map((m) => {
+                      const mine = m.sender === "customer";
+                      return (
+                        <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-snug ${
+                            mine ? "bg-yellow-500 text-black" : "bg-white/10 text-white"
+                          }`}>
+                            <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                            <span className={`mt-0.5 flex items-center justify-end gap-1 text-[9px] ${
+                              mine ? "text-black/50" : "text-gray-500"
+                            }`}>
+                              {new Date(m.created_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+                              {/* Doble check solo en los míos: gris enviado, azul visto. */}
+                              {mine && (m.read_at
+                                ? <CheckCheck size={12} className="text-blue-700" />
+                                : <Check size={12} className="text-black/40" />)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  {adminTyping && (
+                    <p className="px-1 text-[11px] font-bold italic text-gray-500">Soporte está escribiendo…</p>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {chatError && (
+                  <div className="mx-2.5 mb-1 flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 p-2.5 text-[11.5px] font-semibold text-red-300">
+                    <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                    <span className="flex-1">
+                      {chatError}{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const code = order?.short_code || "";
+                          const juego = order?.game_name ? ` (${order.game_name})` : "";
+                          window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola, necesito ayuda con mi orden ${code}${juego}.`)}`, "_blank");
+                        }}
+                        className="font-black text-white underline"
+                      >
+                        Abrir WhatsApp
+                      </button>
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 border-t border-white/10 p-2.5">
+                  <input
+                    value={messageInput}
+                    onChange={(e) => {
+                      setMessageInput(e.target.value);
+                      chatChannelRef.current?.send({ type: "broadcast", event: "typing", payload: { from: "customer" } });
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendSupportMessage(); } }}
+                    placeholder="Escribe tu mensaje..."
+                    className="flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none placeholder:text-gray-600 focus:border-yellow-500/50"
+                  />
+                  <button onClick={sendSupportMessage} disabled={sendingMessage || !messageInput.trim()}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-500 text-black disabled:opacity-40">
+                    {sendingMessage ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Botón burbuja + badge de mensajes sin leer */}
+          <button
+            onClick={() => (chatOpen ? closeChat() : openChat())}
+            aria-label={chatOpen ? "Minimizar soporte" : `Abrir soporte${unreadCount > 0 ? ` (${unreadCount} sin leer)` : ""}`}
+            className="chat-fab relative flex h-14 w-14 items-center justify-center rounded-full text-yellow-50 active:scale-95"
+          >
+            {chatOpen ? <ChevronDown size={24} /> : <MessageCircle size={24} />}
+            {!chatOpen && unreadCount > 0 && (
+              <motion.span
+                key={unreadCount}
+                initial={{ scale: 1.5 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 520, damping: 18 }}
+                className="chat-fab-badge absolute -right-0.5 -top-0.5 z-[2] flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#0c0f12] bg-red-500 px-1 text-[11px] font-black text-white"
+              >
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </motion.span>
+            )}
+          </button>
         </div>
       )}
 
@@ -541,14 +888,66 @@ export function EntregaWizard() {
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 backdrop-blur-xl"
             onClick={() => setFullscreenImage(null)}
           >
-            <button onClick={() => setFullscreenImage(null)} className="absolute top-6 right-6 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 z-[101]">
+            <button onClick={() => setFullscreenImage(null)} className="absolute right-6 top-6 z-[101] rounded-full bg-white/10 p-3 text-white hover:bg-white/20">
               <X size={24} />
             </button>
             <img src={fullscreenImage} alt="Fullscreen" className="max-h-full max-w-full object-contain" />
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* REJECT MODAL */}
+      <AnimatePresence>
+        {showRejectModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowRejectModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative z-10 w-full max-w-sm rounded-3xl border border-red-500/30 bg-[#120a0a] p-6 text-center shadow-2xl shadow-red-500/20">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15 text-red-500">
+                <AlertCircle size={28} />
+              </div>
+              <h2 className="text-lg font-black uppercase tracking-widest text-white">Comprobante Rechazado</h2>
+              <p className="mt-3 text-sm leading-relaxed text-gray-300">
+                Tu comprobante no pudo ser validado. Por favor, asegúrate de que la imagen sea clara y los datos coincidan.
+              </p>
+              <div className="mt-6 flex flex-col gap-3">
+                <button onClick={() => setShowRejectModal(false)} className="flex w-full items-center justify-center gap-2 rounded-full bg-red-500 py-3.5 text-xs font-black uppercase tracking-widest text-black transition-colors hover:bg-red-400">
+                  Subir nuevo comprobante
+                </button>
+                <button onClick={() => { setShowRejectModal(false); setShowCancelModal(true); }} className="flex w-full items-center justify-center rounded-full border border-white/10 py-3.5 text-xs font-black uppercase tracking-widest text-gray-400 transition-colors hover:bg-white/5 hover:text-white">
+                  Volver a la tienda
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CANCEL MODAL */}
+      <AnimatePresence>
+        {showCancelModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowCancelModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative z-10 w-full max-w-sm rounded-3xl border border-white/10 bg-[#120a0a] p-6 text-center shadow-2xl">
+              <h2 className="text-lg font-black uppercase tracking-widest text-white">Cancelar Orden</h2>
+              <p className="mt-3 text-sm leading-relaxed text-gray-300">
+                Tu orden <strong className="text-yellow-500">{order?.short_code}</strong> se cancelará. ¿Estás seguro de volver a la tienda?
+              </p>
+              <div className="mt-6 flex flex-col gap-3">
+                <button onClick={async () => {
+                  if (order && supabase) await supabase.from('orders').update({ payment_status: 'cancelled' }).eq('id', order.id);
+                  window.location.href = "/";
+                }} className="flex w-full items-center justify-center rounded-full bg-white/10 py-3.5 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-red-500/20 hover:text-red-400">
+                  Sí, Cancelar Orden
+                </button>
+                <button onClick={() => setShowCancelModal(false)} className="flex w-full items-center justify-center gap-2 rounded-full bg-white py-3.5 text-xs font-black uppercase tracking-widest text-black transition-colors hover:bg-gray-200">
+                  No, Continuar Pago
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -594,6 +993,115 @@ export function EntregaWizard() {
             </div>
             <h1 className="text-xl font-black uppercase tracking-widest">Orden no encontrada</h1>
             <p className="mt-2 text-sm text-gray-400">El código ingresado no existe o ha expirado. Por favor contacta a soporte.</p>
+            <a href="/" className="mt-8 rounded-full bg-white/10 px-6 py-3 text-xs font-black uppercase tracking-widest text-white hover:bg-white/20 transition-colors">
+              Ir a la tienda
+            </a>
+          </motion.div>
+        )}
+
+        {/* GATE DE PAGO — transferencia pendiente / rechazada */}
+        {/* Mercado Pago: no hay nada que subir, solo esperar la confirmación
+            del webhook. Llega por realtime y la pantalla avanza sola. */}
+        {state === "payment" && order && order.payment_method === "mercadopago" && (
+          <motion.div key="payment-mp" variants={variants} initial="initial" animate="animate" exit="exit" className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-yellow-500/30 bg-yellow-500/10">
+              {order.payment_status === "rejected"
+                ? <AlertCircle size={28} className="text-red-400" />
+                : <Loader2 size={28} className="animate-spin text-yellow-500" />}
+            </div>
+
+            {order.payment_status === "rejected" ? (
+              <>
+                <h1 className="text-xl font-black uppercase tracking-tight text-white">Pago rechazado</h1>
+                <p className="max-w-[290px] text-xs leading-relaxed text-gray-400">
+                  Mercado Pago no aprobó el pago de tu orden <b className="text-white">{order.short_code}</b>. Puedes intentarlo otra vez desde la tienda o escribirnos.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[10px] font-black uppercase tracking-widest text-yellow-500">Confirmando tu pago</p>
+                <h1 className="text-xl font-black uppercase tracking-tight text-white">Un momento…</h1>
+                <p className="max-w-[290px] text-xs leading-relaxed text-gray-400">
+                  Estamos esperando la confirmación de Mercado Pago. Esta pantalla avanza sola en cuanto llegue — no cierres la página.
+                </p>
+                <p className="text-[11px] text-gray-600">Orden <b className="text-gray-400">{order.short_code}</b> · ${(order.sale_price ?? 0).toLocaleString("es-CL")} CLP</p>
+              </>
+            )}
+
+            <a href="/" className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500 underline">
+              Volver a la tienda
+            </a>
+          </motion.div>
+        )}
+
+        {state === "payment" && order && order.payment_method !== "mercadopago" && (
+          <motion.div key="payment" variants={variants} initial="initial" animate="animate" exit="exit" className="flex flex-1 flex-col justify-center gap-2">
+            <div className="rounded-[1.4rem] border border-white/10 bg-black/40 p-3">
+              <TransferDetailsPanel
+                code={order.short_code}
+                totalLabel={`$${(order.sale_price ?? 0).toLocaleString("es-CL")} CLP`}
+                whatsappNumber="56926411278"
+                isCollapsed={(!!order.receipt_url && order.payment_status !== "rejected") || uploadingReceipt}
+              />
+            </div>
+
+            <div className="rounded-[1.4rem] border border-white/10 bg-black/40 p-3">
+              <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-yellow-500">Comprobante</p>
+
+              {order.payment_status === "rejected" && (
+                <div className="mb-2.5 flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 p-2.5 text-[11.5px] font-semibold text-red-300">
+                  <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                  Comprobante rechazado. Vuelve a subirlo o escríbenos.
+                </div>
+              )}
+
+              {(uploadingReceipt || (order.receipt_url && order.payment_status !== "rejected")) && (
+                <div className="mb-2.5 flex flex-col gap-2 rounded-xl border border-yellow-500/25 bg-yellow-500/10 p-2.5 text-[11.5px] font-semibold text-yellow-300">
+                  <div className="flex items-center gap-2">
+                    <Loader2 size={15} className="shrink-0 animate-spin" />
+                    {uploadingReceipt ? "Subiendo comprobante..." : "Comprobante en revisión. Te avisaremos aquí mismo."}
+                  </div>
+                  <div className="relative h-1 w-full overflow-hidden rounded-full bg-yellow-500/20">
+                    <motion.div
+                      className="absolute left-0 top-0 h-full w-1/2 rounded-full bg-yellow-500"
+                      animate={{ x: ["-100%", "200%"] }}
+                      transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {order.receipt_url && (
+                <button type="button" onClick={() => setFullscreenImage(order.receipt_url!)} className="mb-2 block w-full overflow-hidden rounded-xl border border-white/10">
+                  <img src={order.receipt_url} alt="Comprobante" className="max-h-24 w-full bg-black/40 object-contain" />
+                </button>
+              )}
+
+              <label className={`flex w-full items-center justify-center gap-2 rounded-full py-2 text-xs font-black uppercase tracking-wide ${uploadingReceipt ? "bg-white/10 text-gray-400" : "cursor-pointer bg-white text-black"}`}>
+                {uploadingReceipt ? (
+                  <><Loader2 size={15} className="animate-spin" /> Subiendo...</>
+                ) : (
+                  <><Camera size={15} /> {order.receipt_url ? "Cambiar comprobante" : "Subir comprobante"}</>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingReceipt}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) subirComprobante(f); e.currentTarget.value = ""; }}
+                />
+              </label>
+
+              <p className="mt-2 text-center text-[10.5px] leading-snug text-gray-500">
+                Al confirmar tu pago continúas con la instalación.
+              </p>
+            </div>
+
+            <div className="mt-2 text-center">
+              <button onClick={() => setShowCancelModal(true)} className="text-[11px] font-black uppercase tracking-wide text-gray-500 underline decoration-white/20 underline-offset-4 transition hover:text-white">
+                Volver a la tienda
+              </button>
+            </div>
           </motion.div>
         )}
 
@@ -890,29 +1398,6 @@ export function EntregaWizard() {
               className="flex w-full max-w-[290px] items-center justify-center gap-2 rounded-full bg-yellow-500 py-4 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-yellow-400">
               Continuar con la instalación <ArrowRight size={14} />
             </button>
-          </motion.div>
-        )}
-
-        {/* SOPORTE (problema durante la instalación) */}
-        {state === "support" && (
-          <motion.div key="support" variants={variants} initial="initial" animate="animate" exit="exit" className="flex flex-col flex-1 items-center justify-center text-center">
-            <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-yellow-500/30 bg-yellow-500/15 text-yellow-500">
-              <LifeBuoy size={40} />
-            </div>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-yellow-500">Soporte activado</p>
-            <h1 className="mb-2 text-2xl font-black uppercase tracking-tight text-white">Estamos contigo</h1>
-            <p className="mb-6 max-w-[290px] text-sm leading-relaxed text-gray-400">
-              Tu proceso está en pausa. Escríbenos por WhatsApp y resolveremos tu caso lo antes posible.
-            </p>
-            <button onClick={() => {
-                const code = order?.short_code || "";
-                const juego = order?.game_name ? ` (${order.game_name})` : "";
-                window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola, necesito ayuda con mi orden ${code}${juego}.`)}`, "_blank");
-              }}
-              className="flex w-full max-w-[290px] items-center justify-center gap-2 rounded-full bg-green-500 py-4 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-green-400">
-              <LifeBuoy size={14} /> Escribir por WhatsApp
-            </button>
-            <p className="mt-4 max-w-[260px] text-[10px] text-gray-600">Cuando resolvamos tu caso, esta pantalla se actualizará sola.</p>
           </motion.div>
         )}
 

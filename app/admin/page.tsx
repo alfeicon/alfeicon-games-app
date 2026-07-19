@@ -4,12 +4,12 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff,
-  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, X
+  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
 import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY } from "./_helpers";
-import type { AdminGame, AdminPack, AdminNews, AdSpend, AdminSection, Provider, Sale, SettingsState } from "./_types";
+import type { AdminGame, AdminPack, AdminNews, AdSpend, AdminSection, Provider, Sale, SettingsState, SupportRequest } from "./_types";
 import { Inicio } from "./_components/Inicio";
 import { JuegosCatalog } from "./_components/JuegosCatalog";
 import { PacksCatalog } from "./_components/PacksCatalog";
@@ -17,6 +17,7 @@ import { Noticias } from "./_components/Noticias";
 import { Ventas } from "./_components/Ventas";
 import { Entregas } from "./_components/Entregas";
 import { Ajustes } from "./_components/Ajustes";
+import { Soporte } from "./_components/Soporte";
 import { SaleModal } from "./_components/SaleModal";
 import type { Order } from "./_types";
 
@@ -34,6 +35,7 @@ const NAV_ITEMS: { id: AdminSection; label: string; Icon: React.ElementType; acc
   { id: "entregas", label: "Entregas", Icon: PackageCheck, accent: "text-yellow-400" },
   { id: "noticias", label: "Noticias", Icon: Newspaper, accent: "text-orange-400" },
   { id: "ventas",  label: "Ventas",  Icon: Receipt,  accent: "text-green-400" },
+  { id: "soporte", label: "Soporte", Icon: LifeBuoy, accent: "text-sky-400" },
   { id: "ajustes", label: "Ajustes", Icon: Settings,  accent: "text-gray-400" },
 ];
 
@@ -47,6 +49,9 @@ export default function AdminPage() {
   const [authError, setAuthError] = useState("");
 
   const [section, setSection] = useState<AdminSection>("inicio");
+  // Sidebar de desktop: arranca plegado (solo iconos) y se abre solo mientras
+  // el cursor está encima.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [sectionKey, setSectionKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -60,7 +65,10 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [adSpend, setAdSpend] = useState<AdSpend[]>([]);
+  // Visitas de la tienda (tabla page_views). Solo se necesitan las recientes.
+  const [views, setViews] = useState<{ created_at: string; item_id: string | null; source: string | null }[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [supportRequests, setSupportRequests] = useState<SupportRequest[]>([]);
   const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [salesTableExists, setSalesTableExists] = useState<boolean | null>(null);
   const [salesError, setSalesError] = useState<string | null>(null);
@@ -152,6 +160,35 @@ export default function AdminPage() {
     setOrders((data || []) as Order[]);
   }, [showNotice]);
 
+  const loadSupport = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("support_requests")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(300);
+    // Sin la tabla (falta support-requests.sql) el panel sigue funcionando.
+    if (error) { setSupportRequests([]); return; }
+    setSupportRequests((data || []) as SupportRequest[]);
+  }, []);
+
+  const loadViews = useCallback(async () => {
+    if (!supabase) return;
+    // 60 días: alcanza para el gráfico diario del mes y para comparar con el
+    // mes anterior. Si el tráfico crece mucho habrá que agregar por día en SQL
+    // en vez de traer fila por fila.
+    const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from("page_views")
+      .select("created_at,item_id,source")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(20000);
+    // Si falta correr page-views.sql, el panel sigue funcionando sin visitas.
+    if (error) { setViews([]); return; }
+    setViews(data || []);
+  }, []);
+
   const loadSales = useCallback(async () => {
     if (!supabase) return;
     setSalesError(null);
@@ -237,13 +274,15 @@ export default function AdminPage() {
     setTimeout(() => {
       loadOrders().catch(console.error);
       loadNews().catch(console.error);
+      loadSupport().catch(console.error);
     }, 100);
     setTimeout(() => {
       loadAdSpend().catch(console.error);
+      loadViews().catch(console.error);
       loadSettings().catch(console.error);
       loadProviders().catch(console.error);
     }, 300);
-  }, [loadGames, loadPacks, loadSales, loadOrders, loadNews, loadAdSpend, loadSettings, loadProviders]);
+  }, [loadGames, loadPacks, loadSales, loadOrders, loadNews, loadSupport, loadAdSpend, loadViews, loadSettings, loadProviders]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -494,9 +533,16 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Sidebar (desktop) */}
+      {/* Sidebar (desktop) — plegado a iconos, se abre solo al acercar el cursor.
+          El hueco de 64px queda fijo y el menú crece por encima del contenido,
+          así abrirlo no reacomoda toda la pantalla. */}
+      <div className="relative hidden w-[64px] shrink-0 md:block">
       <nav
-        className="relative hidden w-[210px] shrink-0 flex-col overflow-hidden md:flex"
+        onMouseEnter={() => setSidebarCollapsed(false)}
+        onMouseLeave={() => setSidebarCollapsed(true)}
+        className={`absolute inset-y-0 left-0 z-40 flex flex-col overflow-hidden transition-[width] duration-200 ${
+          sidebarCollapsed ? "w-[64px]" : "w-[210px] shadow-2xl shadow-black/50"
+        }`}
         style={{
           background: "linear-gradient(180deg, #0c0f12 0%, #090b0d 100%)",
           borderRight: "1px solid rgba(255,255,255,0.06)",
@@ -506,17 +552,19 @@ export default function AdminPage() {
         <div className="pointer-events-none absolute left-0 right-0 top-0 h-32 bg-gradient-to-b from-white/[0.035] to-transparent" />
 
         {/* Logo */}
-        <div className="relative flex items-center gap-3 px-5 py-5">
+        <div className={`relative flex items-center py-5 ${sidebarCollapsed ? "justify-center px-2" : "gap-3 px-5"}`}>
           <div
-            className="flex h-8 w-8 items-center justify-center rounded-xl"
+            className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl"
             style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
           >
-            <ShieldCheck size={14} className="text-white/80" />
+            <img src="/logo.png" alt="Alfeicon Games" className="h-full w-full object-cover" />
           </div>
-          <div className="min-w-0">
-            <p className="text-[11px] font-black uppercase tracking-widest text-white/90">Admin</p>
-            <p className="truncate text-[9px] font-bold tracking-widest text-gray-600">Alfeicon Games</p>
-          </div>
+          {!sidebarCollapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-black uppercase tracking-widest text-white/90">Admin</p>
+              <p className="truncate text-[9px] font-bold tracking-widest text-gray-600">Alfeicon Games</p>
+            </div>
+          )}
         </div>
 
         {/* Nav items */}
@@ -525,7 +573,11 @@ export default function AdminPage() {
             const active = section === id;
             return (
               <button key={id} onClick={() => navigate(id)}
-                className="group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200"
+                title={sidebarCollapsed ? label : undefined}
+                aria-label={label}
+                className={`group relative flex w-full items-center rounded-xl py-2.5 transition-all duration-200 ${
+                  sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3 text-left"
+                }`}
                 style={{
                   background: active ? "rgba(255,255,255,0.07)" : "transparent",
                   boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
@@ -544,9 +596,11 @@ export default function AdminPage() {
                   style={{ background: active ? "rgba(255,255,255,0.06)" : "transparent" }}>
                   <Icon size={14} />
                 </div>
-                <span className={`relative text-[10.5px] font-black uppercase tracking-widest transition-colors duration-200 ${
-                  active ? "text-white" : "text-gray-700 group-hover:text-gray-400"
-                }`}>{label}</span>
+                {!sidebarCollapsed && (
+                  <span className={`relative text-[10.5px] font-black uppercase tracking-widest transition-colors duration-200 ${
+                    active ? "text-white" : "text-gray-700 group-hover:text-gray-400"
+                  }`}>{label}</span>
+                )}
               </button>
             );
           })}
@@ -554,23 +608,33 @@ export default function AdminPage() {
 
         {/* Bottom */}
         <div className="relative border-t border-white/[0.05] px-2.5 py-3 space-y-0.5">
-          <Link href="/" className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all hover:bg-white/[0.04]">
-            <ArrowLeft size={13} className="text-gray-700 transition-colors group-hover:text-gray-500" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-700 transition-colors group-hover:text-gray-500">Ver tienda</span>
+          <Link href="/" title={sidebarCollapsed ? "Ver tienda" : undefined}
+            className={`group flex items-center rounded-xl py-2.5 transition-all hover:bg-white/[0.04] ${
+              sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3"
+            }`}>
+            <ArrowLeft size={13} className="shrink-0 text-gray-700 transition-colors group-hover:text-gray-500" />
+            {!sidebarCollapsed && (
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-700 transition-colors group-hover:text-gray-500">Ver tienda</span>
+            )}
           </Link>
-          <button onClick={signOut}
-            className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all hover:bg-red-500/8">
-            <LogOut size={13} className="text-gray-700 transition-colors group-hover:text-red-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-700 transition-colors group-hover:text-red-400">Cerrar sesión</span>
+          <button onClick={signOut} title={sidebarCollapsed ? "Cerrar sesión" : undefined}
+            className={`group flex w-full items-center rounded-xl py-2.5 transition-all hover:bg-red-500/8 ${
+              sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3"
+            }`}>
+            <LogOut size={13} className="shrink-0 text-gray-700 transition-colors group-hover:text-red-400" />
+            {!sidebarCollapsed && (
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-700 transition-colors group-hover:text-red-400">Cerrar sesión</span>
+            )}
           </button>
         </div>
       </nav>
+      </div>
 
       {/* Main */}
       <div className="relative flex flex-1 flex-col overflow-hidden">
         <div key={sectionKey} className="flex h-full flex-col animate-soft-in">
           {section === "inicio" && (
-            <Inicio games={games} packs={packs} sales={sales} adSpend={adSpend} settings={settings}
+            <Inicio games={games} packs={packs} sales={sales} adSpend={adSpend} views={views} settings={settings}
               salesTableExists={salesTableExists}
               firstLoadDone={firstLoadDone}
               onNavigate={navigate}
@@ -598,6 +662,10 @@ export default function AdminPage() {
               salesError={salesError}
               loading={loading} setLoading={setLoading}
               showNotice={showNotice} onReload={loadAll} />
+          )}
+          {section === "soporte" && (
+            <Soporte requests={supportRequests} loading={loading} setLoading={setLoading}
+              showNotice={showNotice} onReload={loadSupport} />
           )}
           {section === "ajustes" && (
             <Ajustes settings={settings} providers={providers} loading={loading}

@@ -19,7 +19,7 @@ export default function TermsModal({ onClose }: TermsModalProps) {
           <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
             <ShieldCheck size={18} className="text-blue-500" /> Términos y Condiciones
           </h3>
-          <button onClick={onClose} className="magnetic rounded-full bg-white/5 p-2 text-white hover:bg-white/20">
+          <button onClick={onClose} className="magnetic rounded-full bg-white/5 p-2 text-white active:bg-white/20">
             <X size={20} />
           </button>
         </div>
@@ -87,7 +87,7 @@ export default function TermsModal({ onClose }: TermsModalProps) {
 
         {/* Botón de Cierre */}
         <div className="border-t border-white/5 p-4">
-          <button onClick={onClose} className="magnetic w-full rounded-full bg-[#e5e4e2] py-4 text-xs font-black uppercase tracking-[0.2em] text-[#0a0a0a] shadow-lg shadow-white/10 hover:bg-white">
+          <button onClick={onClose} className="magnetic w-full rounded-full bg-[#e5e4e2] py-4 text-xs font-black uppercase tracking-[0.2em] text-[#0a0a0a] shadow-lg shadow-white/10 active:bg-white">
             Entendido y Acepto
           </button>
         </div>

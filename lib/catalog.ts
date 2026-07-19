@@ -69,18 +69,39 @@ export function getImageForGame(titulo: string): string | null {
   return imageByGameName.get(normalizeGameName(titulo)) ?? null;
 }
 
+// Slug legible para links compartibles: "1-2 Switch™" -> "1-2-switch".
+// Quita acentos, símbolos de marca y colapsa lo demás en guiones.
+export function slugifyTitulo(titulo: string): string {
+  return titulo
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[™®©]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Busca un juego/pack por su slug de título. Devuelve null si no hay match
+// (p. ej. si el título cambió desde que se compartió el link).
+export function findCatalogItemBySlug<T extends { titulo: string }>(
+  items: T[],
+  slug: string,
+): T | null {
+  return items.find((item) => slugifyTitulo(item.titulo) === slug) ?? null;
+}
+
 // Reescribe URLs de assets.nintendo.com a un thumbnail más liviano en vez de
 // cargar la imagen full-size (w_1240) para huecos pequeños.
 export function getNintendoThumb(
   url: string | null | undefined,
-  w = 272,
-  h = 153,
+  w = 400,
+  h = 225,
 ): string | undefined {
   if (!url) return undefined;
   if (url.includes('assets.nintendo.com/image/upload/')) {
     const m = url.match(/((?:ncom|store)\/.+)/);
     if (m) {
-      return `https://assets.nintendo.com/image/upload/c_fill,g_auto,w_${w},h_${h},f_auto,q_auto/${m[1]}`;
+      return `https://assets.nintendo.com/image/upload/c_fill,g_auto,w_${w},h_${h},f_auto,q_auto:best/${m[1]}`;
     }
   }
   return url;
