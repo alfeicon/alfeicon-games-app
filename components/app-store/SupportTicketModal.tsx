@@ -5,6 +5,7 @@
 // botón de WhatsApp, esto queda guardado en `support_requests` y se puede
 // revisar después desde el admin.
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, LifeBuoy, Loader2, Send, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
@@ -88,7 +89,15 @@ export default function SupportTicketModal({ open, onClose }: Props) {
 
   if (!open) return null;
 
-  return (
+  // Se porta a #store-content: dentro de la sección, el modal queda atrapado
+  // en su contexto de apilamiento y el dock (z-index 50) se dibuja encima por
+  // mucho z-index que le pongamos. Portado, lo tapa como corresponde.
+  const contenedor = typeof document !== 'undefined'
+    ? document.getElementById('store-content')
+    : null;
+  if (!contenedor) return null;
+
+  return createPortal(
     // Mismas clases que la ficha del catálogo y el modal de pago: ya resuelven
     // el vidrio y el desenfoque en este árbol.
     <div
@@ -168,6 +177,7 @@ export default function SupportTicketModal({ open, onClose }: Props) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    contenedor,
   );
 }
