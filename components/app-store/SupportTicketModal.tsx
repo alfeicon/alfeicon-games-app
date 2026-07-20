@@ -4,7 +4,7 @@
 // lugares: el banner del inicio y el de la sección Soporte. A diferencia del
 // botón de WhatsApp, esto queda guardado en `support_requests` y se puede
 // revisar después desde el admin.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, LifeBuoy, Loader2, Send, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
@@ -60,6 +60,25 @@ export default function SupportTicketModal({ open, onClose }: Props) {
       }),
     }).catch(err2 => console.error('[soporte] error notificando', err2));
   };
+
+  // Con el modal abierto se bloquea el scroll del fondo y Escape cierra,
+  // igual que la ficha del catálogo. Se guarda el overflow previo en vez de
+  // asumir "auto": si otro modal ya lo había bloqueado, al cerrar este no
+  // debe desbloquearlo por su cuenta.
+  useEffect(() => {
+    if (!open) return;
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cerrar(); };
+    window.addEventListener('keydown', onKey);
+
+    return () => {
+      document.body.style.overflow = previo;
+      window.removeEventListener('keydown', onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const cerrar = () => {
     onClose();
