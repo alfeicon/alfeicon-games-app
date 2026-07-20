@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { type MouseEvent, useState, useEffect, useRef, useMemo } from 'react';
 import {
-  ArrowDown, ChevronRight, Gamepad2, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy, Plus
+  ArrowDown, ChevronRight, Gamepad2, Instagram, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy, Plus
 } from 'lucide-react';
 import type { CatalogGame, CatalogPack } from '@/lib/catalog';
 import { getNintendoThumb } from '@/lib/catalog';
@@ -473,7 +473,27 @@ export default function HomeSectionV2({
         </button>
       </div>
 
-      {/* 9. TÉRMINOS Y CONDICIONES (footer inicio) */}
+      {/* 9. INSTAGRAM — de ahí llega la mayor parte del tráfico, así que el
+          cierre del inicio invita a seguir la cuenta. */}
+      <a
+        href="https://instagram.com/alfeicon_games"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hs2-ig-banner"
+      >
+        <span className="hs2-ig-banner__ico">
+          <Instagram size={22} strokeWidth={1.9} />
+        </span>
+        <span className="hs2-ig-banner__text">
+          <span className="hs2-ig-banner__title">Síguenos en Instagram</span>
+          <span className="hs2-ig-banner__sub">Ofertas, novedades y sorteos antes que nadie.</span>
+        </span>
+        <span className="hs2-ig-banner__cta">
+          @alfeicon_games <ChevronRight size={14} strokeWidth={2.6} />
+        </span>
+      </a>
+
+      {/* 10. TÉRMINOS Y CONDICIONES (footer inicio) */}
       <div className="hs2-reveal mb-6" data-delay="180">
         <button type="button" onClick={onOpenTerms} className="support-terms-btn">
           <ShieldCheck size={16} />

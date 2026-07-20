@@ -448,33 +448,6 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     window.location.href = `/entrega/${code}`;
   }, []);
 
-  const procesarWhatsApp = useCallback((data: {items: CatalogItem[], origin: {x:number, y:number}}) => {
-    const { items, origin } = data;
-    setPurchaseModalData(null);
-    setIsCartOpen(false);
-    setPurchaseOrigin(origin);
-    setPurchaseTransition(true);
-
-    const code = generateShortCode();
-    
-    const total_precio = items.reduce((acc, item) => acc + item.precio, 0);
-    const titulos = items.map(item => item.titulo).join(' + ');
-    // Ya no se crea una orden borrador aquí: una consulta por WhatsApp no es
-    // una venta y llenaba la pestaña Validación de ruido. La orden se crea
-    // cuando el cliente paga (transferencia / Mercado Pago).
-
-    const precioFmt = `${format(total_precio)} ${currency.code}`;
-    const mensaje = `Hola Alfeicon Games!\n\nMe interesa llevar estos juegos:\n*${titulos}*\n\nTotal: ${precioFmt}${notaInternacional}\n\nMi orden es: *${code}*\n\n¿Me pasas los datos para transferencia o pago internacional?`;
-    const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
-    
-    setTimeout(() => {
-      window.location.href = url;
-    }, 620);
-    purchaseResetTimerRef.current = window.setTimeout(() => {
-      setPurchaseTransition(false);
-    }, 1800);
-  }, [format, currency.code, notaInternacional]);
-
   const addToCart = useCallback((item: CatalogItem, event?: MouseEvent<HTMLElement>) => {
     if (event) {
       event.stopPropagation();
@@ -816,13 +789,13 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
             <div className="purchase-ink-blob" />
 
             <div className="absolute bottom-24 left-1/2 w-[min(330px,calc(100%-2rem))] -translate-x-1/2">
-              <div className="purchase-splash flex items-center gap-3 rounded-full border border-[#25d366]/35 bg-[#101417]/95 px-4 py-3 text-white shadow-2xl shadow-[#25d366]/20 backdrop-blur-2xl">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#25d366] text-white shadow-lg shadow-[#25d366]/35">
-                  <MessageCircle size={20} fill="currentColor" strokeWidth={2.4} />
+              <div className="purchase-splash flex items-center gap-3 rounded-full border border-white/20 bg-[#101417]/95 px-4 py-3 text-white shadow-2xl shadow-black/40 backdrop-blur-2xl">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg">
+                  <ShoppingCart size={19} strokeWidth={2.4} />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#8ff0ad]">WhatsApp</p>
-                  <p className="truncate text-sm font-black">Abriendo compra</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-400">Alfeicon Games</p>
+                  <p className="truncate text-sm font-black">Abriendo tu compra</p>
                 </div>
               </div>
             </div>
