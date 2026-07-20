@@ -33,10 +33,11 @@
 
 .hs2-logo-mark {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.1);
+  /* Sin fondo propio: el logo ya trae su círculo negro. El gris de antes
+     asomaba por detrás y lo hacía ver recortado. */
   flex-shrink: 0;
   overflow: hidden;
 }

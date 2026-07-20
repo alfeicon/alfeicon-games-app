@@ -123,7 +123,7 @@ export default function HomeSectionV2({
       <div className="hs2-topbar">
         <div className="hs2-logo-pill">
           <span className="hs2-logo-mark">
-            <Image src="/logo.png" alt="Alfeicon" fill className="object-contain p-1.5" sizes="28px" priority />
+            <Image src="/logo.png" alt="Alfeicon" fill className="object-contain" sizes="32px" priority />
           </span>
           <span>Alfeicon Games</span>
         </div>
