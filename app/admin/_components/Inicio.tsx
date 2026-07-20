@@ -377,8 +377,16 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
               const profitPct = d.revenue > 0 ? Math.round((Math.max(d.profit, 0) / d.revenue) * 100) : 0;
               return (
                 <div key={d.key} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-                  <span className={`text-[9px] font-black leading-none ${isToday ? "text-yellow-500" : "text-gray-600"}`}>
-                    {d.revenue > 0 ? `$${fmt(d.revenue)}` : ""}
+                  {/* Dos cifras: lo vendido arriba y lo ganado abajo, cada una
+                      del color de su parte de la barra. Antes solo se rotulaba
+                      lo vendido y el verde quedaba sin número. */}
+                  <span className="flex flex-col items-center gap-px leading-none">
+                    <span className={`text-[9px] font-black ${isToday ? "text-yellow-500" : "text-gray-500"}`}>
+                      {d.revenue > 0 ? `$${fmt(d.revenue)}` : ""}
+                    </span>
+                    <span className={`text-[8.5px] font-black ${isToday ? "text-yellow-600" : "text-emerald-400"}`}>
+                      {d.revenue > 0 ? `$${fmt(Math.max(d.profit, 0))}` : ""}
+                    </span>
                   </span>
                   <div
                     title={`${d.label}: $${fmt(d.revenue)} en ${d.count} ${d.count === 1 ? "venta" : "ventas"} · $${fmt(d.profit)} de ganancia`}
