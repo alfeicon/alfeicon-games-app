@@ -376,7 +376,11 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     // Orden pendiente de pago. Queda bloqueada hasta que el webhook de Mercado
     // Pago confirme (/api/mp-webhook): volver de la pasarela no es prueba de
     // pago, esa URL la puede abrir cualquiera.
-    supabase?.from('orders').insert({
+    //
+    // Se ESPERA a que termine antes de mandar al cliente a la pasarela. Sin
+    // await, el navegador cancelaba el insert al navegar y el cliente pagaba
+    // una orden que no existía: ni el webhook ni su portal la encontraban.
+    const { error: insertErr } = await (supabase?.from('orders').insert({
       short_code: code,
       game_name: titulos,
       pack_ids: pack_ids.length > 0 ? pack_ids : null,
@@ -385,9 +389,14 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
       sale_price: total_precio,
       payment_method: 'mercadopago',
       payment_status: 'pending',
-    }).then(({ error }) => {
-      if (error) console.error("Error creating draft order", error);
-    });
+    }) ?? Promise.resolve({ error: null }));
+
+    if (insertErr) {
+      console.error("Error creating draft order", insertErr);
+      alert('No pudimos preparar tu orden. Revisa tu conexión e inténtalo de nuevo.');
+      setPurchaseTransition(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/checkout', {
