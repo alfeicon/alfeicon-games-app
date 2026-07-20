@@ -498,6 +498,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const [historySearch, setHistorySearch] = useState("");
   // Las canceladas van plegadas: son registro, no trabajo pendiente.
   const [showCancelled, setShowCancelled] = useState(false);
+  const [showAwaiting, setShowAwaiting] = useState(false);
 
   // Para sugerencias de autocompletado
   const [query, setQuery] = useState("");
@@ -544,10 +545,26 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     });
   };
 
-  // Validación excluye las canceladas: si el cliente se arrepintió y volvió a
-  // la tienda, no hay nada que validar y solo estorbarían la lista.
+  // Validación = solo lo que requiere una decisión tuya: un comprobante de
+  // transferencia esperando aprobación. Una orden recién creada todavía no
+  // pagó nada, y las de Mercado Pago las resuelve el webhook solo.
   const draftOrders = useMemo(
-    () => orders.filter(o => o.status === 'draft' && o.payment_status !== 'cancelled'),
+    () => orders.filter(o =>
+      o.status === 'draft' &&
+      o.payment_status === 'pending' &&
+      !!o.receipt_url,
+    ),
+    [orders],
+  );
+
+  // Compras a medio camino: eligieron método de pago y no completaron. No son
+  // trabajo pendiente, pero saber cuántas son dice mucho, así que van aparte.
+  const awaitingPayment = useMemo(
+    () => orders.filter(o =>
+      o.status === 'draft' &&
+      o.payment_status === 'pending' &&
+      !o.receipt_url,
+    ),
     [orders],
   );
   const cancelledOrders = useMemo(() => orders.filter(o => o.payment_status === 'cancelled'), [orders]);
@@ -1371,14 +1388,48 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
               <div className="flex flex-col items-center gap-3 py-16 text-center">
                 <HelpCircle size={24} className="text-gray-800" />
                 <p className="text-xs text-gray-700">Nada por validar</p>
-                <p className="text-[10px] text-gray-600 max-w-[220px]">Aquí llegan las consultas por WhatsApp y los pagos por transferencia esperando tu revisión.</p>
+                <p className="text-[10px] text-gray-600 max-w-[240px]">
+                  Aquí aparecen solo las transferencias con comprobante subido, esperando que lo revises.
+                </p>
               </div>
             ) : (
               <div className="p-4 mb-2 bg-purple-500/5 border-b border-purple-500/10">
-                 <p className="text-[10px] text-purple-400 font-bold">Todo lo que está aquí espera que lo valides: confirma la orden, o revisa el comprobante si el cliente pagó por transferencia.</p>
+                 <p className="text-[10px] text-purple-400 font-bold">
+                   Cada una subió su comprobante y espera que lo apruebes o lo rechaces.
+                 </p>
               </div>
             )}
             {draftOrders.map(item => <OrderItem key={item.id} item={item} />)}
+
+            {/* Compras a medio camino: eligieron pagar y no completaron. Van
+                plegadas porque no hay nada que hacer con ellas todavía. */}
+            {awaitingPayment.length > 0 && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAwaiting(v => !v)}
+                  className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2 text-left"
+                >
+                  <Clock size={12} className="text-gray-600" />
+                  <h2 className="flex-1 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                    Esperando pago ({awaitingPayment.length})
+                  </h2>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">
+                    {showAwaiting ? "Ocultar" : "Ver"}
+                  </span>
+                </button>
+
+                {showAwaiting && (
+                  <>
+                    <p className="px-6 py-2 text-[10px] leading-relaxed text-gray-600">
+                      Eligieron un método de pago y no completaron. Las de Mercado Pago se aprueban solas
+                      cuando llega la confirmación; las de transferencia, cuando suban su comprobante.
+                    </p>
+                    {awaitingPayment.map(item => <OrderItem key={item.id} item={item} />)}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
