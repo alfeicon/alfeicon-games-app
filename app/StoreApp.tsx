@@ -385,7 +385,8 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
       game_name: titulos,
       pack_ids: pack_ids.length > 0 ? pack_ids : null,
       status: 'draft',
-      source: 'web',
+      // Sin `source`: esa columna no existe en `orders` y Postgres rechazaba
+      // la fila entera. Nadie la lee tampoco.
       sale_price: total_precio,
       payment_method: 'mercadopago',
       payment_status: 'pending',

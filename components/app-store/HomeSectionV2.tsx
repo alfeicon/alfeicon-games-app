@@ -130,6 +130,26 @@ export default function HomeSectionV2({
         <CurrencySwitcher />
       </div>
 
+      {/* INSTAGRAM — de ahí llega la mayor parte del tráfico; va arriba
+          para que lo vean apenas entran. */}
+      <a
+        href="https://instagram.com/alfeicon_games"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hs2-ig-banner"
+      >
+        <span className="hs2-ig-banner__ico">
+          <Instagram size={22} strokeWidth={1.9} />
+        </span>
+        <span className="hs2-ig-banner__text">
+          <span className="hs2-ig-banner__title">Síguenos en Instagram</span>
+          <span className="hs2-ig-banner__sub">Ofertas, novedades y sorteos antes que nadie.</span>
+        </span>
+        <span className="hs2-ig-banner__cta">
+          @alfeicon_games <ChevronRight size={14} strokeWidth={2.6} />
+        </span>
+      </a>
+
       {/* ── AVISO DE AYUDA ──
           El apartado de dudas vive al final y casi nadie baja hasta allá.
           Esto lo anuncia arriba y lleva hasta él. */}
@@ -472,26 +492,6 @@ export default function HomeSectionV2({
           </span>
         </button>
       </div>
-
-      {/* 9. INSTAGRAM — de ahí llega la mayor parte del tráfico, así que el
-          cierre del inicio invita a seguir la cuenta. */}
-      <a
-        href="https://instagram.com/alfeicon_games"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="hs2-ig-banner"
-      >
-        <span className="hs2-ig-banner__ico">
-          <Instagram size={22} strokeWidth={1.9} />
-        </span>
-        <span className="hs2-ig-banner__text">
-          <span className="hs2-ig-banner__title">Síguenos en Instagram</span>
-          <span className="hs2-ig-banner__sub">Ofertas, novedades y sorteos antes que nadie.</span>
-        </span>
-        <span className="hs2-ig-banner__cta">
-          @alfeicon_games <ChevronRight size={14} strokeWidth={2.6} />
-        </span>
-      </a>
 
       {/* 10. TÉRMINOS Y CONDICIONES (footer inicio) */}
       <div className="hs2-reveal mb-6" data-delay="180">
