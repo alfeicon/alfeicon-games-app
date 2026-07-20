@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { type MouseEvent, useState, useEffect, useRef, useMemo } from 'react';
 import {
-  ChevronRight, Gamepad2, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy, Plus
+  ArrowDown, ChevronRight, Gamepad2, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy, Plus
 } from 'lucide-react';
 import type { CatalogGame, CatalogPack } from '@/lib/catalog';
 import { getNintendoThumb } from '@/lib/catalog';
@@ -101,7 +101,7 @@ export default function HomeSectionV2({
   const { format, code } = useCurrency();
   const [activeStep, setActiveStep] = useState(0);
   const [showTicketForm, setShowTicketForm] = useState(false);
-  const stepsRef = useRef<HTMLDivElement>(null);
+  const dudasRef = useRef<HTMLDivElement>(null);
 
   const ofertas = useMemo(() => {
     if (ofertasFlash.length > 0) return ofertasFlash;
@@ -130,24 +130,26 @@ export default function HomeSectionV2({
         <CurrencySwitcher />
       </div>
 
-      {/* ── ACCESOS DIRECTOS ──
-          La guía y el soporte viven al final de la página y casi nadie baja
-          hasta allá. Estos atajos los anuncian arriba: los dos primeros
-          llevan a su sección y el de ayuda abre el ticket al tiro. */}
-      <div className="hs2-shortcuts">
-        <button type="button" onClick={() => stepsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="hs2-shortcut">
-          <Route size={15} strokeWidth={2} />
-          <span>Cómo comprar</span>
-        </button>
-        <button type="button" onClick={() => navigateToSection('instrucciones')} className="hs2-shortcut">
-          <BookOpen size={15} strokeWidth={2} />
-          <span>Instrucciones</span>
-        </button>
-        <button type="button" onClick={() => setShowTicketForm(true)} className="hs2-shortcut hs2-shortcut--help">
-          <LifeBuoy size={15} strokeWidth={2} />
-          <span>Ayuda</span>
-        </button>
-      </div>
+      {/* ── AVISO DE AYUDA ──
+          El apartado de dudas vive al final y casi nadie baja hasta allá.
+          Esto lo anuncia arriba y lleva hasta él. */}
+      <button
+        type="button"
+        onClick={() => dudasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        className="hs2-help-cta"
+        aria-label="Ir a la sección de ayuda"
+      >
+        <span className="hs2-help-cta__ico">
+          <LifeBuoy size={19} strokeWidth={1.9} />
+        </span>
+        <span className="hs2-help-cta__text">
+          <span className="hs2-help-cta__title">¿Necesitas ayuda?</span>
+          <span className="hs2-help-cta__sub">Cómo comprar, cómo instalar y soporte directo.</span>
+        </span>
+        <span className="hs2-help-cta__arrow">
+          <ArrowDown size={15} strokeWidth={2.6} />
+        </span>
+      </button>
 
       {/* 2. JUEGOS Y PACKS STATS */}
       <div className="hs2-info-grid mb-4">
@@ -407,11 +409,11 @@ export default function HomeSectionV2({
       </section>
 
       {/* 8. DUDAS: cómo comprar, cómo instalar y soporte, todo junto */}
-      <div className="hs2-sec-head mb-3">
+      <div className="hs2-sec-head mb-3" ref={dudasRef} style={{ scrollMarginTop: '1rem' }}>
         <h2 className="hs2-sec-title">¿Tienes dudas?</h2>
       </div>
 
-      <div className="hs2-reveal mt-2" data-delay="0" ref={stepsRef}>
+      <div className="hs2-reveal mt-2" data-delay="0">
         <div className="hs2-steps-card mb-4">
           <div className="hs2-steps-head">
             <span className="hs2-steps-ico"><Route size={19} strokeWidth={1.7} /></span>
