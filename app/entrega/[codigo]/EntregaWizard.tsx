@@ -937,7 +937,9 @@ export function EntregaWizard() {
               </p>
               <div className="mt-6 flex flex-col gap-3">
                 <button onClick={async () => {
-                  if (order && supabase) await supabase.from('orders').update({ payment_status: 'cancelled' }).eq('id', order.id);
+                  if (order && supabase) {
+                    await supabase.from('orders').update({ payment_status: 'cancelled' }).eq('id', order.id);
+                  }
                   window.location.href = "/";
                 }} className="flex w-full items-center justify-center rounded-full bg-white/10 py-3.5 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-red-500/20 hover:text-red-400">
                   Sí, Cancelar Orden
@@ -1028,9 +1030,12 @@ export function EntregaWizard() {
               </>
             )}
 
-            <a href="/" className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500 underline">
+            {/* Pasa por el modal de cancelación: irse de acá es abandonar la
+                compra, y la orden tiene que quedar marcada como cancelada. */}
+            <button type="button" onClick={() => setShowCancelModal(true)}
+              className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500 underline">
               Volver a la tienda
-            </a>
+            </button>
           </motion.div>
         )}
 

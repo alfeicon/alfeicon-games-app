@@ -496,6 +496,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
   // Búsqueda dentro del Historial
   const [historySearch, setHistorySearch] = useState("");
+  // Las canceladas van plegadas: son registro, no trabajo pendiente.
+  const [showCancelled, setShowCancelled] = useState(false);
 
   // Para sugerencias de autocompletado
   const [query, setQuery] = useState("");
@@ -542,7 +544,13 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     });
   };
 
-  const draftOrders = useMemo(() => orders.filter(o => o.status === 'draft'), [orders]);
+  // Validación excluye las canceladas: si el cliente se arrepintió y volvió a
+  // la tienda, no hay nada que validar y solo estorbarían la lista.
+  const draftOrders = useMemo(
+    () => orders.filter(o => o.status === 'draft' && o.payment_status !== 'cancelled'),
+    [orders],
+  );
+  const cancelledOrders = useMemo(() => orders.filter(o => o.payment_status === 'cancelled'), [orders]);
   const activeOrders = useMemo(() => orders.filter(o => !['draft', 'completed', 'issue'].includes(o.status)), [orders]);
   // Los problemas tienen su propia pestaña: son tickets abiertos, no entregas
   // terminadas. Antes caían en el historial junto a las completadas.
@@ -1322,7 +1330,10 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
         <div className="flex items-center gap-4 px-6 py-4">
           <div className="flex-1">
             <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Entregas</h1>
-            <p className="mt-0.5 text-[10px] text-gray-600">{orders.length} órdenes totales</p>
+            <p className="mt-0.5 text-[10px] text-gray-600">
+              {orders.length} órdenes totales
+              {cancelledOrders.length > 0 && ` · ${cancelledOrders.length} canceladas por el cliente`}
+            </p>
           </div>
           <button onClick={onReload} disabled={loading} className="rounded-full bg-white/5 p-2 text-white hover:bg-white/10 active:scale-95 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -1466,6 +1477,43 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                   <HistoryTable items={items} onSelect={select} />
                 </div>
               ))
+            )}
+
+            {/* Canceladas: quedan como registro, no como pendientes. Se pueden
+                borrar una por una cuando ya no sirvan de referencia. */}
+            {cancelledOrders.length > 0 && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelled(v => !v)}
+                  className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2 text-left"
+                >
+                  <X size={12} className="text-gray-600" />
+                  <h2 className="flex-1 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                    Canceladas por el cliente ({cancelledOrders.length})
+                  </h2>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">
+                    {showCancelled ? "Ocultar" : "Ver"}
+                  </span>
+                </button>
+
+                {showCancelled && cancelledOrders.map(item => (
+                  <div key={item.id} className="flex items-center gap-2 border-b border-white/[0.04] pr-4 opacity-60">
+                    <div className="min-w-0 flex-1">
+                      <OrderItem item={item} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => del(item)}
+                      disabled={loading}
+                      title="Eliminar del registro"
+                      className="flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-red-500/70 transition-colors hover:bg-red-500/15 hover:text-red-400 disabled:opacity-50"
+                    >
+                      <Trash2 size={11} /> Eliminar
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

@@ -424,10 +424,12 @@ export default function HomeSectionV2({
           </span>
         </button>
 
-        <a
-          href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent("Hola Alfeicon Games, tuve un problema con uno de mis juegos y necesito soporte.")}`}
-          target="_blank"
-          rel="noopener noreferrer"
+        {/* Lleva a la sección Soporte, no directo a WhatsApp: ahí están el
+            formulario (que sí queda registrado para responderlo), las dudas
+            frecuentes y el botón de WhatsApp para quien lo prefiera. */}
+        <button
+          type="button"
+          onClick={() => navigateToSection('perfil')}
           className="hs2-guide-card"
           style={{ '--card-tint': 'var(--tw-colors-red-500)', backgroundImage: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.02) 100%)', borderColor: 'rgba(239, 68, 68, 0.2)' } as any}
           aria-label="Soporte y problemas"
@@ -440,9 +442,9 @@ export default function HomeSectionV2({
             <span className="hs2-guide-sub">Contáctanos al soporte y lo resolveremos.</span>
           </span>
           <span className="hs2-guide-cta" style={{ color: 'rgba(239, 68, 68, 1)' }}>
-            Hablar con soporte <ChevronRight size={13} strokeWidth={2.5} />
+            Ir a soporte <ChevronRight size={13} strokeWidth={2.5} />
           </span>
-        </a>
+        </button>
       </div>
 
       {/* 9. TÉRMINOS Y CONDICIONES (footer inicio) */}
