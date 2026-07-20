@@ -4200,28 +4200,28 @@ html {
 .chat-fab {
   isolation: isolate;
   overflow: hidden;
-  border: 1px solid rgba(234, 179, 8, 0.45);
+  border: 1px solid rgba(253, 224, 71, 0.5);
+  /* Ámbar sólido con brillo encima, no un tinte translúcido: sobre fondo
+     negro un ámbar al 40% se lee oliva sucio, no amarillo. El vidrio queda
+     en el reflejo y el borde, que es donde de verdad se nota. */
   background:
-    radial-gradient(circle at 26% 12%, rgba(255, 255, 255, 0.32), transparent 44%),
-    linear-gradient(150deg, rgba(250, 204, 21, 0.42), rgba(234, 179, 8, 0.30) 52%, rgba(120, 80, 10, 0.34) 100%),
-    rgba(60, 45, 8, 0.42);
+    radial-gradient(circle at 28% 14%, rgba(255, 255, 255, 0.45), transparent 46%),
+    linear-gradient(155deg, #fbbf24 0%, #eab308 55%, #ca8a04 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.32),
-    0 10px 30px rgba(0, 0, 0, 0.45),
-    0 0 22px rgba(234, 179, 8, 0.16);
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 4px rgba(120, 80, 10, 0.35),
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 26px rgba(234, 179, 8, 0.28);
 }
 
 .chat-fab::after {
   content: "";
   position: absolute;
-  inset: -40% 18% auto 18%;
-  height: 60%;
+  inset: -42% 16% auto 16%;
+  height: 62%;
   border-radius: inherit;
-  background: rgba(255, 255, 255, 0.28);
-  filter: blur(16px);
+  background: rgba(255, 255, 255, 0.55);
+  filter: blur(14px);
   transform: rotate(-8deg);
   pointer-events: none;
   z-index: 0;

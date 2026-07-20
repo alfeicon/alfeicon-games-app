@@ -863,7 +863,7 @@ export function EntregaWizard() {
           <button
             onClick={() => (chatOpen ? closeChat() : openChat())}
             aria-label={chatOpen ? "Minimizar soporte" : `Abrir soporte${unreadCount > 0 ? ` (${unreadCount} sin leer)` : ""}`}
-            className="chat-fab relative flex h-14 w-14 items-center justify-center rounded-full text-yellow-50 active:scale-95"
+            className="chat-fab relative flex h-14 w-14 items-center justify-center rounded-full text-[#1c1400] active:scale-95"
           >
             {chatOpen ? <ChevronDown size={24} /> : <MessageCircle size={24} />}
             {!chatOpen && unreadCount > 0 && (
