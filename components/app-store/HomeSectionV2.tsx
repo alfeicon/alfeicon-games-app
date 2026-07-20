@@ -11,6 +11,7 @@ import type { NewsItem } from '@/lib/news';
 import type { SectionId } from './AppDock';
 import { useCurrency } from '@/components/currency/CurrencyProvider';
 import CurrencySwitcher from '@/components/currency/CurrencySwitcher';
+import SupportTicketModal from './SupportTicketModal';
 import './HomeSectionV2.css';
 
 type Props = {
@@ -99,6 +100,7 @@ export default function HomeSectionV2({
   useScrollReveal(!cargando);
   const { format, code } = useCurrency();
   const [activeStep, setActiveStep] = useState(0);
+  const [showTicketForm, setShowTicketForm] = useState(false);
 
   const ofertas = useMemo(() => {
     if (ofertasFlash.length > 0) return ofertasFlash;
@@ -424,25 +426,24 @@ export default function HomeSectionV2({
           </span>
         </button>
 
-        {/* Lleva a la sección Soporte, no directo a WhatsApp: ahí están el
-            formulario (que sí queda registrado para responderlo), las dudas
-            frecuentes y el botón de WhatsApp para quien lo prefiera. */}
+        {/* Abre el formulario de consulta acá mismo: deja un ticket guardado
+            que podemos revisar, en vez de una conversación de WhatsApp que se
+            pierde si no la vemos a tiempo. */}
         <button
           type="button"
-          onClick={() => navigateToSection('perfil')}
-          className="hs2-guide-card"
-          style={{ '--card-tint': 'var(--tw-colors-red-500)', backgroundImage: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.02) 100%)', borderColor: 'rgba(239, 68, 68, 0.2)' } as any}
-          aria-label="Soporte y problemas"
+          onClick={() => setShowTicketForm(true)}
+          className="support-ticket-banner"
+          aria-label="Abrir un ticket de soporte"
         >
-          <span className="hs2-guide-ico" style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: 'rgba(239, 68, 68, 1)' }}>
-            <LifeBuoy size={20} strokeWidth={1.8} />
+          <span className="support-ticket-banner__ico">
+            <LifeBuoy size={22} strokeWidth={1.9} />
           </span>
-          <span className="hs2-guide-text">
-            <span className="hs2-guide-title">¿Tuviste un problema con tu juego?</span>
-            <span className="hs2-guide-sub">Contáctanos al soporte y lo resolveremos.</span>
+          <span className="support-ticket-banner__text">
+            <span className="support-ticket-banner__title">¿Tienes problemas o dudas?</span>
+            <span className="support-ticket-banner__sub">Cuéntanos y te generamos un ticket. Te respondemos a tu WhatsApp o correo.</span>
           </span>
-          <span className="hs2-guide-cta" style={{ color: 'rgba(239, 68, 68, 1)' }}>
-            Ir a soporte <ChevronRight size={13} strokeWidth={2.5} />
+          <span className="support-ticket-banner__cta">
+            Abrir ticket <ChevronRight size={14} strokeWidth={2.6} />
           </span>
         </button>
       </div>
@@ -455,6 +456,8 @@ export default function HomeSectionV2({
           <ChevronRight size={15} className="ml-auto" />
         </button>
       </div>
+
+      <SupportTicketModal open={showTicketForm} onClose={() => setShowTicketForm(false)} />
     </div>
   );
 }
