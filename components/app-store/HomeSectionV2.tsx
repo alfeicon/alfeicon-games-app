@@ -101,6 +101,7 @@ export default function HomeSectionV2({
   const { format, code } = useCurrency();
   const [activeStep, setActiveStep] = useState(0);
   const [showTicketForm, setShowTicketForm] = useState(false);
+  const stepsRef = useRef<HTMLDivElement>(null);
 
   const ofertas = useMemo(() => {
     if (ofertasFlash.length > 0) return ofertasFlash;
@@ -129,8 +130,27 @@ export default function HomeSectionV2({
         <CurrencySwitcher />
       </div>
 
+      {/* ── ACCESOS DIRECTOS ──
+          La guía y el soporte viven al final de la página y casi nadie baja
+          hasta allá. Estos atajos los anuncian arriba: los dos primeros
+          llevan a su sección y el de ayuda abre el ticket al tiro. */}
+      <div className="hs2-shortcuts">
+        <button type="button" onClick={() => stepsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="hs2-shortcut">
+          <Route size={15} strokeWidth={2} />
+          <span>Cómo comprar</span>
+        </button>
+        <button type="button" onClick={() => navigateToSection('instrucciones')} className="hs2-shortcut">
+          <BookOpen size={15} strokeWidth={2} />
+          <span>Instrucciones</span>
+        </button>
+        <button type="button" onClick={() => setShowTicketForm(true)} className="hs2-shortcut hs2-shortcut--help">
+          <LifeBuoy size={15} strokeWidth={2} />
+          <span>Ayuda</span>
+        </button>
+      </div>
+
       {/* 1. COMPRA GUIADA */}
-      <div className="hs2-reveal mt-2" data-delay="0">
+      <div className="hs2-reveal mt-2" data-delay="0" ref={stepsRef}>
         <div className="hs2-steps-card mb-4">
           <div className="hs2-steps-head">
             <span className="hs2-steps-ico"><Route size={19} strokeWidth={1.7} /></span>
