@@ -149,28 +149,6 @@ export default function HomeSectionV2({
         </button>
       </div>
 
-      {/* 1. COMPRA GUIADA */}
-      <div className="hs2-reveal mt-2" data-delay="0" ref={stepsRef}>
-        <div className="hs2-steps-card mb-4">
-          <div className="hs2-steps-head">
-            <span className="hs2-steps-ico"><Route size={19} strokeWidth={1.7} /></span>
-            <div className="min-w-0 flex-1">
-              <p className="hs2-steps-title">Compra guiada en 4 pasos</p>
-              <p className="hs2-steps-sub">Rápido, seguro y con acompañamiento.</p>
-            </div>
-            <ChevronRight size={15} className="hs2-stat-arrow flex-shrink-0" />
-          </div>
-          <div className="hs2-steps-track">
-            {(['Elige', 'Confirma', 'Paga', 'Recibe y juega'] as const).map((lbl, i) => (
-              <div key={lbl} className="hs2-step" style={{ transition: 'all 0.3s ease' }}>
-                <span className={`hs2-step-num ${activeStep === i ? 'hs2-step-active' : ''}`} style={{ transition: 'all 0.3s ease', transform: activeStep === i ? 'scale(1.1)' : 'scale(1)' }}>{i + 1}</span>
-                <span className="hs2-step-lbl" style={{ opacity: activeStep === i ? 1 : 0.6, fontWeight: activeStep === i ? 800 : 600 }}>{lbl}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* 2. JUEGOS Y PACKS STATS */}
       <div className="hs2-info-grid mb-4">
         <div className="hs2-stat-col" style={{ width: '100%', flexDirection: 'row' }}>
@@ -428,7 +406,32 @@ export default function HomeSectionV2({
         </div>
       </section>
 
-      {/* 8. INSTRUCCIONES Y SOPORTE */}
+      {/* 8. DUDAS: cómo comprar, cómo instalar y soporte, todo junto */}
+      <div className="hs2-sec-head mb-3">
+        <h2 className="hs2-sec-title">¿Tienes dudas?</h2>
+      </div>
+
+      <div className="hs2-reveal mt-2" data-delay="0" ref={stepsRef}>
+        <div className="hs2-steps-card mb-4">
+          <div className="hs2-steps-head">
+            <span className="hs2-steps-ico"><Route size={19} strokeWidth={1.7} /></span>
+            <div className="min-w-0 flex-1">
+              <p className="hs2-steps-title">Compra guiada en 4 pasos</p>
+              <p className="hs2-steps-sub">Rápido, seguro y con acompañamiento.</p>
+            </div>
+            <ChevronRight size={15} className="hs2-stat-arrow flex-shrink-0" />
+          </div>
+          <div className="hs2-steps-track">
+            {(['Elige', 'Confirma', 'Paga', 'Recibe y juega'] as const).map((lbl, i) => (
+              <div key={lbl} className="hs2-step" style={{ transition: 'all 0.3s ease' }}>
+                <span className={`hs2-step-num ${activeStep === i ? 'hs2-step-active' : ''}`} style={{ transition: 'all 0.3s ease', transform: activeStep === i ? 'scale(1.1)' : 'scale(1)' }}>{i + 1}</span>
+                <span className="hs2-step-lbl" style={{ opacity: activeStep === i ? 1 : 0.6, fontWeight: activeStep === i ? 800 : 600 }}>{lbl}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="hs2-reveal mb-6" data-delay="150">
         <button
           type="button"
