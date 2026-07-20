@@ -80,7 +80,9 @@ export default function SupportTicketModal({ open, onClose }: Props) {
       aria-label="Dejar una consulta"
       onClick={cerrar}
     >
-      <div className="catalog-detail-panel" onClick={e => e.stopPropagation()}>
+      {/* --scroll: el panel base no trae padding (espera hijos con regiones
+          propias). Sin esto el contenido se pega a los bordes. */}
+      <div className="catalog-detail-panel catalog-detail-panel--scroll" onClick={e => e.stopPropagation()}>
         {ticket ? (
           <div className="flex flex-col items-center gap-3 py-4 text-center">
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500/15 text-green-400">
