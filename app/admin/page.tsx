@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff,
-  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X
+  Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X, PiggyBank
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -15,6 +15,7 @@ import { JuegosCatalog } from "./_components/JuegosCatalog";
 import { PacksCatalog } from "./_components/PacksCatalog";
 import { Noticias } from "./_components/Noticias";
 import { Ventas } from "./_components/Ventas";
+import { Finanzas } from "./_components/Finanzas";
 import { Entregas } from "./_components/Entregas";
 import { Ajustes } from "./_components/Ajustes";
 import { Soporte } from "./_components/Soporte";
@@ -35,8 +36,9 @@ const NAV_ITEMS: { id: AdminSection; label: string; Icon: React.ElementType; acc
   { id: "juegos",  label: "Juegos",  Icon: Gamepad2, accent: "text-blue-400" },
   { id: "packs",   label: "Packs",   Icon: Gift,     accent: "text-purple-400" },
   { id: "entregas", label: "Entregas", Icon: PackageCheck, accent: "text-yellow-400" },
+  { id: "finanzas", label: "Finanzas", Icon: PiggyBank, accent: "text-emerald-400" },
   { id: "noticias", label: "Noticias", Icon: Newspaper, accent: "text-orange-400" },
-  { id: "ventas",  label: "Ventas",  Icon: Receipt,  accent: "text-green-400" },
+  { id: "ventas",  label: "Historial",  Icon: Receipt,  accent: "text-green-400" },
   { id: "soporte", label: "Soporte", Icon: LifeBuoy, accent: "text-sky-400" },
   { id: "ajustes", label: "Ajustes", Icon: Settings,  accent: "text-gray-400" },
 ];
@@ -281,7 +283,7 @@ export default function AdminPage() {
   const navigate = (s: AdminSection) => {
     setSection(s);
     setSectionKey(k => k + 1);
-    if (s === "ventas") {
+    if (s === "ventas" || s === "finanzas") {
       loadSales();
       loadAdSpend();
     }
@@ -511,7 +513,7 @@ export default function AdminPage() {
           {[
             NAV_ITEMS.find(i => i.id === "inicio")!,
             NAV_ITEMS.find(i => i.id === "entregas")!,
-            NAV_ITEMS.find(i => i.id === "ventas")!
+            NAV_ITEMS.find(i => i.id === "finanzas")!
           ].map(({ id, label, Icon, accent }) => {
             const active = section === id;
             return (
@@ -711,7 +713,14 @@ export default function AdminPage() {
               showNotice={showNotice} onReload={loadOrders} />
           )}
           {section === "ventas" && (
-            <Ventas sales={sales} adSpend={adSpend} providers={providers} settings={settings}
+            <Ventas sales={sales} providers={providers} settings={settings}
+              salesTableExists={salesTableExists}
+              salesError={salesError}
+              loading={loading} setLoading={setLoading}
+              showNotice={showNotice} onReload={loadAll} />
+          )}
+          {section === "finanzas" && (
+            <Finanzas sales={sales} adSpend={adSpend} games={games} packs={packs} settings={settings}
               salesTableExists={salesTableExists}
               salesError={salesError}
               loading={loading} setLoading={setLoading}

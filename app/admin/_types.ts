@@ -142,7 +142,7 @@ export type DiscountCode = {
   created_at: string;
 };
 
-export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "ventas" | "entregas" | "soporte" | "ajustes";
+export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "ventas" | "entregas" | "finanzas" | "soporte" | "ajustes";
 
 /** Consulta enviada desde la sección Soporte de la tienda (sin orden detrás). */
 export type SupportRequest = {
