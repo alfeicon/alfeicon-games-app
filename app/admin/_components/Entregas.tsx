@@ -739,6 +739,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   };
 
   const handleStatusChange = async (newStatus: Order["status"]) => {
+    if (!supabase) return;
     setForm({ ...form, status: newStatus });
     if (selectedOrder) {
       const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", selectedOrder.id);
@@ -1475,25 +1476,21 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                           </div>
 
                           {/* Credentials */}
-                          {form.items && form.items.length > 0 && form.items.map((item, i) => (
-                            <div key={item.id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-                              <p className="text-xs font-black leading-tight text-gray-900 mb-2">{item.game_name || "Cuenta nueva"}</p>
+                          {form.account_email && (
+                            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                              <p className="text-xs font-black leading-tight text-gray-900 mb-2">{form.game_name || "Cuenta nueva"}</p>
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                  <p className="mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-gray-500"><Hash size={9}/> Código</p>
-                                  <p className="font-mono text-base font-black tracking-[0.2em] text-gray-900">{item.console_email || "—"}</p>
+                                  <p className="mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-gray-500"><Hash size={9}/> Código / Email</p>
+                                  <p className="font-mono text-xs font-black tracking-wider text-gray-900">{form.account_email || "—"}</p>
                                 </div>
                                 <div className="min-w-0">
                                   <p className="mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-gray-500"><KeyRound size={9}/> Contraseña</p>
-                                  <p className="break-all text-xs font-bold text-gray-900">{item.console_password || "—"}</p>
+                                  <p className="break-all text-xs font-bold text-gray-900">{form.account_password || "—"}</p>
                                 </div>
                               </div>
-                              <p className="mt-2 flex items-start gap-1 border-t border-gray-100 pt-1.5 text-[10px] leading-snug text-gray-500">
-                                <ShieldCheck size={11} className="shrink-0 text-green-600" />
-                                <span><b className="text-gray-900">{item.garantia_dias || 7} días</b> de garantía</span>
-                              </p>
                             </div>
-                          ))}
+                          )}
                         </div>
                         
                         <div className="border-t border-dashed border-gray-300 mx-5 relative">

@@ -104,7 +104,8 @@ export function EntregaItems({ orderId, gameName, garantiaJuegoDias, garantiaPac
       if (data) {
          const lista = data as OrderItem[];
          const totalCost = lista.reduce((acc, it) => acc + (Number(it.cost_price) || 0), 0);
-         onItemsLoadRef.current?.(lista.length, totalCost);
+         const hasCreds = lista.some(it => it.account_email && it.account_password);
+         onItemsLoadRef.current?.(lista.length, totalCost, hasCreds);
       }
     }, 800); // 800ms debounce
 
