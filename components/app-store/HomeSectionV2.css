@@ -666,19 +666,57 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 144px;
-  background: none;
-  border: none;
-  padding: 0;
+  width: 152px;
+  /* Vidrio, como los packs: antes la tarjeta era transparente y el juego
+     "flotaba" suelto sobre el fondo. */
+  background: rgba(22, 25, 33, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 6px 6px 10px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.38), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   cursor: pointer;
   text-align: left;
   transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1); /* Elastic spring */
 }
 
+.theme-light .hs2-game-card {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(0, 0, 0, 0.07);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.09), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+/* Botón "+" del carrusel. Es el MISMO diseño que `cat2-add-btn` del catálogo,
+   duplicado a propósito: aquel CSS viaja con el catálogo, que se carga diferido,
+   así que en el inicio el botón salía sin fondo hasta entrar a la sección.
+   Si cambias uno, cambia el otro. */
+.hs2-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+}
+
+.hs2-add-btn:active {
+  transform: scale(0.88);
+}
+
 
 .hs2-game-img {
   position: relative;
-  width: 144px;
+  width: 100%;
   height: 172px;
   border-radius: 14px;
   background: rgba(255,255,255,0.055);
@@ -734,9 +772,9 @@
 
 .hs2-game-skeleton {
   flex-shrink: 0;
-  width: 144px;
-  height: 200px;
-  border-radius: 14px;
+  width: 152px;
+  height: 232px;
+  border-radius: 18px;
   background: rgba(255,255,255,0.05);
   animation: pulse 1.6s ease-in-out infinite;
 }

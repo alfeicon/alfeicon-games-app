@@ -2,7 +2,7 @@
 
 // Formulario de consulta de soporte. Vive aparte porque se abre desde dos
 // lugares: el banner del inicio y el de la sección Soporte. A diferencia del
-// botón de WhatsApp, esto queda guardado en `support_requests` y se puede
+// enlace a redes, esto queda guardado en `support_requests` y se puede
 // revisar después desde el admin.
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -12,10 +12,18 @@ import { supabase } from '@/lib/supabase/client';
 type Props = {
   open: boolean;
   onClose: () => void;
+  /** Se antepone al mensaje para que en el admin se sepa de qué orden habla. */
+  referencia?: string;
+  /**
+   * Cuando la compra trae varias cuentas, el cliente elige cuál le falló. Sin
+   * esto tendríamos que adivinar de qué juego habla.
+   */
+  opciones?: string[];
 };
 
-export default function SupportTicketModal({ open, onClose }: Props) {
+export default function SupportTicketModal({ open, onClose, referencia, opciones }: Props) {
   const [form, setForm] = useState({ name: '', contact: '', message: '' });
+  const [afectado, setAfectado] = useState('');
   const [sending, setSending] = useState(false);
   const [ticket, setTicket] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,8 +31,12 @@ export default function SupportTicketModal({ open, onClose }: Props) {
   const enviarConsulta = async () => {
     const name = form.name.trim();
     const contact = form.contact.trim();
-    const message = form.message.trim();
-    if (!name || !contact || !message || sending) return;
+    const escrito = form.message.trim();
+    if (!name || !contact || !escrito || sending) return;
+    // El admin necesita saber de qué orden y de qué juego se habla antes de
+    // leer el mensaje: por eso van al principio y no en un campo aparte.
+    const etiquetas = [referencia, afectado].filter(Boolean).join(' · ');
+    const message = etiquetas ? `[${etiquetas}] ${escrito}` : escrito;
 
     setSending(true);
     // Se pide el id de vuelta para armar el número de ticket que ve el cliente.
@@ -38,7 +50,7 @@ export default function SupportTicketModal({ open, onClose }: Props) {
 
     if (err || !data) {
       console.error('[soporte] no se pudo enviar', err);
-      setError('No pudimos enviar tu consulta. Escríbenos por WhatsApp y te respondemos igual.');
+      setError('No pudimos enviar tu consulta. Escríbenos por Instagram y te respondemos igual.');
       return;
     }
 
@@ -92,10 +104,10 @@ export default function SupportTicketModal({ open, onClose }: Props) {
   // Se porta a #store-content: dentro de la sección, el modal queda atrapado
   // en su contexto de apilamiento y el dock (z-index 50) se dibuja encima por
   // mucho z-index que le pongamos. Portado, lo tapa como corresponde.
-  const contenedor = typeof document !== 'undefined'
-    ? document.getElementById('store-content')
-    : null;
-  if (!contenedor) return null;
+  // Fuera de la tienda (ej. la boleta de /entrega) ese nodo no existe y el
+  // body sirve igual: ahí no hay dock que tapar.
+  if (typeof document === 'undefined') return null;
+  const contenedor = document.getElementById('store-content') || document.body;
 
   return createPortal(
     // Mismas clases que la ficha del catálogo y el modal de pago: ya resuelven
@@ -119,7 +131,7 @@ export default function SupportTicketModal({ open, onClose }: Props) {
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Tu ticket</p>
             <p className="text-2xl font-black tracking-widest text-white">{ticket}</p>
             <p className="max-w-[280px] text-xs leading-relaxed text-gray-400">
-              Guarda este número. Te respondemos al contacto que dejaste; si es urgente, escríbenos por WhatsApp.
+              Guarda este número. Te respondemos al contacto que dejaste; si es urgente, escríbenos por Instagram.
             </p>
             <button type="button" onClick={cerrar}
               className="motion-press mt-2 w-full rounded-full bg-white py-3 text-xs font-black uppercase tracking-widest text-black">
@@ -152,9 +164,19 @@ export default function SupportTicketModal({ open, onClose }: Props) {
               <input
                 value={form.contact}
                 onChange={e => setForm({ ...form, contact: e.target.value })}
-                placeholder="Tu WhatsApp o correo"
+                placeholder="Tu Instagram, WhatsApp o correo"
                 className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-white/25"
               />
+              {opciones && opciones.length > 1 && (
+                <select
+                  value={afectado}
+                  onChange={e => setAfectado(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-3 text-sm text-white outline-none focus:border-white/25"
+                >
+                  <option value="">¿Con cuál tuviste el problema?</option>
+                  {opciones.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              )}
               <textarea
                 value={form.message}
                 onChange={e => setForm({ ...form, message: e.target.value })}

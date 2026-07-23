@@ -1,11 +1,19 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Handshake, Loader2, Plus, Save, Settings, Trash2, Truck } from "lucide-react";
+import { Handshake, Loader2, Plus, Save, Settings, ShieldCheck, Trash2, Truck } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { SETTING_KEYS } from "@/lib/settings";
 import type { Provider, SettingsState } from "../_types";
+import { Descuentos } from "./Descuentos";
 import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY, toPct, toPrice } from "../_helpers";
+
+// Días de garantía: entero entre 1 y 90. Un 0 dejaría la entrega vencida al
+// instante y le borraría la cuenta al cliente en el siguiente cron.
+const toDias = (valor: string, fallback: number) => {
+  const n = Math.trunc(Number(String(valor).replace(/[^0-9]/g, "")));
+  return Number.isFinite(n) && n >= 1 && n <= 90 ? n : fallback;
+};
 
 const LABEL = "mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-600";
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none focus:border-white/40";
@@ -40,6 +48,8 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
       await Promise.all([
         saveSetting(SETTING_KEYS.nintendoOnlinePrice, toPrice(form.nintendoOnlinePrice)),
         saveSetting(SETTING_KEYS.packPriceIncrease, toPrice(form.packPriceIncrease)),
+        saveSetting(SETTING_KEYS.garantiaJuegoDias, toDias(form.garantiaJuegoDias, 7)),
+        saveSetting(SETTING_KEYS.garantiaPackDias, toDias(form.garantiaPackDias, 3)),
         saveSetting(PARTNER_PCT_KEY, toPct(form.partnerSplitPct)),
         saveTextSetting(PARTNER_NAME_KEY, form.partnerName.trim() || DEFAULT_PARTNER_NAME),
       ]);
@@ -124,6 +134,37 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
 
           <div className="border-t border-white/5 pt-4">
             <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-500/12">
+                <ShieldCheck size={14} className="text-green-400" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-widest">Garantía</h2>
+                <p className="text-[10px] text-gray-600">Solo afecta a las entregas nuevas</p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block max-w-[10rem]">
+                <span className={LABEL}>Juegos (días)</span>
+                <input value={form.garantiaJuegoDias}
+                  onChange={e => setForm({ ...form, garantiaJuegoDias: e.target.value })}
+                  inputMode="numeric" className={INPUT} />
+              </label>
+              <label className="block max-w-[10rem]">
+                <span className={LABEL}>Packs (días)</span>
+                <input value={form.garantiaPackDias}
+                  onChange={e => setForm({ ...form, garantiaPackDias: e.target.value })}
+                  inputMode="numeric" className={INPUT} />
+              </label>
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-gray-700">
+              El plazo se congela en cada entrega: si lo cambias, las cuentas ya entregadas
+              conservan la garantía que se les prometió. Es también lo que dura el enlace de la
+              boleta — al vencer, se borran las credenciales.
+            </p>
+          </div>
+
+          <div className="border-t border-white/5 pt-4">
+            <div className="mb-3 flex items-center gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-pink-500/12">
                 <Handshake size={14} className="text-pink-400" />
               </div>
@@ -160,6 +201,8 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
           </button>
         </form>
       </div>
+
+      <Descuentos loading={loading} setLoading={setLoading} showNotice={showNotice} />
 
       {/* Providers */}
       <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">

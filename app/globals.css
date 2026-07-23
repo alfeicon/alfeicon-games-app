@@ -3414,8 +3414,8 @@ html {
   transition: background 0.15s;
 }
 
-/* WhatsApp bar */
-.guide-wa-bar {
+/* Barra de ayuda (Instagram) */
+.guide-help-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3426,20 +3426,20 @@ html {
   border: 1px solid rgba(255,255,255,0.07);
   margin-top: 0.25rem;
 }
-.guide-wa-bar__label {
+.guide-help-bar__label {
   font-size: 0.62rem;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.18em;
   color: rgba(255,255,255,0.3);
 }
-.guide-wa-bar__title {
+.guide-help-bar__title {
   font-size: 0.82rem;
   font-weight: 900;
   color: #fff;
   margin-top: 0.2rem;
 }
-.guide-wa-btn {
+.guide-help-btn {
   width: 48px; height: 48px;
   border-radius: 50%;
   background: #25d366;
@@ -3463,7 +3463,7 @@ html {
 .guide-checklist-item { transition: background 0.15s ease; }
 .guide-checklist-item:active { background: rgba(255,255,255,0.06); }
 .theme-light .guide-checklist-item:active { background: rgba(0,0,0,0.05); }
-.guide-wa-btn:active { transform: scale(0.94); }
+.guide-help-btn:active { transform: scale(0.94); }
 
 /* ── Console picker cards (legacy – keep for @property) ── */
 @keyframes consoleCardIn {
@@ -3736,13 +3736,13 @@ html {
 .theme-light .guide-pdf-preview__title { color: #0a0a0a; }
 .theme-light .guide-pdf-preview__meta { color: rgba(0,0,0,0.5); }
 
-/* WhatsApp bar */
-.theme-light .guide-wa-bar {
+/* Barra de ayuda (Instagram) */
+.theme-light .guide-help-bar {
   background: rgba(0,0,0,0.04);
   border-color: rgba(0,0,0,0.08);
 }
-.theme-light .guide-wa-bar__label { color: rgba(0,0,0,0.4); }
-.theme-light .guide-wa-bar__title { color: #0a0a0a; }
+.theme-light .guide-help-bar__label { color: rgba(0,0,0,0.4); }
+.theme-light .guide-help-bar__title { color: #0a0a0a; }
 
 /* ══════════════════════════════════════════
    SOPORTE — REDESIGN
@@ -3840,11 +3840,12 @@ html {
   margin-bottom: 1.5rem;
   max-width: 280px;
 }
-.support-wa-btn {
+.support-ig-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: #25d366;
+  /* Degradado de Instagram, el mismo lenguaje del canal de más abajo. */
+  background: linear-gradient(115deg, #f9ce34 4%, #ee2a7b 48%, #6228d7 96%);
   color: #fff;
   font-size: 0.82rem;
   font-weight: 800;
@@ -3852,10 +3853,10 @@ html {
   letter-spacing: 0.08em;
   padding: 0.85rem 1.5rem;
   border-radius: 99px;
-  box-shadow: 0 4px 20px rgba(37,211,102,0.35);
+  box-shadow: 0 4px 20px rgba(238,42,123,0.32);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.support-wa-btn:active { transform: scale(0.97); }
+.support-ig-btn:active { transform: scale(0.97); }
 
 /* Body */
 .support-body {
@@ -4201,30 +4202,11 @@ html {
   isolation: isolate;
   overflow: hidden;
   border: 1px solid rgba(253, 224, 71, 0.5);
-  /* Ámbar sólido con brillo encima, no un tinte translúcido: sobre fondo
-     negro un ámbar al 40% se lee oliva sucio, no amarillo. El vidrio queda
-     en el reflejo y el borde, que es donde de verdad se nota. */
-  background:
-    radial-gradient(circle at 28% 14%, rgba(255, 255, 255, 0.45), transparent 46%),
-    linear-gradient(155deg, #fbbf24 0%, #eab308 55%, #ca8a04 100%);
+  background: linear-gradient(155deg, #fbbf24 0%, #eab308 55%, #ca8a04 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     inset 0 -2px 4px rgba(120, 80, 10, 0.35),
-    0 8px 24px rgba(0, 0, 0, 0.5),
-    0 0 26px rgba(234, 179, 8, 0.28);
-}
-
-.chat-fab::after {
-  content: "";
-  position: absolute;
-  inset: -42% 16% auto 16%;
-  height: 62%;
-  border-radius: inherit;
-  background: rgba(255, 255, 255, 0.55);
-  filter: blur(14px);
-  transform: rotate(-8deg);
-  pointer-events: none;
-  z-index: 0;
+    0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 /* El badge de no leídos queda fuera: debe verse sólido y por encima. */

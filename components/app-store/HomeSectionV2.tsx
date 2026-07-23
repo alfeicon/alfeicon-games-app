@@ -24,11 +24,11 @@ type Props = {
   nintendoOnlinePrice: number;
   navigateToSection: (s: SectionId) => void;
   setStoreTab: (tab: 'individual' | 'packs') => void;
-  comprarDirecto: (item: CatalogGame | CatalogPack, event?: MouseEvent<HTMLElement>) => void;
+  /** Abre la ficha del producto en el catálogo, como al tocarlo allá. */
+  abrirFicha: (item: CatalogGame | CatalogPack) => void;
   addToCart: (item: CatalogGame | CatalogPack, event?: MouseEvent<HTMLElement>) => void;
   comprarNintendoOnline: (event?: MouseEvent<HTMLElement>) => void;
   onOpenTerms: () => void;
-  whatsappNumber: string;
 };
 
 /* ── Counts up from 0 when element enters the viewport ── */
@@ -91,11 +91,10 @@ export default function HomeSectionV2({
   nintendoOnlinePrice,
   navigateToSection,
   setStoreTab,
-  comprarDirecto,
+  abrirFicha,
   addToCart,
   comprarNintendoOnline,
   onOpenTerms,
-  whatsappNumber,
 }: Props) {
   useScrollReveal(!cargando);
   const { format, code } = useCurrency();
@@ -220,9 +219,9 @@ export default function HomeSectionV2({
               <button
                 key={item.id}
                 type="button"
-                onClick={e => comprarDirecto(item, e)}
+                onClick={() => abrirFicha(item)}
                 className="hs2-game-card"
-                aria-label={`Comprar ${item.titulo}`}
+                aria-label={`Ver detalles de ${item.titulo}`}
               >
                 <span className="hs2-game-img">
                   {item.img
@@ -232,26 +231,30 @@ export default function HomeSectionV2({
                   <span className="hs2-heart-btn" aria-hidden>
                     <Heart size={13} />
                   </span>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addToCart(item, e as any);
-                    }}
-                    className="absolute top-1.5 left-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/20 active:bg-white/40 transition-colors text-white z-10"
-                    aria-label="Añadir al carrito"
-                  >
-                    <Plus size={12} strokeWidth={2.5} />
-                  </div>
                 </span>
                 <span className="hs2-game-info">
                   <span className="hs2-game-name">{item.titulo}</span>
-                  <span className="flex items-center gap-1.5 mt-0.5">
-                    <span className="hs2-game-price text-[#4ade80]">{format(item.precio)}</span>
-                    {item.precioOriginal && (
-                      <span className="text-[10px] text-gray-500 line-through">{format(item.precioOriginal)}</span>
-                    )}
+                  {/* El "+" va junto al precio, igual que en los packs y en el
+                      catálogo: encima de la imagen se perdía contra la portada. */}
+                  <span className="mt-0.5 flex items-center justify-between gap-1.5">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="hs2-game-price text-[#4ade80]">{format(item.precio)}</span>
+                      {item.precioOriginal && (
+                        <span className="text-[10px] text-gray-500 line-through">{format(item.precioOriginal)}</span>
+                      )}
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToCart(item, e as any);
+                      }}
+                      className="hs2-add-btn"
+                      aria-label={`Añadir ${item.titulo} al carrito`}
+                    >
+                      <Plus size={14} strokeWidth={2.5} />
+                    </span>
                   </span>
                 </span>
               </button>
@@ -288,7 +291,7 @@ export default function HomeSectionV2({
               return (
                 <div
                   key={pack.id}
-                  onClick={(e) => comprarDirecto(pack, e)}
+                  onClick={() => abrirFicha(pack)}
                   className="hs2-pack-card"
                 >
                   <div className="hs2-pack-img-wrapper">
@@ -332,8 +335,7 @@ export default function HomeSectionV2({
                           e.stopPropagation();
                           addToCart(pack, e as any);
                         }}
-                        className="cat2-add-btn"
-                        style={{ width: '28px', height: '28px' }}
+                        className="hs2-add-btn"
                       >
                         <Plus size={14} strokeWidth={2.5} />
                       </div>
@@ -472,7 +474,7 @@ export default function HomeSectionV2({
         </button>
 
         {/* Abre el formulario de consulta acá mismo: deja un ticket guardado
-            que podemos revisar, en vez de una conversación de WhatsApp que se
+            que podemos revisar, en vez de una conversación suelta que se
             pierde si no la vemos a tiempo. */}
         <button
           type="button"
@@ -485,7 +487,7 @@ export default function HomeSectionV2({
           </span>
           <span className="support-ticket-banner__text">
             <span className="support-ticket-banner__title">¿Tienes problemas o dudas?</span>
-            <span className="support-ticket-banner__sub">Cuéntanos y te generamos un ticket. Te respondemos a tu WhatsApp o correo.</span>
+            <span className="support-ticket-banner__sub">Cuéntanos y te generamos un ticket. Te respondemos al contacto que nos dejes.</span>
           </span>
           <span className="support-ticket-banner__cta">
             Abrir ticket <ChevronRight size={14} strokeWidth={2.6} />

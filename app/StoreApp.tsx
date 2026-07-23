@@ -4,14 +4,17 @@
 import { startTransition, useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageCircle, Heart, ArrowRight, ShoppingCart, Plus, Landmark } from 'lucide-react';
+import { MessageCircle, Heart, ArrowRight, ShoppingCart, Plus, Landmark, Ticket } from 'lucide-react';
 import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
-import { fetchCatalogFromSupabase, findCatalogItemBySlug, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
+import { fetchCatalogFromSupabase, findCatalogItemBySlug, slugifyTitulo, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
 import { fetchNewsFromSupabase, type NewsItem } from '@/lib/news';
 import { fetchAppSettings, type AppSettings } from '@/lib/settings';
+import { crearItemsDeOrden } from '@/lib/order-items';
+import { validarCodigo, type DescuentoAplicado } from '@/lib/descuentos';
 import { supabase } from '@/lib/supabase/client';
 import { trackView } from '@/lib/track';
+import { createPortal } from 'react-dom';
 
 import HomeSectionV2 from '@/components/app-store/HomeSectionV2';
 import GuideSection, { type GuideConsole } from '@/components/app-store/GuideSection';
@@ -26,11 +29,20 @@ const CatalogSection = dynamic(() => import('@/components/app-store/CatalogSecti
   loading: () => <div className="min-h-[52vh]" aria-hidden="true" />,
 });
 
+// La ficha de producto también se usa desde el inicio. Se carga diferida igual
+// que el catálogo: importarla derecho traería todo el catálogo al primer render
+// del inicio, que es justo lo que el dynamic de arriba evita.
+const CatalogDetailModal = dynamic(
+  () => import('@/components/app-store/CatalogSection').then(m => m.CatalogDetailModal),
+  { ssr: false },
+);
+
 // --- CONFIGURACION ---
 const CONFIG = {
-  whatsappNumber: "56926411278",
   emailSoporte: "alfeicon.games@gmail.com",
-  canalWhatsapp: "https://whatsapp.com/channel/0029VafHhlx0G0XpvqQKyG2D",
+  instagram: "https://instagram.com/alfeicon_games",
+  // ig.me/m abre el chat directo, como hacía wa.me.
+  instagramDm: "https://ig.me/m/alfeicon_games",
 };
 
 const FUSE_OPTIONS = {
@@ -176,6 +188,19 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
   const [purchaseTransition, setPurchaseTransition] = useState(false);
   const [purchaseOrigin, setPurchaseOrigin] = useState({ x: 0, y: 0 });
   const [purchaseModalData, setPurchaseModalData] = useState<{items: CatalogItem[], origin: {x:number, y:number}} | null>(null);
+  // Código de descuento del modal de pago. `descuento` solo se llena cuando la
+  // base confirmó el código; el monto viene de allá, nunca de aquí.
+  // Ficha abierta desde el inicio (el catálogo maneja la suya por dentro).
+  const [fichaInicio, setFichaInicio] = useState<CatalogItem | null>(null);
+  // Candado contra el doble toque en los botones de pago: en móvil, dos taps
+  // seguidos alcanzaban a crear dos órdenes antes de que la primera navegara.
+  // El ref frena el segundo al instante; el estado solo apaga el botón.
+  const pagoEnCursoRef = useRef(false);
+  const [pagoEnCurso, setPagoEnCurso] = useState(false);
+  const [codigoInput, setCodigoInput] = useState('');
+  const [descuento, setDescuento] = useState<DescuentoAplicado | null>(null);
+  const [codigoError, setCodigoError] = useState<string | null>(null);
+  const [validandoCodigo, setValidandoCodigo] = useState(false);
   // Vista de datos de transferencia dentro del modal de pago (código + total).
   const [transferOrder, setTransferOrder] = useState<{code: string; total: number} | null>(null);
   const [cartItems, setCartItems] = useState<CatalogItem[]>([]);
@@ -329,7 +354,9 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     }, SECTION_EXIT_MS);
   }, [activeSection]);
 
-  const goToWhatsApp = useCallback((url: string, event?: MouseEvent<HTMLElement>) => {
+  // Abre un enlace externo (hoy, Instagram) conservando la animación de compra
+  // que parte desde el botón presionado.
+  const abrirContacto = useCallback((url: string, event?: MouseEvent<HTMLElement>) => {
     if (purchaseTimerRef.current) window.clearTimeout(purchaseTimerRef.current);
     if (purchaseResetTimerRef.current) window.clearTimeout(purchaseResetTimerRef.current);
 
@@ -355,11 +382,47 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     }, 1800);
   }, []);
 
+  // Tocar una tarjeta del inicio abre la MISMA ficha que el catálogo, pero sin
+  // moverse de sección: el cliente mira el juego y vuelve al carrusel donde
+  // estaba. Es el mismo componente, montado también aquí.
+  const abrirFichaDesdeInicio = useCallback((item: CatalogItem) => {
+    setFichaInicio(item);
+    // Misma métrica que en el catálogo: abrir la ficha = visita al juego.
+    trackView(`/juego/${slugifyTitulo(item.titulo)}`, item);
+  }, []);
+
+  const aplicarCodigo = useCallback(async () => {
+    if (!purchaseModalData || validandoCodigo) return;
+    setValidandoCodigo(true);
+    const r = await validarCodigo(codigoInput, purchaseModalData.items);
+    setValidandoCodigo(false);
+    if (!r.ok) { setDescuento(null); setCodigoError(r.motivo); return; }
+    setCodigoError(null);
+    setDescuento(r.descuento);
+  }, [codigoInput, purchaseModalData, validandoCodigo]);
+
+  const quitarCodigo = useCallback(() => {
+    setDescuento(null); setCodigoInput(''); setCodigoError(null);
+  }, []);
+
+  // Al cerrar el modal el descuento no debe sobrevivir: el próximo carrito
+  // puede tener otros productos y el código quizá ya no aplique.
+  const cerrarModalCompra = useCallback(() => {
+    setPurchaseModalData(null);
+    setTransferOrder(null);
+    quitarCodigo();
+    pagoEnCursoRef.current = false;
+    setPagoEnCurso(false);
+  }, [quitarCodigo]);
+
   const notaInternacional = isBase
     ? ''
     : `\n(Precio internacional en ${currency.label}, incluye +US$7 por costos de cambio y transferencia. Pago por transferencia internacional o tarjeta de crédito.)`;
 
   const procesarMercadoPago = useCallback(async (data: {items: CatalogItem[], origin: {x:number, y:number}}) => {
+    if (pagoEnCursoRef.current) return; // doble toque: la orden ya se está creando
+    pagoEnCursoRef.current = true;
+    setPagoEnCurso(true);
     const { items, origin } = data;
     setPurchaseModalData(null);
     setIsCartOpen(false);
@@ -368,8 +431,11 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
 
     const code = generateShortCode();
     
-    // Calcular totales para Mercado Pago
-    const total_precio = items.reduce((acc, item) => acc + item.precio, 0);
+    // Calcular totales para Mercado Pago. El descuento ya viene validado por la
+    // base; aquí solo se resta.
+    const bruto = items.reduce((acc, item) => acc + item.precio, 0);
+    const rebaja = descuento?.monto ?? 0;
+    const total_precio = Math.max(0, bruto - rebaja);
     const titulos = items.map(item => item.titulo).join(' + ');
     const pack_ids = items.filter(item => item.esPack).map(item => item.id);
 
@@ -380,7 +446,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     // Se ESPERA a que termine antes de mandar al cliente a la pasarela. Sin
     // await, el navegador cancelaba el insert al navegar y el cliente pagaba
     // una orden que no existía: ni el webhook ni su portal la encontraban.
-    const { error: insertErr } = await (supabase?.from('orders').insert({
+    const { data: nuevaOrden, error: insertErr } = await (supabase?.from('orders').insert({
       short_code: code,
       game_name: titulos,
       pack_ids: pack_ids.length > 0 ? pack_ids : null,
@@ -388,16 +454,23 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
       // Sin `source`: esa columna no existe en `orders` y Postgres rechazaba
       // la fila entera. Nadie la lee tampoco.
       sale_price: total_precio,
+      discount_code: descuento?.code ?? null,
+      discount_amount: rebaja,
       payment_method: 'mercadopago',
       payment_status: 'pending',
-    }) ?? Promise.resolve({ error: null }));
+    }).select('id').single() ?? Promise.resolve({ data: null, error: null }));
 
     if (insertErr) {
       console.error("Error creating draft order", insertErr);
       alert('No pudimos preparar tu orden. Revisa tu conexión e inténtalo de nuevo.');
       setPurchaseTransition(false);
+      pagoEnCursoRef.current = false;
+      setPagoEnCurso(false);
       return;
     }
+
+    // Una cuenta por producto: el cliente las instala una a una desde su enlace.
+    if (nuevaOrden?.id) await crearItemsDeOrden(nuevaOrden.id, items, appSettings);
 
     try {
       const res = await fetch('/api/checkout', {
@@ -418,45 +491,60 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
       } else {
         alert('Error al generar el pago: ' + (resData.details || resData.error || 'Desconocido'));
         setPurchaseTransition(false);
+        pagoEnCursoRef.current = false;
+        setPagoEnCurso(false);
       }
     } catch (error: any) {
       console.error(error);
       alert('Error de conexión: ' + error.message);
       setPurchaseTransition(false);
+      pagoEnCursoRef.current = false;
+      setPagoEnCurso(false);
     }
-  }, []);
+  }, [appSettings, descuento]);
 
   // Transferencia: crea la orden (transferencia pendiente, con el monto en
   // sale_price) y lleva al cliente a su portal /entrega/[code], donde ve los
   // datos, sube el comprobante y espera la aprobación. Si el insert falla
   // (p. ej. falta correr order-receipts.sql), cae al panel de datos en el modal.
   const iniciarTransferencia = useCallback(async (data: {items: CatalogItem[], origin: {x:number, y:number}}) => {
+    if (pagoEnCursoRef.current) return; // doble toque: la orden ya se está creando
+    pagoEnCursoRef.current = true;
+    setPagoEnCurso(true);
     const { items } = data;
     const code = generateShortCode();
-    const total = items.reduce((acc, item) => acc + item.precio, 0);
+    const brutoTransf = items.reduce((acc, item) => acc + item.precio, 0);
+    const rebajaTransf = descuento?.monto ?? 0;
+    const total = Math.max(0, brutoTransf - rebajaTransf);
     const titulos = items.map(item => item.titulo).join(' + ');
     const pack_ids = items.filter(item => item.esPack).map(item => item.id);
 
-    const { error } = await (supabase?.from('orders').insert({
+    const { data: nuevaOrden, error } = await (supabase?.from('orders').insert({
       short_code: code,
       game_name: titulos,
       pack_ids: pack_ids.length > 0 ? pack_ids : null,
       status: 'draft',
       sale_price: total,
+      discount_code: descuento?.code ?? null,
+      discount_amount: rebajaTransf,
       payment_method: 'transferencia',
       payment_status: 'pending',
-    }) ?? Promise.resolve({ error: null }));
+    }).select('id').single() ?? Promise.resolve({ data: null, error: null }));
 
     if (error) {
       console.error("Error creating transfer order:", JSON.stringify(error));
       setTransferOrder({ code, total }); // fallback: datos en el modal
+      pagoEnCursoRef.current = false;
+      setPagoEnCurso(false);
       return;
     }
+
+    if (nuevaOrden?.id) await crearItemsDeOrden(nuevaOrden.id, items, appSettings);
 
     // El proceso vive en /entrega/[code]: datos + comprobante → validación →
     // tutorial de instalación. El modal solo elige el método de pago.
     window.location.href = `/entrega/${code}`;
-  }, []);
+  }, [appSettings, descuento]);
 
   const addToCart = useCallback((item: CatalogItem, event?: MouseEvent<HTMLElement>) => {
     if (event) {
@@ -542,11 +630,13 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
   const comprarNintendoOnline = useCallback((event?: MouseEvent<HTMLElement>) => {
     const precioFmt = `${format(appSettings.nintendoOnlinePrice)} ${currency.code}`;
     const code = generateShortCode();
-    const mensaje = `Hola Alfeicon Games!\n\nMe interesa Nintendo Switch Online + Paquete de expansión por 12 meses.\n\nPrecio: ${precioFmt}${notaInternacional}\n\nMi orden generada es: *${code}*\n\n¿Lo tienes disponible?`;
-    const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(mensaje)}`;
-    goToWhatsApp(url, event);
+    // Instagram no admite mensaje prellenado en el enlace, así que el texto se
+    // copia al portapapeles: el cliente solo pega y envía.
+    const mensaje = `Hola Alfeicon Games! Me interesa Nintendo Switch Online + Paquete de expansión por 12 meses. Precio: ${precioFmt}${notaInternacional} Mi orden generada es: ${code}. ¿Lo tienes disponible?`;
+    navigator.clipboard?.writeText(mensaje).catch(() => {});
+    abrirContacto(CONFIG.instagramDm, event);
     // Tampoco se registra borrador: es solo una consulta.
-  }, [appSettings.nintendoOnlinePrice, goToWhatsApp, format, currency.code, notaInternacional]);
+  }, [appSettings.nintendoOnlinePrice, abrirContacto, format, currency.code, notaInternacional]);
 
   const getSavedKey = useCallback((item: CatalogItem) => {
     return `${item.esPack ? 'pack' : 'game'}:${String(item.id)}`;
@@ -713,11 +803,10 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
               nintendoOnlinePrice={appSettings.nintendoOnlinePrice}
               navigateToSection={navigateToSection}
               setStoreTab={changeStoreTab}
-              comprarDirecto={comprarDirecto}
+              abrirFicha={abrirFichaDesdeInicio}
               addToCart={addToCart}
               comprarNintendoOnline={comprarNintendoOnline}
               onOpenTerms={() => setShowTerms(true)}
-              whatsappNumber={CONFIG.whatsappNumber}
             />
           )}
 
@@ -747,7 +836,6 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
               catalogInitialCount={CATALOG_INITIAL_COUNT}
               catalogBatchSize={CATALOG_BATCH_SIZE}
               loadMoreRef={loadMoreRef}
-              whatsappNumber={CONFIG.whatsappNumber}
               comprarDirecto={comprarDirecto}
               addToCart={addToCart}
               toggleSaved={toggleSaved}
@@ -772,7 +860,6 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
               setHelpSelected={setHelpSelected}
               pickerExiting={pickerExiting}
               setPickerExiting={setPickerExiting}
-              whatsappNumber={CONFIG.whatsappNumber}
             />
           )}
 
@@ -780,7 +867,6 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
           {visibleSection === 'perfil' && (
             <SupportSection
               sectionMotion={sectionMotion}
-              whatsappNumber={CONFIG.whatsappNumber}
               onOpenTerms={() => setShowTerms(true)}
             />
           )}
@@ -857,7 +943,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { duration: 0.2, ease: 'easeOut' } }}
               exit={{ opacity: 0, transition: { duration: 0.22, ease: 'easeIn' } }}
-              onClick={() => { setPurchaseModalData(null); setTransferOrder(null); }}
+              onClick={cerrarModalCompra}
             >
               <motion.div
                 className="catalog-detail-panel catalog-detail-panel--scroll"
@@ -870,7 +956,6 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                   <TransferDetailsPanel
                     code={transferOrder.code}
                     totalLabel={`${format(transferOrder.total)} ${currency.code}`}
-                    whatsappNumber={CONFIG.whatsappNumber}
                     onBack={() => setTransferOrder(null)}
                   />
                 ) : (
@@ -888,16 +973,62 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                     <h3 className="line-clamp-2 text-sm font-black leading-tight text-white">
                       {purchaseModalData.items.length === 1 ? purchaseModalData.items[0].titulo : `${purchaseModalData.items.length} Juegos en Carrito`}
                     </h3>
-                    <p className="mt-1 text-lg font-black text-white">
-                      {format(purchaseModalData.items.reduce((acc, item) => acc + item.precio, 0))} <span className="text-[10px] text-gray-400">{currency.code}</span>
-                    </p>
+                    {(() => {
+                      const bruto = purchaseModalData.items.reduce((acc, item) => acc + item.precio, 0);
+                      const neto = Math.max(0, bruto - (descuento?.monto ?? 0));
+                      return (
+                        <p className="mt-1 text-lg font-black text-white">
+                          {descuento && (
+                            <span className="mr-2 text-sm font-bold text-gray-500 line-through">{format(bruto)}</span>
+                          )}
+                          {format(neto)} <span className="text-[10px] text-gray-400">{currency.code}</span>
+                        </p>
+                      );
+                    })()}
                   </div>
+                </div>
+
+                {/* Código de descuento. El monto lo confirma la base: aquí solo
+                    se muestra lo que respondió. */}
+                <div className="mb-4">
+                  {descuento ? (
+                    <div className="flex items-center gap-2.5 rounded-2xl border border-green-500/30 bg-green-500/10 px-3.5 py-3">
+                      <Ticket size={16} className="shrink-0 text-green-400" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-mono text-sm font-black tracking-widest text-white">{descuento.code}</p>
+                        <p className="text-[10px] font-bold text-green-400">−{format(descuento.monto)} de descuento</p>
+                      </div>
+                      <button type="button" onClick={quitarCodigo}
+                        className="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-gray-400 active:bg-white/10">
+                        Quitar
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <input
+                          value={codigoInput}
+                          onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setCodigoError(null); }}
+                          onKeyDown={e => { if (e.key === 'Enter') aplicarCodigo(); }}
+                          placeholder="¿Tienes un código?"
+                          className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/30 px-3.5 py-3 text-sm font-bold tracking-widest text-white outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-gray-600 focus:border-white/25"
+                        />
+                        <button type="button" onClick={aplicarCodigo}
+                          disabled={validandoCodigo || !codigoInput.trim()}
+                          className="motion-press shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-40">
+                          {validandoCodigo ? '…' : 'Aplicar'}
+                        </button>
+                      </div>
+                      {codigoError && <p className="mt-1.5 text-[11px] font-semibold text-red-400">{codigoError}</p>}
+                    </>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => procesarMercadoPago(purchaseModalData)}
-                    className="motion-press group relative flex w-full items-center justify-between overflow-hidden rounded-2xl border border-[#38bdf8]/35 bg-[#009EE3]/18 p-4 text-white shadow-lg shadow-[#009EE3]/15 backdrop-blur-xl"
+                    disabled={pagoEnCurso}
+                    className="motion-press group relative flex w-full items-center justify-between overflow-hidden rounded-2xl border border-[#38bdf8]/35 bg-[#009EE3]/18 p-4 text-white shadow-lg shadow-[#009EE3]/15 backdrop-blur-xl disabled:opacity-60"
                   >
                     <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/12 to-transparent" />
                     <div className="relative z-10 flex items-center gap-3">
@@ -922,7 +1053,8 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
 
                   <button
                     onClick={() => iniciarTransferencia(purchaseModalData)}
-                    className="motion-press premium-control flex w-full items-center justify-between rounded-2xl p-4 text-white"
+                    disabled={pagoEnCurso}
+                    className="motion-press premium-control flex w-full items-center justify-between rounded-2xl p-4 text-white disabled:opacity-60"
                   >
                     <div className="flex items-center gap-3">
                       <div className="rounded-full bg-white/10 p-2 text-[#e5e4e2]">
@@ -956,7 +1088,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                 )}
 
                 <button
-                  onClick={() => setPurchaseModalData(null)}
+                  onClick={cerrarModalCompra}
                   className="mt-5 w-full py-2 text-center text-xs font-black uppercase tracking-widest text-gray-500 transition-colors active:text-white"
                 >
                   Cancelar
@@ -967,6 +1099,26 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Ficha abierta desde el inicio. Va portada a #store-content igual que
+            la del catálogo: ahí el backdrop-filter toma la tienda de fondo y el
+            dock no se dibuja encima. */}
+        {typeof window !== 'undefined' && createPortal(
+          <AnimatePresence>
+            {fichaInicio && (
+              <CatalogDetailModal
+                key="detail-modal-inicio"
+                item={fichaInicio}
+                saved={savedIds.includes(getSavedKey(fichaInicio))}
+                onClose={() => setFichaInicio(null)}
+                onBuy={comprarDirecto}
+                onAddToCart={addToCart}
+                onToggleSaved={toggleSaved}
+              />
+            )}
+          </AnimatePresence>,
+          document.getElementById('store-content') ?? document.body
+        )}
 
         {/* Miniaturas que vuelan al carrito: arco hacia arriba y caída al dock */}
         {flyingToCart.map(fly => (

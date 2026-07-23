@@ -2,12 +2,12 @@
 
 // Panel de datos de transferencia dentro del modal de pago. El cliente copia
 // los datos (uno por uno o "copiar todo" para que el banco autocomplete al
-// pegar) y coordina el resto por la página. WhatsApp queda solo para casos
+// pegar) y coordina el resto por la página. Instagram queda solo para casos
 // especiales / pagos del extranjero.
 // NOTA: los datos de la cuenta viven aquí por ahora; se pueden mover a los
 // ajustes del admin (app_settings) más adelante para editarlos sin tocar código.
 import { useState, useEffect } from "react";
-import { ArrowLeft, Copy, Check, MessageCircle, Landmark, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Copy, Check, Instagram, Landmark, ChevronDown, ChevronUp } from "lucide-react";
 
 const CUENTA = {
   titular: "Alfeicon Games",
@@ -21,12 +21,11 @@ const CUENTA = {
 type Props = {
   code: string;
   totalLabel: string;
-  whatsappNumber: string;
   onBack?: () => void;
   isCollapsed?: boolean;
 };
 
-export default function TransferDetailsPanel({ code, totalLabel, whatsappNumber, onBack, isCollapsed }: Props) {
+export default function TransferDetailsPanel({ code, totalLabel, onBack, isCollapsed }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [localCollapsed, setLocalCollapsed] = useState<boolean | null>(null);
 
@@ -58,9 +57,7 @@ export default function TransferDetailsPanel({ code, totalLabel, whatsappNumber,
 
   const bloque = rows.map((r) => `${r.label}: ${r.value}`).join("\n");
 
-  const waUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
-    `Hola! Consulta sobre mi orden ${code} (pago por transferencia / desde el extranjero).`,
-  )}`;
+  const contactoUrl = "https://ig.me/m/alfeicon_games";
 
   return (
     <div>
@@ -122,12 +119,12 @@ export default function TransferDetailsPanel({ code, totalLabel, whatsappNumber,
           </div>
 
           <a
-            href={waUrl}
+            href={contactoUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="motion-press mt-2 flex w-full items-center justify-center gap-2 rounded-full border border-white/10 px-2 py-2 text-[10px] font-black uppercase tracking-wide text-gray-400 active:text-white"
           >
-            <MessageCircle size={14} className="shrink-0" />
+            <Instagram size={14} className="shrink-0" />
             <span className="truncate">¿Eres de otro país? Pago internacional</span>
           </a>
         </>

@@ -1,7 +1,10 @@
 "use client";
 
 import Image from 'next/image';
-import { AlertTriangle, ChevronRight, FileText, MessageCircle, Youtube, Zap } from 'lucide-react';
+import { AlertTriangle, ChevronRight, FileText, Instagram, Youtube, Zap } from 'lucide-react';
+
+// Contacto de la tienda: Instagram (ig.me/m abre el chat directo).
+const INSTAGRAM_DM = 'https://ig.me/m/alfeicon_games';
 
 export type GuideConsole = 'switch2' | 'switch1';
 
@@ -11,7 +14,6 @@ type GuideSectionProps = {
   setHelpSelected: (value: GuideConsole | null) => void;
   pickerExiting: boolean;
   setPickerExiting: (value: boolean) => void;
-  whatsappNumber: string;
 };
 
 const CHECKLIST_SWITCH2: ReadonlyArray<readonly [string, string]> = [
@@ -44,15 +46,15 @@ function Checklist({ items }: { items: ReadonlyArray<readonly [string, string]> 
   );
 }
 
-function WhatsAppBar({ whatsappNumber }: { whatsappNumber: string }) {
+function InstagramBar() {
   return (
-    <div className="guide-wa-bar">
+    <div className="guide-help-bar">
       <div>
-        <p className="guide-wa-bar__label">¿Aún tienes dudas?</p>
-        <p className="guide-wa-bar__title">Te ayudamos por WhatsApp</p>
+        <p className="guide-help-bar__label">¿Aún tienes dudas?</p>
+        <p className="guide-help-bar__title">Te ayudamos por Instagram</p>
       </div>
-      <a href={`https://wa.me/${whatsappNumber}`} target="_blank" className="guide-wa-btn" aria-label="Soporte WhatsApp">
-        <MessageCircle size={20} />
+      <a href={INSTAGRAM_DM} target="_blank" rel="noopener noreferrer" className="guide-help-btn" aria-label="Escribirnos por Instagram">
+        <Instagram size={20} />
       </a>
     </div>
   );
@@ -64,7 +66,6 @@ export default function GuideSection({
   setHelpSelected,
   pickerExiting,
   setPickerExiting,
-  whatsappNumber,
 }: GuideSectionProps) {
   const selectConsole = (target: GuideConsole) => {
     setPickerExiting(true);
@@ -128,7 +129,7 @@ export default function GuideSection({
           {/* Warning strip */}
           <div className="guide-picker-warning">
             <AlertTriangle size={14} className="shrink-0 text-yellow-500" />
-            <p>Usar la guía incorrecta puede generar errores. Si tienes dudas escríbenos por WhatsApp.</p>
+            <p>Usar la guía incorrecta puede generar errores. Si tienes dudas escríbenos por Instagram.</p>
           </div>
         </div>
       )}
@@ -167,7 +168,7 @@ export default function GuideSection({
               <p>Mira el tutorial completo <strong>antes de empezar</strong>. Switch 2 requiere pasos específicos que conviene seguir en orden.</p>
             </div>
 
-            <WhatsAppBar whatsappNumber={whatsappNumber} />
+            <InstagramBar />
           </div>
         </div>
       )}
@@ -220,7 +221,7 @@ export default function GuideSection({
               </div>
             </a>
 
-            <WhatsAppBar whatsappNumber={whatsappNumber} />
+            <InstagramBar />
           </div>
         </div>
       )}

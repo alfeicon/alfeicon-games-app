@@ -1,13 +1,15 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake, Send, MessageCircle, Receipt, ArrowLeft, CheckCheck
+  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake, Send, MessageCircle, Receipt, ArrowLeft, CheckCheck, ShoppingCart, ShieldCheck
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { urlImagen } from "@/lib/chat-image";
+import { EntregaItems } from "./EntregaItems";
 import type { Order, OrderMessage, AdminGame, AdminPack, Provider, SettingsState } from "../_types";
-import { fmt, fmtDate, fmtTime } from "../_helpers";
+import { fmt, fmtDate, fmtTime, haceCuanto, probableAbandono } from "../_helpers";
 import { FloatingWindow, type WinId, type WinState } from "./FloatingWindow";
 
 type OrderForm = {
@@ -71,10 +73,11 @@ const STATUS_COLORS: Record<Order["status"], string> = {
 // Pestañas del modal de una orden. La orden en sí, la validación del pago, el
 // chat con el cliente y los números son cuatro tareas distintas; separarlas
 // evita el muro de formulario que había antes.
-type ModalTab = "orden" | "pago" | "chat" | "finanzas";
+type ModalTab = "orden" | "pago" | "chat" | "finanzas" | "boleta";
 
 const MODAL_TABS: { id: ModalTab; label: string; Icon: React.ElementType }[] = [
   { id: "orden",    label: "Orden",    Icon: PackageCheck },
+  { id: "boleta",   label: "Boleta",   Icon: ShoppingCart },
   { id: "pago",     label: "Pago",     Icon: Receipt },
   { id: "chat",     label: "Chat",     Icon: MessageCircle },
   { id: "finanzas", label: "Finanzas", Icon: Handshake },
@@ -89,6 +92,7 @@ const DEFAULT_WINS: Record<WinId, WinState> = {
   chat:     { x: 668,  y: 96,  w: 440, h: 520, z: 3, minimized: false, locked: false, section: "chat" },
   pago:     { x: 668,  y: 632, w: 440, h: 220, z: 2, minimized: true,  locked: false, section: "pago" },
   finanzas: { x: 1128, y: 96,  w: 460, h: 420, z: 1, minimized: true,  locked: false, section: "finanzas" },
+  boleta:   { x: 24,   y: 732, w: 620, h: 220, z: 1, minimized: true,  locked: false, section: "boleta" },
 };
 
 type WinCtx = {
@@ -320,12 +324,19 @@ function AdminOrderChat({ orderId, fill }: { orderId: string; fill?: boolean }) 
         ) : (
           messages.map((m) => {
             const mine = m.sender === "admin";
+            const foto = urlImagen(m.body);
             return (
               <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[80%] rounded-2xl px-3 py-1.5 text-[12.5px] leading-snug ${
                   mine ? "bg-yellow-500 text-black" : "bg-white/10 text-white"
                 }`}>
-                  <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                  {foto ? (
+                    <a href={foto} target="_blank" rel="noopener noreferrer" className="block">
+                      <img src={foto} alt="Foto del cliente" className="mb-1 max-h-52 w-full rounded-lg object-cover" />
+                    </a>
+                  ) : (
+                    <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                  )}
                   <span className={`mt-0.5 flex items-center justify-end gap-1 text-[9px] ${
                     mine ? "text-black/50" : "text-gray-500"
                   }`}>
@@ -416,15 +427,69 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   // flotante que se mueve, se redimensiona y se puede minimizar.
   const isWide = useIsWide();
   const showAll = isWide && !!selectedOrder;
+
   const [wins, setWins] = useState<Record<WinId, WinState>>(DEFAULT_WINS);
+  const [activeLayout, setActiveLayout] = useState<1 | 2 | 3>(1);
   const topZ = useRef(10);
 
   const patchWin = (id: WinId, patch: Partial<WinState>) =>
     setWins(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
+  const handleItemsLoad = useCallback((count: number, totalCost: number, hasCreds?: boolean) => {
+    setItemsCount(count);
+    setItemsHaveCreds(!!hasCreds);
+    if (count > 0) {
+      setForm(f => ({ ...f, cost_price: totalCost }));
+    }
+  }, []);
+
   const focusWin = (id: WinId) => {
     topZ.current += 1;
     patchWin(id, { z: topZ.current });
+  };
+
+  const applyLayout = (type: 1 | 2 | 3) => {
+    setActiveLayout(type);
+    if (bounds.w < 600) return;
+    const pad = 10;
+    const chatW = Math.max(320, Math.round(bounds.w * 0.34));
+    const mainW = bounds.w - chatW - pad * 3;
+    const h = bounds.h - pad * 2;
+    const mainX = pad;
+    const sideX = pad * 2 + mainW;
+    const halfH = (h - pad) / 2;
+
+    if (type === 1) {
+      const boletaH = Math.min(Math.round(h * 0.35), 280);
+      const boletaY = h - boletaH + pad;
+      setWins(prev => ({
+        ...prev,
+        orden:    { ...prev.orden,    x: mainX, y: pad, w: mainW, h, minimized: false, z: topZ.current + 1 },
+        boleta:   { ...prev.boleta,   x: mainX, y: boletaY, w: mainW, h: boletaH, minimized: true, z: topZ.current + 2 },
+        chat:     { ...prev.chat,     x: sideX, y: pad, w: chatW, h, minimized: false, z: topZ.current + 3 },
+        pago:     { ...prev.pago,     minimized: true },
+        finanzas: { ...prev.finanzas, minimized: true },
+      }));
+    } else if (type === 2) {
+      setWins(prev => ({
+        ...prev,
+        orden:    { ...prev.orden,    x: mainX, y: pad, w: mainW, h, minimized: false, z: topZ.current + 1 },
+        chat:     { ...prev.chat,     x: sideX, y: pad, w: chatW, h: halfH, minimized: false, z: topZ.current + 2 },
+        finanzas: { ...prev.finanzas, x: sideX, y: pad + halfH + pad, w: chatW, h: halfH, minimized: false, z: topZ.current + 3 },
+        pago:     { ...prev.pago,     minimized: true },
+        boleta:   { ...prev.boleta,   minimized: true },
+      }));
+    } else if (type === 3) {
+      setWins(prev => ({
+        ...prev,
+        pago:     { ...prev.pago,     x: mainX, y: pad, w: mainW, h, minimized: false, z: topZ.current + 1 },
+        chat:     { ...prev.chat,     x: sideX, y: pad, w: chatW, h: halfH, minimized: false, z: topZ.current + 2 },
+        finanzas: { ...prev.finanzas, x: sideX, y: pad + halfH + pad, w: chatW, h: halfH, minimized: false, z: topZ.current + 3 },
+        orden:    { ...prev.orden,    minimized: true },
+        boleta:   { ...prev.boleta,   minimized: true },
+      }));
+    }
+    topZ.current += 3;
   };
 
   // Área donde flotan las ventanas: se mide para repartir el layout inicial y
@@ -463,9 +528,13 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     // hay que hacer con ella. El resto abre en los datos de la entrega.
     const validando = needsValidation(selectedOrder);
 
+    const boletaH = Math.min(Math.round(h * 0.35), 280);
+    const boletaY = h - boletaH + pad;
+
     setWins(prev => ({
       ...prev,
       orden:    { ...prev.orden,    x: mainX, y: pad, w: mainW, h, minimized: validando },
+      boleta:   { ...prev.boleta,   x: mainX, y: boletaY, w: mainW, h: boletaH, minimized: true },
       pago:     { ...prev.pago,     x: mainX, y: pad, w: mainW, h, minimized: !validando },
       chat:     { ...prev.chat,     x: sideX, y: pad, w: chatW, h, minimized: false },
       finanzas: { ...prev.finanzas, x: mainX, y: pad, w: Math.min(560, mainW), h: Math.min(460, h), minimized: true },
@@ -497,8 +566,25 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   // Búsqueda dentro del Historial
   const [historySearch, setHistorySearch] = useState("");
   // Las canceladas van plegadas: son registro, no trabajo pendiente.
+  // Cuántas cuentas (order_items) tiene la orden abierta. null = aún cargando:
+  // no se dibuja el bloque antiguo hasta saberlo, para no mostrarlo y esconderlo
+  // de golpe. 0 = orden del modelo viejo, ahí sí manda el bloque de arriba.
+  const [itemsCount, setItemsCount] = useState<number | null>(null);
+  const [itemsHaveCreds, setItemsHaveCreds] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
-  const [showAwaiting, setShowAwaiting] = useState(false);
+  // "Esperando pago" abierta por defecto: conviene verla sin tener que abrirla.
+  const [showAwaiting, setShowAwaiting] = useState(true);
+  // Selección múltiple para borrar de a varias (no una por una). `selMode` dice
+  // en qué sección está activo el modo, así "Esperando pago" y "Canceladas" no
+  // se mezclan; `selIds` guarda solo las de esa sección.
+  const [selMode, setSelMode] = useState<null | "await" | "cancel">(null);
+  const [selIds, setSelIds] = useState<Set<string>>(new Set());
+  const toggleSel = (id: string) => setSelIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const salirSeleccion = () => { setSelMode(null); setSelIds(new Set()); };
 
   // Para sugerencias de autocompletado
   const [query, setQuery] = useState("");
@@ -511,17 +597,13 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   }, [games, packs]);
 
   const suggestions = useMemo(() => {
-    const parts = form.game_name.split('+');
-    const currentSearch = parts[parts.length - 1].trim().toLowerCase();
-    if (!currentSearch) return pool.slice(0, 5);
-    return pool.filter(t => t.title.toLowerCase().includes(currentSearch)).slice(0, 5);
-  }, [pool, form.game_name]);
+    const currentSearch = query.trim().toLowerCase();
+    if (!currentSearch) return pool.slice(0, 20);
+    return pool.filter(t => t.title.toLowerCase().includes(currentSearch)).slice(0, 20);
+  }, [pool, query]);
 
   const addSuggestion = (item: { id: string, title: string, type: "game" | "pack", price: number | null, cost: number | null }) => {
     const parts = form.game_name.split('+').map(p => p.trim()).filter(Boolean);
-    if (form.game_name.includes('+') || parts.length > 0) {
-       parts.pop();
-    }
     parts.push(item.title);
 
     // Se guarda el id del pack elegido para poder eliminarlo del catálogo al
@@ -543,6 +625,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       cost_price: form.cost_price === "" ? (item.cost || "") : form.cost_price,
       pack_ids,
     });
+    setShowSuggestions(false);
   };
 
   // Validación = solo lo que requiere una decisión tuya: un comprobante de
@@ -634,6 +717,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const select = (o: Order) => {
     const f = toForm(o);
     setSelectedOrder(o); setForm(f); setOpenedForm(f); setSplitEnabled(o.partner_pct != null);
+    setItemsCount(null);
     setQuery(""); setShowSuggestions(false); setCreatedCode(null); setModalOpen(true);
     // Si hay un comprobante esperando, el modal abre directo en Pago: es lo
     // único accionable en ese momento.
@@ -652,6 +736,19 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     const dirty = JSON.stringify(form) !== JSON.stringify(openedForm);
     if (dirty && !window.confirm("Tienes cambios sin guardar en esta orden. ¿Cerrar de todas formas?")) return;
     close();
+  };
+
+  const handleStatusChange = async (newStatus: Order["status"]) => {
+    setForm({ ...form, status: newStatus });
+    if (selectedOrder) {
+      const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", selectedOrder.id);
+      if (error) {
+        showNotice("error", "Error al guardar el estado: " + error.message);
+      } else {
+        showNotice("success", "Estado guardado automáticamente.");
+        await onReload();
+      }
+    }
   };
 
   const save = async (e: FormEvent) => {
@@ -685,10 +782,13 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     };
     if (!payload.game_name) { showNotice("error", "Falta el nombre del juego."); return; }
 
-    // Al guardar código de acceso + contraseña por PRIMERA vez, la orden pasa a "Listo"
-    const firstCredentialSave =
-      selectedOrder && payload.account_email && payload.account_password && !selectedOrder.account_password;
-    if (firstCredentialSave && payload.status === "preparing") payload.status = "ready";
+    // Auto-avance: si el admin hace clic en GUARDAR, y hay credenciales cargadas,
+    // y la orden seguía en espera ("pending_setup" o "preparing"), la pasamos a "ready".
+    const hasCredsToDeliver = itemsHaveCreds || !!(payload.account_email && payload.account_password);
+    if (selectedOrder && hasCredsToDeliver && (payload.status === "pending_setup" || payload.status === "preparing")) {
+      payload.status = "ready";
+      setForm(prev => ({ ...prev, status: "ready" })); // Reflejar en la UI inmediatamente
+    }
 
     setLoading(true);
     let missingPackIdsColumn = false;
@@ -703,8 +803,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
         if (error) throw error;
         showNotice("success", missingPackIdsColumn
           ? "Orden actualizada — falta correr orders-delete-pack-on-sale.sql en Supabase para el borrado automático de packs."
-          : (firstCredentialSave ? "Datos guardados — orden marcada como Lista." : "Orden actualizada."));
-        close();
+          : (payload.status === "ready" ? "Datos guardados — orden marcada como Lista." : "Orden actualizada."));
+        // Ya no cerramos la ventana automáticamente para que el admin pueda seguir viendo.
         await onReload();
       } else {
         const generatedCode = generateShortCode();
@@ -740,6 +840,19 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     await onReload();
   };
 
+  const eliminarSeleccionadas = async () => {
+    if (!supabase || selIds.size === 0) return;
+    const ids = Array.from(selIds);
+    if (!window.confirm(`¿Eliminar ${ids.length} ${ids.length === 1 ? "orden" : "órdenes"}? No se puede deshacer.`)) return;
+    setLoading(true);
+    const { error } = await supabase.from("orders").delete().in("id", ids);
+    setLoading(false);
+    if (error) { showNotice("error", "No se pudieron eliminar."); return; }
+    showNotice("success", `${ids.length} ${ids.length === 1 ? "orden eliminada" : "órdenes eliminadas"}.`);
+    salirSeleccion();
+    await onReload();
+  };
+
   const confirmDraft = async (order: Order) => {
     if (!supabase) return;
     setLoading(true);
@@ -772,7 +885,12 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   };
 
   // Componente interno para renderizar cada item de la lista
-  const OrderItem = ({ item }: { item: Order }) => (
+  const OrderItem = ({ item }: { item: Order }) => {
+    // Órdenes que eligieron método y no completaron: sin comprobante (transfer)
+    // ni confirmación (MP). El tiempo es la única pista de si ya se abandonó.
+    const esperandoPago = item.status === "draft" && item.payment_status === "pending" && !item.receipt_url;
+    const abandonada = esperandoPago && probableAbandono(item.created_at);
+    return (
     <div className="group relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]">
 
       <button onClick={() => select(item)} className="flex items-center gap-4 flex-1 min-w-0 text-left">
@@ -789,6 +907,18 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
             <span className="truncate">
               {item.order_number ? `Orden #${item.order_number}` : item.short_code} · {item.game_name}
             </span>
+            {/* Método de pago: en "esperando pago" es la única forma de saber si
+                falta el comprobante (transferencia) o la confirmación (MP). */}
+            {item.payment_method === "mercadopago" && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-sky-400">
+                Mercado Pago
+              </span>
+            )}
+            {item.payment_method === "transferencia" && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/5 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-gray-300">
+                Transferencia
+              </span>
+            )}
             {/* Pagó por transferencia y subió comprobante: hay que validarlo. */}
             {item.payment_status === "pending" && item.receipt_url && (
               <span className="flex shrink-0 items-center gap-1 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-yellow-500">
@@ -800,6 +930,13 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
             {item.short_code} · {fmtTime(item.created_at)} · {fmtDate(item.created_at)}
             {item.console_code ? ` · Código Cliente: ${item.console_code}` : ''}
           </p>
+          {/* En "esperando pago", cuánto lleva sin avanzar. Pasado el umbral se
+              marca como probable abandono para que sepas que puedes borrarla. */}
+          {esperandoPago && (
+            <p className={`mt-0.5 text-[10px] font-bold ${abandonada ? "text-orange-400" : "text-gray-600"}`}>
+              {abandonada ? "⚠ Probablemente abandonada · " : "Esperando · "}{haceCuanto(item.created_at)}
+            </p>
+          )}
         </div>
       </button>
 
@@ -836,41 +973,205 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
       <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.04]" />
     </div>
-  );
+    );
+  };
+
+  // Botón "Seleccionar / Cancelar" para el encabezado de una sección borrable.
+  const botonSeleccion = (seccion: "await" | "cancel") =>
+    selMode === seccion ? (
+      <button type="button" onClick={salirSeleccion}
+        className="text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-white">
+        Cancelar
+      </button>
+    ) : (
+      <button type="button" onClick={() => { setSelMode(seccion); setSelIds(new Set()); }}
+        className="text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-white">
+        Seleccionar
+      </button>
+    );
+
+  // Barra de acción del modo selección: todas/ninguna + eliminar.
+  const barraSeleccion = (seccion: "await" | "cancel", items: Order[]) =>
+    selMode === seccion ? (
+      <div className="flex items-center gap-3 border-b border-white/5 bg-white/[0.02] px-6 py-2">
+        <button type="button"
+          onClick={() => setSelIds(prev => prev.size === items.length ? new Set() : new Set(items.map(o => o.id)))}
+          className="text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-white">
+          {selIds.size === items.length ? "Ninguna" : "Todas"}
+        </button>
+        <span className="flex-1 text-[10px] font-bold text-gray-500">{selIds.size} seleccionada{selIds.size === 1 ? "" : "s"}</span>
+        <button type="button" onClick={eliminarSeleccionadas} disabled={loading || selIds.size === 0}
+          className="flex items-center gap-1.5 rounded-full border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40">
+          <Trash2 size={11} /> Eliminar ({selIds.size})
+        </button>
+      </div>
+    ) : null;
+
+  // Fila de una orden con casilla cuando su sección está en modo selección. En
+  // ese modo el contenido no recibe clics (si no, abriría la orden en vez de
+  // marcarla) y toda la fila alterna la marca.
+  const filaSeleccionable = (item: Order, seccion: "await" | "cancel", claseInactiva = "") => {
+    const activo = selMode === seccion;
+    const marcada = selIds.has(item.id);
+    return (
+      <div key={item.id}
+        onClick={activo ? () => toggleSel(item.id) : undefined}
+        className={`flex items-center gap-2 border-b border-white/[0.04] pr-4 ${activo ? "cursor-pointer" : ""} ${marcada ? "bg-red-500/[0.06]" : claseInactiva}`}
+      >
+        {activo && (
+          <span aria-hidden className={`ml-4 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${marcada ? "border-red-500 bg-red-500 text-white" : "border-white/20 text-transparent"}`}>
+            <Check size={13} strokeWidth={3} />
+          </span>
+        )}
+        <div className={`min-w-0 flex-1 ${activo ? "pointer-events-none" : ""}`}>
+          <OrderItem item={item} />
+        </div>
+        {!activo && seccion === "cancel" && (
+          <button type="button" onClick={() => del(item)} disabled={loading} title="Eliminar del registro"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-red-500/70 transition-colors hover:bg-red-500/15 hover:text-red-400 disabled:opacity-50">
+            <Trash2 size={11} /> Eliminar
+          </button>
+        )}
+      </div>
+    );
+  };
 
   // Contenido del panel de una orden (cabecera + formulario). Se monta en dos
   // contenedores distintos: pantalla completa para una orden existente, modal
   // para la creación de una nueva.
   const orderPanel = (
     <>
-            <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.04] to-transparent px-5 py-4">
-              {selectedOrder ? (
-                <button onClick={closeIfConfirmed} type="button" title="Volver a la lista"
-                  className="flex h-10 shrink-0 items-center gap-2 rounded-2xl border border-white/8 px-3 text-gray-400 transition-all hover:bg-white/5 hover:text-white active:scale-95">
-                  <ArrowLeft size={15} />
-                  <span className="hidden text-[10px] font-black uppercase tracking-widest sm:inline">Volver</span>
-                </button>
-              ) : (
-                <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-yellow-500/20 bg-yellow-500/10 sm:flex">
-                  <PackageCheck size={18} className="text-yellow-500" />
+            <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.04] to-transparent px-5 py-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {selectedOrder ? (
+                  <button onClick={closeIfConfirmed} type="button" title="Volver a la lista"
+                    className="flex h-10 shrink-0 items-center gap-2 rounded-2xl border border-white/8 px-3 text-gray-400 transition-all hover:bg-white/5 hover:text-white active:scale-95">
+                    <ArrowLeft size={15} />
+                    <span className="hidden text-[10px] font-black uppercase tracking-widest sm:inline">Volver</span>
+                  </button>
+                ) : (
+                  <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-yellow-500/20 bg-yellow-500/10 sm:flex">
+                    <PackageCheck size={18} className="text-yellow-500" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-yellow-500 truncate">
+                      {selectedOrder
+                        ? `Orden ${selectedOrder.order_number ? `#${selectedOrder.order_number} · ${selectedOrder.short_code}` : selectedOrder.short_code}`
+                        : "Nueva Orden"}
+                    </p>
+                    {selectedOrder && (
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${STATUS_COLORS[form.status]}`}>
+                        {STATUS_LABELS[form.status]}
+                      </span>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => { setQuery(""); setShowSuggestions(true); }}
+                    className="mt-1 flex items-center gap-2 rounded-lg py-1 px-2 -ml-2 text-sm font-black text-white hover:bg-white/5 transition-colors max-w-full"
+                  >
+                    <span className="truncate">{form.game_name || "Seleccionar Juego / Pack..."}</span>
+                    <Search size={14} className="shrink-0 opacity-50" />
+                  </button>
+                  {/* Suggestions Modal */}
+                {showSuggestions && createPortal(
+                  <div className="fixed inset-0 z-[1000] flex flex-col bg-black/80 backdrop-blur-sm p-4 sm:p-10">
+                    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 mt-10">
+                      <div className="flex items-center gap-4 rounded-2xl bg-[rgb(9,9,11)] p-2 border border-white/10 shadow-2xl">
+                        <Search className="ml-3 text-gray-500 shrink-0" size={20} />
+                        <input 
+                          autoFocus
+                          value={query}
+                          onChange={e => setQuery(e.target.value)}
+                          placeholder="Escribe el juego, pack o búscalo aquí..."
+                          className="flex-1 bg-transparent px-2 py-3 text-lg font-bold text-white outline-none"
+                        />
+                        <button onClick={() => setShowSuggestions(false)} className="rounded-xl p-3 text-gray-500 hover:bg-white/10 hover:text-white transition-colors shrink-0">
+                          <X size={20} />
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto rounded-2xl bg-[rgb(9,9,11)] p-4 border border-white/10 shadow-2xl max-h-[60vh]">
+                        <p className="mb-4 text-xs font-black uppercase tracking-widest text-gray-500 px-2">Resultados del Catálogo</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {suggestions.map(item => (
+                            <button key={`${item.type}-${item.id}`} type="button" onClick={() => addSuggestion(item)}
+                              className="flex items-center gap-3 rounded-xl p-3 text-left hover:bg-white/5 transition-colors border border-transparent hover:border-white/10">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/30">
+                                {item.type === "pack" ? <Gift size={18} className="text-purple-400" /> : <Gamepad2 size={18} className="text-blue-400" />}
+                              </div>
+                              <div>
+                                <span className="block text-sm font-bold text-white">{item.title}</span>
+                                <span className="block text-[10px] uppercase tracking-widest text-gray-500">{item.type}</span>
+                              </div>
+                            </button>
+                          ))}
+                          {suggestions.length === 0 && (
+                            <p className="py-10 text-center text-sm font-bold text-gray-600 col-span-full">No se encontraron resultados en el catálogo</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>,
+                  document.body
+                )}
+                </div>
+              </div>
+
+              {selectedOrder && isWide && (
+                <div className="flex flex-[1.5] items-center justify-center gap-4 border-x border-white/5 px-4">
+                  <div className="flex flex-1 items-start rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-1.5 max-w-[340px]">
+                    {STEPS.map((step, i) => {
+                      const isCompleted = form.status === "completed";
+                      const done = currentStepIndex > i || (isCompleted && i === 4);
+                      const current = currentStepIndex === i && !isCompleted;
+                      return (
+                        <div key={step.key} className="flex flex-1 items-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <div className={`flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-black transition-all duration-300 ${
+                              current ? "border-yellow-500 bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.4)]"
+                              : done ? "border-green-500/40 bg-green-500/20 text-green-400"
+                              : "border-white/10 bg-white/5 text-gray-600"
+                            }`}>
+                              {done ? <Check size={11} strokeWidth={3} /> : i + 1}
+                            </div>
+                            <span className={`text-[7px] font-black uppercase tracking-wider ${
+                              current ? "text-white" : done ? "text-green-400/70" : "text-gray-600"
+                            }`}>{step.label}</span>
+                          </div>
+                          {i < STEPS.length - 1 && (
+                            <div className={`mx-0.5 mt-3 h-[2px] flex-1 self-start rounded-full transition-colors duration-300 ${done ? "bg-green-500/40" : "bg-white/10"}`} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <select value={form.status} onChange={e => handleStatusChange(e.target.value as Order["status"])}
+                    className={"shrink-0 w-[180px] rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold text-white outline-none transition-colors focus:border-yellow-500/50 appearance-none cursor-pointer"}>
+                    <option value="draft">0 · Borrador</option>
+                    <option value="pending_console_code">1 · Esperando código</option>
+                    <option value="pending_setup">2 · Código recibido</option>
+                    <option value="preparing">3 · Avisado (prep, 85%)</option>
+                    <option value="ready">4 · Credenciales listas</option>
+                    <option value="completed">5 · Completa</option>
+                    <option value="issue">⚠ Problema instalación</option>
+                  </select>
                 </div>
               )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-yellow-500">
-                    {selectedOrder
-                      ? `Orden ${selectedOrder.order_number ? `#${selectedOrder.order_number} · ${selectedOrder.short_code}` : selectedOrder.short_code}`
-                      : "Nueva Orden"}
-                  </p>
-                  {selectedOrder && (
-                    <span className={`rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${STATUS_COLORS[form.status]}`}>
-                      {STATUS_LABELS[form.status]}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-0.5 truncate text-sm font-black text-white">{form.game_name || "Sin juego"}</p>
-              </div>
-              <div className="flex shrink-0 gap-1.5">
+
+              <div className="flex flex-1 shrink-0 gap-1.5 items-center justify-end min-w-0">
+                {selectedOrder && isWide && (
+                  <div className="relative flex h-10 items-center gap-1 rounded-2xl border border-white/8 bg-white/5 px-1.5 mr-2">
+                    <div 
+                      className="absolute left-[6px] h-7 w-7 rounded-xl bg-white/15 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                      style={{ transform: `translateX(${(activeLayout - 1) * 32}px)` }}
+                    />
+                    <button onClick={() => applyLayout(1)} title="Layout 1: Orden Izquierda, Chat Derecha" className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-xl text-[11px] font-black transition-colors ${activeLayout === 1 ? 'text-white' : 'text-gray-400 hover:text-white'}`}>1</button>
+                    <button onClick={() => applyLayout(2)} title="Layout 2: Orden Izquierda, Chat y Finanzas Derecha" className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-xl text-[11px] font-black transition-colors ${activeLayout === 2 ? 'text-white' : 'text-gray-400 hover:text-white'}`}>2</button>
+                    <button onClick={() => applyLayout(3)} title="Layout 3: Pago Izquierda, Chat y Finanzas Derecha" className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-xl text-[11px] font-black transition-colors ${activeLayout === 3 ? 'text-white' : 'text-gray-400 hover:text-white'}`}>3</button>
+                  </div>
+                )}
                 {selectedOrder && (
                   <button onClick={() => del(selectedOrder)} type="button"
                     className="rounded-xl border border-red-500/15 p-2 text-red-500/50 transition-all hover:border-red-500/30 hover:bg-red-500/8 hover:text-red-400 active:scale-95">
@@ -1047,8 +1348,16 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                           <input type="number" min="0" value={form.sale_price} onChange={e => setForm({ ...form, sale_price: e.target.value ? Number(e.target.value) : "" })} className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50"} placeholder="Ej: 15000" />
                         </label>
                         <label>
-                          <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Precio Costo ($)</span>
-                          <input type="number" min="0" value={form.cost_price} onChange={e => setForm({ ...form, cost_price: e.target.value ? Number(e.target.value) : "" })} className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50"} placeholder="Ej: 5000" />
+                          <span className={"mb-1.5 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-500 whitespace-nowrap"}>
+                            <span>Precio Costo ($)</span>
+                            {(itemsCount ?? 0) > 0 && <span className="text-[8px] text-yellow-500/70 mt-0.5">(Auto)</span>}
+                          </span>
+                          <input type="number" min="0" value={form.cost_price} 
+                            readOnly={(itemsCount ?? 0) > 0}
+                            onChange={e => setForm({ ...form, cost_price: e.target.value ? Number(e.target.value) : "" })} 
+                            className={`w-full rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50 ${
+                              (itemsCount ?? 0) > 0 ? "bg-white/[0.02] text-yellow-500 cursor-default" : "bg-white/5"
+                            }`} placeholder="Ej: 5000" />
                         </label>
                         <label>
                           <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Proveedor</span>
@@ -1098,191 +1407,303 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                   </div>
                   </Shell>
                   )}
+                  {(!selectedOrder || showAll || modalTab === "boleta") && (
+                  <Shell id="boleta" title="Boleta" Icon={ShoppingCart} ctx={winCtx}>
+                    <div className="mx-auto w-full max-w-md h-full flex flex-col p-4 overflow-y-auto">
+                      <div className="relative mx-auto w-full rounded-3xl bg-white text-black overflow-hidden shadow-lg mb-4">
+                        {/* Barra de marca superior */}
+                        <div className="h-1.5 w-full bg-yellow-500"></div>
+
+                        <div className="p-5 pt-6 pb-5 text-center">
+                          <div className="mx-auto mb-3 flex items-center justify-center gap-2.5">
+                            <div className="h-10 w-10 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center">
+                              <img src="/logo.png" alt="Alfeicon Games" className="h-full w-full object-cover" />
+                            </div>
+                            <div className="flex flex-col items-start">
+                              <p className="font-black text-xs tracking-[0.2em] text-gray-900 leading-none">ALFEICON</p>
+                              <p className="font-black text-[9px] tracking-[0.3em] text-yellow-500 mt-1 leading-none">GAMES</p>
+                            </div>
+                          </div>
+                          <div className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1">
+                            <CheckCircle2 size={12} className="text-green-600" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-green-700">Entrega completada</span>
+                          </div>
+                          <h1 className="mt-2 text-xl font-black tracking-tight text-black">¡Gracias por tu compra!</h1>
+                          {selectedOrder?.payment_method === "mercadopago" && selectedOrder?.client_name && (
+                            <div className="mt-4 inline-flex flex-col items-center gap-0.5 rounded-xl border border-blue-500/20 bg-blue-500/[0.05] px-4 py-2">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">Comprador</p>
+                              <p className="text-sm font-bold text-gray-800 leading-tight">{selectedOrder.client_name}</p>
+                              {selectedOrder.client_email && (
+                                <p className="text-[11px] font-medium text-gray-500 leading-none">{selectedOrder.client_email}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="border-t border-dashed border-gray-300 mx-5 relative">
+                          <div className="absolute -left-8 -top-2.5 h-5 w-5 rounded-full bg-[#090b0d]"></div>
+                          <div className="absolute -right-8 -top-2.5 h-5 w-5 rounded-full bg-[#090b0d]"></div>
+                        </div>
+
+                        <div className="p-5 space-y-4 bg-[#f8f9fa]">
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1">
+                              {form.game_name.split('+').filter(x=>x.trim()).length > 1 ? "Lo que compraste" : "Juego Adquirido"}
+                            </p>
+                            {form.game_name.split('+').filter(x => x.trim()).map((part, index) => {
+                              const term = part.trim();
+                              const found = pool.find(p => p.title.toLowerCase() === term.toLowerCase());
+                              return (
+                                <div key={index} className="flex justify-between items-center group">
+                                  <p className="font-bold text-gray-900 leading-tight">{term}</p>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-black text-green-600">{found?.price ? `$${found.price.toLocaleString("es-CL")}` : ""}</span>
+                                    <button type="button" onClick={() => {
+                                      const parts = form.game_name.split('+').map(p => p.trim()).filter(Boolean);
+                                      parts.splice(index, 1);
+                                      setForm({ ...form, game_name: parts.join(' + ') + (parts.length > 0 ? ' + ' : '') });
+                                    }} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1" title="Quitar">
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {form.game_name.trim() === "" && (
+                              <p className="text-[11px] font-bold text-gray-500">No hay artículos</p>
+                            )}
+                          </div>
+
+                          {/* Credentials */}
+                          {form.items && form.items.length > 0 && form.items.map((item, i) => (
+                            <div key={item.id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                              <p className="text-xs font-black leading-tight text-gray-900 mb-2">{item.game_name || "Cuenta nueva"}</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <p className="mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-gray-500"><Hash size={9}/> Código</p>
+                                  <p className="font-mono text-base font-black tracking-[0.2em] text-gray-900">{item.console_email || "—"}</p>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-gray-500"><KeyRound size={9}/> Contraseña</p>
+                                  <p className="break-all text-xs font-bold text-gray-900">{item.console_password || "—"}</p>
+                                </div>
+                              </div>
+                              <p className="mt-2 flex items-start gap-1 border-t border-gray-100 pt-1.5 text-[10px] leading-snug text-gray-500">
+                                <ShieldCheck size={11} className="shrink-0 text-green-600" />
+                                <span><b className="text-gray-900">{item.garantia_dias || 7} días</b> de garantía</span>
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="border-t border-dashed border-gray-300 mx-5 relative">
+                           <div className="absolute -left-8 -top-2.5 h-5 w-5 rounded-full bg-[#090b0d]"></div>
+                           <div className="absolute -right-8 -top-2.5 h-5 w-5 rounded-full bg-[#090b0d]"></div>
+                        </div>
+                        <div className="p-5 bg-gray-100 text-center">
+                           <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Orden de Compra</p>
+                           <p className="font-mono font-bold text-gray-700 tracking-wider text-xs mt-0.5">{selectedOrder?.short_code || "NUEVA-ORDEN"}</p>
+                           <div className="mt-3 opacity-40 mx-auto w-3/4 flex justify-between h-6 items-end gap-[1px]">
+                             {Array.from({length: 40}).map((_, i) => {
+                               const code = selectedOrder?.short_code || "ALFEICON";
+                               const seed = code.charCodeAt(i % code.length) + i * 7;
+                               return <div key={i} className="bg-black" style={{ width: seed % 3 === 0 ? '4px' : '2px', height: `${45 + (seed % 55)}%` }}></div>;
+                             })}
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  </Shell>
+                  )}
 
                   {(!selectedOrder || showAll || modalTab === "orden") && (
                   <Shell id="orden" title="Orden" Icon={PackageCheck} ctx={winCtx}>
-
-                  <div className="flex flex-col md:flex-row gap-5">
-                    <div className="flex-[1.2] space-y-5">
-                      {/* Left Column content */}
-                      <div className="relative">
-                        <label>
-                          <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Juego / Pack comprado</span>
-                          <input value={form.game_name} onChange={e => setForm({ ...form, game_name: e.target.value })}
-                            onFocus={() => setShowSuggestions(true)}
-                            className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50"} placeholder="Ej: Mario Kart 8 Deluxe" required />
-                        </label>
-                        
-                        {showSuggestions && (
-                          <div className="mt-2 rounded-xl border border-white/10 bg-[#0c0f12] p-2 shadow-inner">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Catálogo</p>
-                            <div className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1">
-                              {suggestions.map(item => (
-                                <button key={`${item.type}-${item.id}`} type="button" onClick={() => addSuggestion(item)}
-                                  className="flex items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-white/10 transition-colors">
-                                  {item.type === "pack" ? <Gift size={13} className="text-purple-400 shrink-0" /> : <Gamepad2 size={13} className="text-blue-400 shrink-0" />}
-                                  <span className="text-[12px] font-bold text-gray-300 leading-tight">{item.title}</span>
-                                </button>
-                              ))}
-                              {suggestions.length === 0 && (
-                                <p className="py-3 text-center text-[11px] text-gray-600">Sin resultados</p>
-                              )}
-                            </div>
-                            <div className="mt-2 text-center pt-2 border-t border-white/5">
-                              <button type="button" onClick={() => setShowSuggestions(false)}
-                                className="text-[10px] w-full py-2 font-bold text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded hover:bg-white/5">Cerrar catálogo</button>
-                            </div>
-                          </div>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="md:hidden mb-2">
+                          <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-yellow-500">
+                            {selectedOrder ? `Orden #${selectedOrder.order_number}` : "Nueva Orden"}
+                          </span>
+                          <h2 className="text-xl font-black text-white">{form.game_name || "Sin Juego"}</h2>
+                        </div>
+                        {selectedOrder?.client_name && (
+                          <p className="mb-1 text-[11px] font-bold text-gray-400 truncate">
+                            Cliente: <span className="text-white">{selectedOrder.client_name}</span> {selectedOrder.client_email && `(${selectedOrder.client_email})`}
+                          </p>
                         )}
                       </div>
-
-                      {selectedOrder && (
-                        <>
-                          {/* Stepper visual del progreso */}
-                          <div>
-                            <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Progreso de la entrega</span>
-                            <div className="flex items-start rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3.5">
-                              {STEPS.map((step, i) => {
-                                const done = currentStepIndex > i;
-                                const current = currentStepIndex === i;
-                                return (
-                                  <div key={step.key} className="flex flex-1 items-center">
-                                    <div className="flex flex-col items-center gap-1.5">
-                                      <div className={`flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-black transition-all duration-300 ${
-                                        current ? "border-yellow-500 bg-yellow-500 text-black shadow-[0_0_12px_rgba(234,179,8,0.4)]"
-                                        : done ? "border-green-500/40 bg-green-500/20 text-green-400"
-                                        : "border-white/10 bg-white/5 text-gray-600"
-                                      }`}>
-                                        {done ? <Check size={13} strokeWidth={3} /> : i + 1}
-                                      </div>
-                                      <span className={`text-[8px] font-black uppercase tracking-wider ${
-                                        current ? "text-white" : done ? "text-green-400/70" : "text-gray-600"
-                                      }`}>{step.label}</span>
-                                    </div>
-                                    {i < STEPS.length - 1 && (
-                                      <div className={`mx-1 mt-3.5 h-0.5 flex-1 self-start rounded-full transition-colors duration-300 ${done ? "bg-green-500/40" : "bg-white/10"}`} />
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          <label className="block">
-                            <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Cambiar estado manualmente</span>
-                            <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as Order["status"] })}
-                              className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50 appearance-none cursor-pointer"}>
-                              <option value="draft">0 · Borrador (Nueva Consulta)</option>
-                              <option value="pending_console_code">1 · Esperando código del cliente</option>
-                              <option value="pending_setup">2 · Código recibido</option>
-                              <option value="preparing">3 · Avisado (prepárate, 85%)</option>
-                              <option value="ready">4 · Credenciales entregadas</option>
-                              <option value="completed">5 · Entrega completa</option>
-                              <option value="issue">⚠ Problema en instalación (soporte)</option>
-                            </select>
-                          </label>
-
-                          <div className="rounded-xl border border-yellow-500/15 bg-yellow-500/[0.03] p-4 mt-2">
-                            <div className="mb-3 flex items-center gap-2">
-                              <KeyRound size={13} className="text-yellow-500" />
-                              <p className="text-[10px] font-black uppercase tracking-widest text-white">Datos que recibirá el cliente</p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <label>
-                                <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Código (5 dígitos)</span>
-                                <input inputMode="numeric" value={form.account_email}
-                                  onChange={e => setForm({ ...form, account_email: e.target.value.replace(/\D/g, "").slice(0, 5) })}
-                                  className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50 text-center font-mono text-lg font-black tracking-[0.4em]"} placeholder="12345" maxLength={5} />
-                              </label>
-
-                              <label>
-                                <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Contraseña</span>
-                                <input type="text" value={form.account_password} onChange={e => setForm({ ...form, account_password: e.target.value })}
-                                  className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50"} placeholder="Contraseña123" />
-                              </label>
-                            </div>
-                            <p className="mt-2.5 text-[10px] text-gray-600">El cliente verá estos datos al marcar la orden como "Listo".</p>
-                          </div>
-                        </>
-                      )}
                     </div>
 
-                    <div className="flex-[0.8] space-y-5">
-                      {/* Right Column content */}
-                      {!selectedOrder && (
-                        <div className="rounded-2xl border border-yellow-500/15 bg-yellow-500/[0.04] p-4">
-                          <div className="mb-3 flex items-center gap-2">
-                            <PackageCheck size={14} className="text-yellow-500" />
-                            <p className="text-[11px] font-black uppercase tracking-widest text-white">Cómo funciona</p>
-                          </div>
-                          <ol className="space-y-2 text-[11.5px] leading-tight text-gray-400">
-                            <li className="flex gap-2.5"><span className="font-black text-yellow-500">1.</span> Escribe el juego o pack que compró el cliente.</li>
-                            <li className="flex gap-2.5"><span className="font-black text-yellow-500">2.</span> Se genera un <b className="text-gray-200">código único (ALF-XXXX)</b> y un link.</li>
-                            <li className="flex gap-2.5"><span className="font-black text-yellow-500">3.</span> Le envías el link al cliente por WhatsApp.</li>
-                          </ol>
-                        </div>
-                      )}
-
-                      {selectedOrder && form.status !== 'draft' && (
-                        <div className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-4">
-                          <div className="mb-2.5 flex items-center gap-2">
-                            <Hash size={13} className="text-gray-500" />
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Código proporcionado por el cliente</p>
-                          </div>
-                          {selectedOrder.console_code ? (
-                            <div className="flex flex-col items-center gap-2.5">
-                              <div className="flex w-full items-center gap-2">
-                                <p className="flex-1 rounded-xl border border-white/10 bg-black/30 p-3.5 text-center font-mono text-2xl font-black tracking-[0.25em] text-white">{selectedOrder.console_code}</p>
-                                <button type="button" title="Copiar código"
-                                  onClick={() => { navigator.clipboard.writeText(selectedOrder.console_code || ""); showNotice("success", "Código del cliente copiado"); }}
-                                  className="flex shrink-0 items-center justify-center self-stretch rounded-xl border border-white/10 bg-white/5 px-3.5 text-gray-400 transition-colors hover:bg-white/10 hover:text-white active:scale-95">
-                                  <Copy size={16} />
-                                </button>
-                              </div>
-                              {form.status === "pending_setup" ? (
-                                <button type="button" onClick={async () => {
-                                  if (!supabase) return;
-                                  const { error } = await supabase.from("orders").update({ status: "preparing" }).eq("id", selectedOrder.id);
-                                  if (error) { showNotice("error", `No se pudo avisar: ${error.message}`); return; }
-                                  setForm({ ...form, status: "preparing" });
-                                  showNotice("success", "Cliente avisado — barra al 85%.");
-                                  await onReload();
-                                }} className="w-full bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors border border-green-500/30 rounded-lg py-2 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                                  <PackageCheck size={14} /> Avisar que te estás preparando (Salta a 85%)
-                                </button>
-                              ) : (
-                                <div className="w-full rounded-lg border border-white/8 bg-white/[0.03] py-2 text-center text-[11px] font-bold uppercase tracking-widest text-gray-500 flex items-center justify-center gap-2">
-                                  <CheckCircle2 size={13} className="text-green-500/70" /> Cliente ya avisado
+                    {/* TOP ROW: Progreso y Estado (Oculto en escritorio porque está en la barra superior) */}
+                    {selectedOrder && !isWide && (
+                      <div className="flex flex-col gap-3.5">
+                        {/* Stepper visual del progreso */}
+                        <div>
+                          <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Progreso de la entrega</span>
+                          <div className="flex items-start rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+                            {STEPS.map((step, i) => {
+                              const isCompleted = form.status === "completed";
+                              const done = currentStepIndex > i || (isCompleted && i === 4);
+                              const current = currentStepIndex === i && !isCompleted;
+                              return (
+                                <div key={step.key} className="flex flex-1 items-center">
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <div className={`flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-black transition-all duration-300 ${
+                                      current ? "border-yellow-500 bg-yellow-500 text-black shadow-[0_0_12px_rgba(234,179,8,0.4)]"
+                                      : done ? "border-green-500/40 bg-green-500/20 text-green-400"
+                                      : "border-white/10 bg-white/5 text-gray-600"
+                                    }`}>
+                                      {done ? <Check size={13} strokeWidth={3} /> : i + 1}
+                                    </div>
+                                    <span className={`text-[8px] font-black uppercase tracking-wider ${
+                                      current ? "text-white" : done ? "text-green-400/70" : "text-gray-600"
+                                    }`}>{step.label}</span>
+                                  </div>
+                                  {i < STEPS.length - 1 && (
+                                    <div className={`mx-1 mt-3.5 h-0.5 flex-1 self-start rounded-full transition-colors duration-300 ${done ? "bg-green-500/40" : "bg-white/10"}`} />
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-gray-600 italic">El cliente aún no ha ingresado el código.</p>
-                          )}
-                          <p className="text-[10px] text-gray-600 mt-2">
-                            Usa este código en la web de Nintendo para vincular la cuenta. Luego ingresa las credenciales abajo y cambia el estado a "Listo".
-                          </p>
+                              );
+                            })}
+                          </div>
                         </div>
-                      )}
 
-                      {selectedOrder && (
-                        <div className="rounded-xl border border-blue-500/15 bg-blue-500/[0.03] p-4 mt-2">
+                        <label className="block">
+                          <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Cambiar estado manualmente</span>
+                          <select value={form.status} onChange={e => handleStatusChange(e.target.value as Order["status"])}
+                            className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50 appearance-none cursor-pointer"}>
+                            <option value="draft">0 · Borrador (Nueva Consulta)</option>
+                            <option value="pending_console_code">1 · Esperando código del cliente</option>
+                            <option value="pending_setup">2 · Código recibido</option>
+                            <option value="preparing">3 · Avisado (prepárate, 85%)</option>
+                            <option value="ready">4 · Credenciales entregadas</option>
+                            <option value="completed">5 · Entrega completa</option>
+                            <option value="issue">⚠ Problema en instalación (soporte)</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* MIDDLE: Cuentas de la entrega & Datos antiguos */}
+                    {selectedOrder && itemsCount === 0 && (
+                      <div className="rounded-xl border border-yellow-500/15 bg-yellow-500/[0.03] p-4 mt-2">
+                        <div className="mb-3 flex items-center gap-2">
+                          <KeyRound size={13} className="text-yellow-500" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-white">Datos que recibirá el cliente</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <label>
+                            <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Código (5 dígitos)</span>
+                            <input inputMode="numeric" value={form.account_email}
+                              onChange={e => setForm({ ...form, account_email: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+                              className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50 text-center font-mono text-lg font-black tracking-[0.4em]"} placeholder="12345" maxLength={5} />
+                          </label>
+
+                          <label>
+                            <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Contraseña</span>
+                            <input type="text" value={form.account_password} onChange={e => setForm({ ...form, account_password: e.target.value })}
+                              className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50"} placeholder="Contraseña123" />
+                          </label>
+                        </div>
+                        <p className="mt-2.5 text-[10px] text-gray-600">
+                          Orden del modelo antiguo: una sola cuenta. En cuanto le agregues
+                          cuentas abajo, este bloque desaparece y mandan los ítems.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedOrder && (
+                      <div className="mt-2">
+                        <EntregaItems
+                          orderId={selectedOrder.id}
+                          gameName={selectedOrder.game_name}
+                          garantiaJuegoDias={Number(settings.garantiaJuegoDias) || 7}
+                          garantiaPackDias={Number(settings.garantiaPackDias) || 3}
+                          showNotice={showNotice}
+                          onItemsLoad={handleItemsLoad}
+                          games={games}
+                          packs={packs}
+                        />
+                      </div>
+                    )}
+
+                    {/* BOTTOM ROW: Código proporcionado & Link (Side by side) */}
+                    {!selectedOrder && (
+                      <div className="rounded-2xl border border-yellow-500/15 bg-yellow-500/[0.04] p-4">
+                        <div className="mb-3 flex items-center gap-2">
+                          <PackageCheck size={14} className="text-yellow-500" />
+                          <p className="text-[11px] font-black uppercase tracking-widest text-white">Cómo funciona</p>
+                        </div>
+                        <ol className="space-y-2 text-[11.5px] leading-tight text-gray-400">
+                          <li className="flex gap-2.5"><span className="font-black text-yellow-500">1.</span> Escribe el juego o pack que compró el cliente.</li>
+                          <li className="flex gap-2.5"><span className="font-black text-yellow-500">2.</span> Se genera un <b className="text-gray-200">código único (ALF-XXXX)</b> y un link.</li>
+                          <li className="flex gap-2.5"><span className="font-black text-yellow-500">3.</span> Le envías el link al cliente por donde te escribió.</li>
+                        </ol>
+                      </div>
+                    )}
+
+                    {selectedOrder && (
+                      <div className="flex flex-col md:flex-row gap-4 mt-2">
+                        {form.status !== 'draft' && (
+                          <div className="flex-1 rounded-2xl border border-white/[0.07] bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-4 flex flex-col justify-center">
+                            <div className="mb-2.5 flex items-center gap-2">
+                              <Hash size={13} className="text-gray-500" />
+                              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Código proporcionado</p>
+                            </div>
+                            {selectedOrder.console_code ? (
+                              <div className="flex flex-col items-center gap-2.5">
+                                <div className="flex w-full items-center gap-2">
+                                  <p className="flex-1 rounded-xl border border-white/10 bg-black/30 p-3.5 text-center font-mono text-xl font-black tracking-[0.25em] text-white">{selectedOrder.console_code}</p>
+                                  <button type="button" title="Copiar código"
+                                    onClick={() => { navigator.clipboard.writeText(selectedOrder.console_code || ""); showNotice("success", "Código del cliente copiado"); }}
+                                    className="flex shrink-0 items-center justify-center self-stretch rounded-xl border border-white/10 bg-white/5 px-3.5 text-gray-400 transition-colors hover:bg-white/10 hover:text-white active:scale-95">
+                                    <Copy size={16} />
+                                  </button>
+                                </div>
+                                {form.status === "pending_setup" ? (
+                                  <button type="button" onClick={async () => {
+                                    if (!supabase) return;
+                                    const { error } = await supabase.from("orders").update({ status: "preparing" }).eq("id", selectedOrder.id);
+                                    if (error) { showNotice("error", `No se pudo avisar: ${error.message}`); return; }
+                                    setForm({ ...form, status: "preparing" });
+                                    showNotice("success", "Cliente avisado — barra al 85%.");
+                                    await onReload();
+                                  }} className="w-full bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors border border-green-500/30 rounded-lg py-2 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                                    <PackageCheck size={14} /> Avisar (Salta a 85%)
+                                  </button>
+                                ) : (
+                                  <div className="w-full rounded-lg border border-white/8 bg-white/[0.03] py-2 text-center text-[11px] font-bold uppercase tracking-widest text-gray-500 flex items-center justify-center gap-2">
+                                    <CheckCircle2 size={13} className="text-green-500/70" /> Cliente ya avisado
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-600 italic">El cliente aún no ha ingresado el código.</p>
+                            )}
+                            <p className="text-[10px] text-gray-600 mt-2">
+                              Úsalo en la web de Nintendo.
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="flex-1 rounded-xl border border-blue-500/15 bg-blue-500/[0.03] p-4 flex flex-col justify-center">
                           <div className="mb-2 flex items-center gap-2">
                             <Copy size={13} className="text-blue-500" />
                             <p className="text-[10px] font-black uppercase tracking-widest text-white">Link para el cliente</p>
                           </div>
-                          <div className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-black/50 p-2">
-                            <input readOnly value={`${window.location.origin}/entrega/${selectedOrder.short_code}`} className="flex-1 bg-transparent px-2 text-[11px] text-gray-400 outline-none" />
+                          <div className="flex w-full flex-col gap-2 rounded-xl border border-white/10 bg-black/50 p-3">
+                            <input readOnly value={`${window.location.origin}/entrega/${selectedOrder.short_code}`} className="w-full bg-transparent text-[11px] text-gray-400 outline-none" />
                             <button onClick={() => {
                               navigator.clipboard.writeText(`${window.location.origin}/entrega/${selectedOrder.short_code}`);
                               showNotice("success", "Enlace copiado");
-                            }} type="button" className="flex items-center gap-2 rounded-lg bg-blue-500/20 px-3 py-2 text-blue-400 hover:bg-blue-500/30 transition-colors">
-                              <span className="text-[10px] font-bold uppercase tracking-wider">Copiar</span>
+                            }} type="button" className="flex items-center justify-center gap-2 w-full rounded-lg bg-blue-500/20 px-3 py-2 text-blue-400 hover:bg-blue-500/30 transition-colors">
+                              <span className="text-[10px] font-bold uppercase tracking-wider">Copiar Enlace</span>
                             </button>
                           </div>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                   </Shell>
                   )}
@@ -1405,27 +1826,26 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                 plegadas porque no hay nada que hacer con ellas todavía. */}
             {awaitingPayment.length > 0 && (
               <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAwaiting(v => !v)}
-                  className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2 text-left"
-                >
-                  <Clock size={12} className="text-gray-600" />
-                  <h2 className="flex-1 text-[10px] font-black uppercase tracking-widest text-gray-500">
-                    Esperando pago ({awaitingPayment.length})
-                  </h2>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">
-                    {showAwaiting ? "Ocultar" : "Ver"}
-                  </span>
-                </button>
+                <div className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
+                  <button type="button" onClick={() => setShowAwaiting(v => !v)} className="flex flex-1 items-center gap-2 text-left">
+                    <Clock size={12} className="text-gray-600" />
+                    <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      Esperando pago ({awaitingPayment.length})
+                    </h2>
+                  </button>
+                  {showAwaiting ? botonSeleccion("await") : (
+                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">Ver</span>
+                  )}
+                </div>
 
                 {showAwaiting && (
                   <>
+                    {barraSeleccion("await", awaitingPayment)}
                     <p className="px-6 py-2 text-[10px] leading-relaxed text-gray-600">
                       Eligieron un método de pago y no completaron. Las de Mercado Pago se aprueban solas
                       cuando llega la confirmación; las de transferencia, cuando suban su comprobante.
                     </p>
-                    {awaitingPayment.map(item => <OrderItem key={item.id} item={item} />)}
+                    {awaitingPayment.map(item => filaSeleccionable(item, "await"))}
                   </>
                 )}
               </div>
@@ -1534,36 +1954,20 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                 borrar una por una cuando ya no sirvan de referencia. */}
             {cancelledOrders.length > 0 && (
               <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCancelled(v => !v)}
-                  className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2 text-left"
-                >
-                  <X size={12} className="text-gray-600" />
-                  <h2 className="flex-1 text-[10px] font-black uppercase tracking-widest text-gray-500">
-                    Canceladas por el cliente ({cancelledOrders.length})
-                  </h2>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">
-                    {showCancelled ? "Ocultar" : "Ver"}
-                  </span>
-                </button>
+                <div className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
+                  <button type="button" onClick={() => setShowCancelled(v => !v)} className="flex flex-1 items-center gap-2 text-left">
+                    <X size={12} className="text-gray-600" />
+                    <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      Canceladas por el cliente ({cancelledOrders.length})
+                    </h2>
+                  </button>
+                  {showCancelled ? botonSeleccion("cancel") : (
+                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">Ver</span>
+                  )}
+                </div>
 
-                {showCancelled && cancelledOrders.map(item => (
-                  <div key={item.id} className="flex items-center gap-2 border-b border-white/[0.04] pr-4 opacity-60">
-                    <div className="min-w-0 flex-1">
-                      <OrderItem item={item} />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => del(item)}
-                      disabled={loading}
-                      title="Eliminar del registro"
-                      className="flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-red-500/70 transition-colors hover:bg-red-500/15 hover:text-red-400 disabled:opacity-50"
-                    >
-                      <Trash2 size={11} /> Eliminar
-                    </button>
-                  </div>
-                ))}
+                {showCancelled && barraSeleccion("cancel", cancelledOrders)}
+                {showCancelled && cancelledOrders.map(item => filaSeleccionable(item, "cancel", "opacity-60"))}
               </div>
             )}
           </div>

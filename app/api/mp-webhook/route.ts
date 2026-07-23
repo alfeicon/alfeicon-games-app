@@ -120,21 +120,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "ya procesado" });
     }
 
+    const clientEmail = payment.payer?.email || null;
+    const clientName = [payment.payer?.first_name, payment.payer?.last_name].filter(Boolean).join(" ") || null;
+
     await supabase
       .from("orders")
       .update({
         payment_status: "approved",
         payment_method: "mercadopago",
         sale_price: order.sale_price ?? Math.round(Number(payment.transaction_amount) || 0),
+        client_email: clientEmail,
+        client_name: clientName,
         // Sale de borrador: el pago está confirmado y ya puede instalar.
         status: order.status === "draft" ? "pending_console_code" : order.status,
       })
       .eq("id", order.id);
 
+    // Se manda lo que REALMENTE pagó Mercado Pago, no lo que dice la orden: es
+    // el único dato que no salió del navegador del cliente. Con eso el aviso
+    // puede cuadrar solo y avisarte si no calza.
     fetch(`${req.nextUrl.origin}/api/notify-order`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "MP_APPROVED", order }),
+      body: JSON.stringify({
+        action: "MP_APPROVED",
+        order,
+        pago: {
+          monto: Math.round(Number(payment.transaction_amount) || 0),
+          pagador: [payment?.payer?.first_name, payment?.payer?.last_name].filter(Boolean).join(" ")
+            || payment?.payer?.email || null,
+          medio: payment?.payment_method_id || null,
+          id: String(paymentId),
+        },
+      }),
     }).catch(err => console.error("[mp-webhook] error notificando", err));
 
     return NextResponse.json({ status: "ok" });

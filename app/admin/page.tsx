@@ -24,6 +24,8 @@ import type { Order } from "./_types";
 const defaultSettings: SettingsState = {
   nintendoOnlinePrice: String(DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
   packPriceIncrease: String(DEFAULT_APP_SETTINGS.packPriceIncrease),
+  garantiaJuegoDias: String(DEFAULT_APP_SETTINGS.garantiaJuegoDias),
+  garantiaPackDias: String(DEFAULT_APP_SETTINGS.garantiaPackDias),
   partnerSplitPct: "40",
   partnerName: DEFAULT_PARTNER_NAME,
 };
@@ -76,10 +78,37 @@ export default function AdminPage() {
   const [firstLoadDone, setFirstLoadDone] = useState(false);
   const didLoadRef = useRef(false);
 
-  const showNotice = useCallback((type: "success" | "error", text: string) => {
+  const showNotice = useCallback((type: "success" | "error" | "info", text: string, playSound = false) => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    setNotice({ type, text });
+    setNotice({ type: type === "info" ? "success" : type, text });
     noticeTimer.current = window.setTimeout(() => setNotice(null), 3500) as unknown as number;
+
+    if (playSound) {
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        if (type === "error") {
+          osc.type = "square";
+          osc.frequency.setValueAtTime(300, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.3);
+          gain.gain.setValueAtTime(0, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+          osc.start(); osc.stop(ctx.currentTime + 0.3);
+        } else {
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(600, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(type === "success" ? 1200 : 600, ctx.currentTime + 0.1);
+          gain.gain.setValueAtTime(0, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+          osc.start(); osc.stop(ctx.currentTime + 0.5);
+        }
+      } catch(e) {}
+    }
 
     // Reportar a Telegram si es un error
     if (type === "error") {
@@ -242,6 +271,8 @@ export default function AdminPage() {
     setSettings({
       nintendoOnlinePrice: String(rows.get(SETTING_KEYS.nintendoOnlinePrice)?.value || DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
       packPriceIncrease: String(rows.get(SETTING_KEYS.packPriceIncrease)?.value || DEFAULT_APP_SETTINGS.packPriceIncrease),
+      garantiaJuegoDias: String(rows.get(SETTING_KEYS.garantiaJuegoDias)?.value || DEFAULT_APP_SETTINGS.garantiaJuegoDias),
+      garantiaPackDias: String(rows.get(SETTING_KEYS.garantiaPackDias)?.value || DEFAULT_APP_SETTINGS.garantiaPackDias),
       partnerSplitPct: String(rows.get(PARTNER_PCT_KEY)?.value ?? defaultSettings.partnerSplitPct),
       partnerName: rows.get(PARTNER_NAME_KEY)?.value_text || defaultSettings.partnerName,
     });
@@ -322,13 +353,22 @@ export default function AdminPage() {
         // Notificaciones visuales
         if (payload.eventType === "INSERT") {
           const num = payload.new.order_number ? `#${payload.new.order_number}` : '';
-          showNotice("success", `¡Nueva orden ${num} creada!`);
+          showNotice("info", `¡Nueva orden ${num} creada!`, true);
         } else if (payload.eventType === "UPDATE") {
           const old = payload.old as Order;
           const updated = payload.new as Order;
+          const num = updated.order_number ? `#${updated.order_number}` : '';
+
           if (!old.console_code && updated.console_code) {
-             const num = updated.order_number ? `#${updated.order_number}` : '';
-             showNotice("success", `¡Código recibido en la orden ${num}: ${updated.console_code}!`);
+             showNotice("success", `¡Código recibido en la orden ${num}: ${updated.console_code}!`, true);
+          } else if (old.status !== updated.status) {
+             if (updated.status === 'completed') {
+                showNotice("success", `¡Orden ${num} completada por el cliente!`, true);
+             } else if (updated.status === 'issue') {
+                showNotice("error", `¡Problema reportado en la orden ${num}!`, true);
+             } else {
+                showNotice("info", `Orden ${num} pasó a: ${updated.status}`);
+             }
           }
         }
       })
@@ -373,6 +413,8 @@ export default function AdminPage() {
   }
 
   // ── Login ────────────────────────────────────────────────────────────────
+  const activeOrdersCount = orders.filter(o => o.status === "pending_setup" || o.status === "issue").length;
+
   if (!isLoggedIn) {
     return (
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#090b0d] p-6">
@@ -478,7 +520,14 @@ export default function AdminPage() {
                 {active && (
                   <span className="absolute inset-x-2 top-1.5 h-[54px] rounded-[1.8rem] bg-white/[0.08]" />
                 )}
-                <Icon size={18} className={active ? accent : "text-white/65"} strokeWidth={active ? 2.6 : 2.1} />
+                <div className="relative">
+                  <Icon size={18} className={active ? accent : "text-white/65"} strokeWidth={active ? 2.6 : 2.1} />
+                  {id === "entregas" && activeOrdersCount > 0 && (
+                    <span className="absolute -right-2 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white">
+                      {activeOrdersCount}
+                    </span>
+                  )}
+                </div>
                 <span className={`text-[8.5px] font-black uppercase tracking-wider ${active ? "text-white" : "text-white/55"}`}>{label}</span>
               </button>
             );
@@ -594,7 +643,12 @@ export default function AdminPage() {
                   active ? accent : "text-gray-700 group-hover:text-gray-500"
                 }`}
                   style={{ background: active ? "rgba(255,255,255,0.06)" : "transparent" }}>
-                  <Icon size={14} />
+                  <Icon size={16} strokeWidth={2.5} className="z-10" />
+                  {id === "entregas" && activeOrdersCount > 0 && (
+                    <span className="absolute -right-1.5 -top-1.5 z-20 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white shadow-lg ring-2 ring-[#0c0f12]">
+                      {activeOrdersCount}
+                    </span>
+                  )}
                 </div>
                 {!sidebarCollapsed && (
                   <span className={`relative text-[10.5px] font-black uppercase tracking-widest transition-colors duration-200 ${

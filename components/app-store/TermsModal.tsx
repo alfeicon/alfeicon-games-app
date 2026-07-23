@@ -64,11 +64,14 @@ export default function TermsModal({ onClose }: TermsModalProps) {
             <div className="rounded-2xl border border-green-500/25 bg-green-500/10 p-4 text-center">
               <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wide">Duración de la garantía</p>
               <p className="text-2xl text-green-400 font-black mt-1">7 días</p>
-              <p className="text-gray-400 text-[11px] mt-1">desde la entrega de tu cuenta</p>
+              <p className="text-gray-400 text-[11px] mt-1">juegos unitarios, desde la entrega de tu cuenta</p>
+              <p className="text-lg text-green-400 font-black mt-2">3 días</p>
+              <p className="text-gray-400 text-[11px] mt-1">packs de juegos</p>
             </div>
             <p>• Cubre fallos del juego no causados por el usuario. Incluye reposición (1 vez) o devolución del 50%.</p>
+            <p>• Tu boleta de entrega queda disponible el mismo plazo de la garantía. Guarda una captura con tu código y contraseña.</p>
             <p className="text-xs text-red-500 font-bold bg-red-500/5 p-3 rounded-lg border border-red-500/20">
-              No aplica si eliminas el juego/cuenta, juegas con el perfil entregado, se trata de un pack o hay interrupciones por corte de luz/apagado.
+              No aplica si eliminas el juego/cuenta, juegas con el perfil entregado o hay interrupciones por corte de luz/apagado.
             </p>
           </section>
 

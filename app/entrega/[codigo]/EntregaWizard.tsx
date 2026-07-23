@@ -4,11 +4,14 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
-import { ArrowRight, ArrowLeft, Smartphone, Maximize, X, CheckCircle2, Copy, Gamepad2, Loader2, PackageCheck, MonitorSmartphone, KeyRound, Check, AlertCircle, Hash, Camera, LifeBuoy, BellRing, Send, ChevronDown, MessageCircle, CheckCheck } from "lucide-react";
+import { ArrowRight, ArrowLeft, Smartphone, Maximize, X, CheckCircle2, Copy, Gamepad2, Loader2, PackageCheck, MonitorSmartphone, KeyRound, Check, AlertCircle, Hash, Camera, LifeBuoy, BellRing, Send, ChevronDown, MessageCircle, CheckCheck, ShieldCheck, ImagePlus } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import TransferDetailsPanel from "@/components/app-store/TransferDetailsPanel";
+import SupportTicketModal from "@/components/app-store/SupportTicketModal";
 import { playNotificationSound, playSuccessSound, playErrorSound } from "@/lib/sounds";
-import type { Order, OrderMessage } from "../../../app/admin/_types"; // we can redefine it here to be safe
+import { diasGarantia, diasRestantesGarantia, fechaVencimientoLegible, garantiaVencida } from "@/lib/garantia";
+import { marcarImagen, urlImagen } from "@/lib/chat-image";
+import type { Order, OrderItem, OrderMessage } from "../../../app/admin/_types"; // we can redefine it here to be safe
 
 // Cada cuánto se puede repetir el aviso de Telegram por mensajes del chat.
 const MSG_NOTIFY_COOLDOWN_MS = 10 * 60 * 1000;
@@ -16,8 +19,26 @@ const MSG_NOTIFY_COOLDOWN_MS = 10 * 60 * 1000;
 // avisemos por Telegram que sigue ahí.
 const WAITING_ALERT_MS = 20 * 60 * 1000;
 
-// Soporte por WhatsApp (mismo número de la tienda).
-const WHATSAPP = "56926411278";
+// Soporte de la tienda: Instagram. ig.me/m abre el chat directo.
+const INSTAGRAM_DM = "https://ig.me/m/alfeicon_games";
+
+// Cada consola tiene su set de fotos. Switch 2 usa /instrucciones_2/: basta
+// crear esa carpeta y subir paso_1.png … paso_18.png. Mientras una foto de
+// Switch 2 no exista, `pasoImg` deja que el respaldo (Switch 1) la reemplace.
+const carpetaInstrucciones = (consola: "switch1" | "switch2" | null) =>
+  consola === "switch2" ? "instrucciones_2" : "instrucciones_1";
+
+const pasoImg = (consola: "switch1" | "switch2" | null, paso: number) =>
+  `/${carpetaInstrucciones(consola)}/paso_${paso}.png`;
+
+// Respaldo a Switch 1 mientras faltan las fotos de Switch 2. Se aplica en el
+// onError de la imagen; el flag evita un bucle si tampoco existe el respaldo.
+const usarRespaldoInstruccion = (e: React.SyntheticEvent<HTMLImageElement>, paso: number) => {
+  const img = e.currentTarget;
+  if (img.dataset.fallback) return;
+  img.dataset.fallback = "1";
+  img.src = `/instrucciones_1/paso_${paso}.png`;
+};
 
 type WizardState =
   | "loading"
@@ -29,11 +50,15 @@ type WizardState =
   | "waiting_setup"
   | "credentials_ready"
   | "tutorial_download"
-  | "ready";
+  | "ready"
+  | "expired";
 
 export function EntregaWizard() {
   const params = useParams<{ codigo: string }>();
   const [order, setOrder] = useState<Order | null>(null);
+  // Cuentas de esta compra. Un pack + un juego son dos ítems: el cliente
+  // instala uno, confirma, y el wizard lo lleva al siguiente.
+  const [items, setItems] = useState<OrderItem[]>([]);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [state, setState] = useState<WizardState>("loading");
@@ -52,6 +77,9 @@ export function EntregaWizard() {
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [showSupportConfirm, setShowSupportConfirm] = useState(false);
+  // Ticket de problemas (support_requests). Se abre desde la boleta y desde la
+  // pantalla de garantía vencida.
+  const [showTicketModal, setShowTicketModal] = useState(false);
   // Chat de soporte tipo burbuja (estilo Messenger): vive por encima del wizard,
   // así el cliente sigue con su instalación con la conversación abierta.
   // `chatOpen` = panel desplegado. La burbuja en sí está siempre presente
@@ -256,6 +284,25 @@ export function EntregaWizard() {
     };
   }, [params.codigo]);
 
+  // Las cuentas van en su propia tabla desde que una compra puede traer varias.
+  // Las órdenes creadas a mano en el admin pueden no tener ítems: en ese caso
+  // se sigue usando la cuenta de la orden (modelo antiguo).
+  const loadItems = async (orderId: string): Promise<OrderItem[]> => {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+      .from("order_items")
+      .select("*")
+      .eq("order_id", orderId)
+      .order("sort_order", { ascending: true });
+    if (error) {
+      console.warn("[entrega] no se pudieron cargar los ítems", error.message);
+      return [];
+    }
+    const lista = (data || []) as OrderItem[];
+    setItems(lista);
+    return lista;
+  };
+
   const loadOrder = async () => {
     if (!supabase) {
       console.error("[entrega] supabase es null — faltan NEXT_PUBLIC_SUPABASE_URL / ANON_KEY en este build. Se queda en 'buscando'.");
@@ -284,7 +331,8 @@ export function EntregaWizard() {
       }
 
       setOrder(data as Order);
-      determineNextState(data as Order);
+      const cargados = await loadItems(data.id);
+      determineNextState(data as Order, cargados);
       setupRealtime(data.id);
     } catch (e) {
       console.error("[entrega] excepción al cargar la orden", e);
@@ -333,10 +381,16 @@ export function EntregaWizard() {
           if (!supabase) return;
           const { data, error } = await supabase.from("orders").select("*").eq("id", order.id).maybeSingle();
           if (data && !error) {
+            const lista = await loadItems(order.id);
+            const siguiente = lista.find(i => !i.completed_at);
             // Si el estado o los datos clave cambiaron, actualizamos.
             if (data.status !== order.status || data.account_email !== order.account_email) {
               setOrder(data as Order);
-              determineNextState(data as Order);
+              determineNextState(data as Order, lista);
+            } else if (state === "waiting_setup" && siguiente?.account_email && data.status === "ready") {
+              // Cargamos la cuenta que faltaba y la orden ya está Lista: el cliente avanza.
+              playNotificationSound();
+              setState("credentials_ready");
             }
           }
         } catch (e) {
@@ -449,7 +503,7 @@ export function EntregaWizard() {
     if (error) {
       // Antes esto solo iba a la consola: el cliente veía que "no pasaba nada".
       console.error("Error enviando mensaje de soporte", error);
-      setChatError("No pudimos enviar tu mensaje. Escríbenos por WhatsApp y te ayudamos igual.");
+      setChatError("No pudimos enviar tu mensaje. Escríbenos por Instagram y te ayudamos igual.");
       return;
     }
     setChatError(null);
@@ -467,6 +521,45 @@ export function EntregaWizard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'NEW_MESSAGE', order, message: body })
       }).catch(err => console.error("Error sending notification", err));
+    }
+  };
+
+  // Envía una foto por el chat: la sube al mismo bucket y guarda el mensaje con
+  // la URL marcada, para que el admin la vea como imagen. Sirve tanto para una
+  // foto tomada en el momento como para una elegida de la galería.
+  const enviarFotoChat = async (file: File) => {
+    if (!supabase || !order || sendingMessage) return;
+    if (!file.type.startsWith("image/")) {
+      setChatError("Ese archivo no es una imagen. Envía una foto.");
+      return;
+    }
+    setSendingMessage(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${order.short_code}-chat-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("comprobantes").upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("comprobantes").getPublicUrl(path);
+
+      const { error: msgErr } = await supabase.from("order_messages").insert({
+        order_id: order.id, sender: "customer", body: marcarImagen(pub.publicUrl),
+      });
+      if (msgErr) throw msgErr;
+      setChatError(null);
+
+      const ahora = Date.now();
+      if (ahora - lastMsgNotifyRef.current > MSG_NOTIFY_COOLDOWN_MS) {
+        lastMsgNotifyRef.current = ahora;
+        fetch("/api/notify-order", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "NEW_MESSAGE", order, message: "📷 Te envió una foto" }),
+        }).catch(err => console.error("Error sending notification", err));
+      }
+    } catch (e) {
+      console.error("Error enviando foto de soporte", e);
+      setChatError("No pudimos enviar la foto. Inténtalo de nuevo.");
+    } finally {
+      setSendingMessage(false);
     }
   };
 
@@ -500,7 +593,7 @@ export function EntregaWizard() {
     }
   };
 
-  const determineNextState = (o: Order) => {
+  const determineNextState = (o: Order, lista: OrderItem[] = items) => {
     // Gate de pago: una orden por transferencia que aún no está aprobada muestra
     // la pantalla de pago (datos + subir comprobante), antes de la instalación.
     // Las órdenes de siempre (payment_method null) saltan el gate y siguen igual.
@@ -512,7 +605,13 @@ export function EntregaWizard() {
       return;
     }
     if (o.status === "completed") {
-      setState("ready"); // boleta final (estado 5: entrega completa)
+      // El enlace dura lo mismo que la garantía: pasada esa ventana la boleta
+      // ya no muestra credenciales, solo la vía para abrir un ticket. Con
+      // varias cuentas, basta que UNA siga vigente para mantener la boleta.
+      const vencido = lista.length > 0
+        ? lista.every(i => garantiaVencida(i))
+        : garantiaVencida(o);
+      setState(vencido ? "expired" : "ready");
     } else if (o.status === "ready") {
       // Estado 4: credenciales entregadas → check, luego pasos de descarga.
       // Si ya está en el flujo (check / pasos / boleta), se respeta.
@@ -532,11 +631,83 @@ export function EntregaWizard() {
     }
   };
 
-  // Estado 5: el cliente confirma que terminó → orden "completa" + boleta.
+  // La cuenta que el cliente está instalando ahora: el primer ítem que aún no
+  // confirma. Si la orden no tiene ítems (creada a mano), se cae a la cuenta de
+  // la orden, que es como funcionaba antes.
+  const itemActual = items.find(i => !i.completed_at) || null;
+  const cuenta = items.length > 0
+    ? { email: itemActual?.account_email || null, password: itemActual?.account_password || null, titulo: itemActual?.title || "" }
+    : { email: order?.account_email || null, password: order?.account_password || null, titulo: order?.game_name || "" };
+  // Para rotular "Cuenta 1 de 2" solo cuando hay más de una.
+  const totalItems = items.length;
+  const indiceActual = itemActual ? items.indexOf(itemActual) + 1 : totalItems;
+
+  // La boleta muestra TODO lo que compró: una tarjeta por cuenta, cada una con
+  // su garantía. Al vencer, el cron le borra las credenciales y la tarjeta pasa
+  // a decirlo en vez de mostrar datos vacíos.
+  type LineaBoleta = Pick<OrderItem, "id" | "title" | "kind" | "account_email" | "account_password" | "completed_at" | "created_at" | "dias_garantia">
+    & { pack_ids?: string[] | null; item_type?: OrderItem["item_type"] };
+  const fuenteBoleta: LineaBoleta[] =
+    items.length > 0
+      ? items
+      : order
+        ? [{ id: order.id, title: order.game_name, kind: "compra",
+             account_email: order.account_email, account_password: order.account_password,
+             completed_at: order.completed_at ?? null, created_at: order.created_at,
+             pack_ids: order.pack_ids, dias_garantia: null }]
+        : [];
+  const boletaLineas = fuenteBoleta.map(i => ({
+    id: i.id,
+    titulo: i.title,
+    email: i.account_email,
+    password: i.account_password,
+    esRecuperacion: i.kind === "recuperacion",
+    dias: diasGarantia(i),
+    vence: fechaVencimientoLegible(i),
+    restantes: diasRestantesGarantia(i),
+    // Sin credenciales = ya las liberó el cron al vencer.
+    vencida: garantiaVencida(i) || !i.account_email,
+  }));
+
+  // Estado 5: el cliente confirma que terminó con ESTA cuenta.
+  // Si quedan más cuentas por instalar, el wizard vuelve al paso de
+  // credenciales con la siguiente en vez de cerrar la entrega.
   const confirmCompleted = async () => {
+    const ahora = new Date().toISOString();
+
+    if (supabase && itemActual) {
+      // Marca la cuenta recién instalada: aquí empieza SU garantía.
+      const { error } = await supabase
+        .from("order_items")
+        .update({ completed_at: ahora })
+        .eq("id", itemActual.id);
+      if (error) console.error("[entrega] no se pudo cerrar el ítem", error);
+
+      const restantes = items.filter(i => i.id !== itemActual.id && !i.completed_at);
+      setItems(prev => prev.map(i => i.id === itemActual.id ? { ...i, completed_at: ahora } : i));
+
+      if (restantes.length > 0) {
+        // Siguiente cuenta: se reinicia el tutorial de descarga. Si todavía no
+        // le cargamos las credenciales, el cliente espera en la pantalla de
+        // siempre y el sondeo lo hace avanzar solo cuando aparezcan.
+        setDownloadStep(9);
+        setState(restantes[0].account_email ? "credentials_ready" : "waiting_setup");
+        playSuccessSound();
+        return;
+      }
+    }
+
     if (supabase && order) {
-      await supabase.from("orders").update({ status: "completed" }).eq("id", order.id);
-      setOrder({ ...order, status: "completed" });
+      // La orden se cierra cuando ya no queda ninguna cuenta por instalar.
+      const completed_at = ahora;
+      const { error } = await supabase
+        .from("orders")
+        .update({ status: "completed", completed_at })
+        .eq("id", order.id);
+      if (error?.code === "42703") {
+        await supabase.from("orders").update({ status: "completed" }).eq("id", order.id);
+      }
+      setOrder({ ...order, status: "completed", completed_at });
       
       // Notificar por Telegram
       fetch('/api/notify-order', {
@@ -558,7 +729,7 @@ export function EntregaWizard() {
 
   // Soporte: marca la orden con problema (para que el admin lo vea) y abre la
   // burbuja de chat. El cliente NO pierde su paso: sigue instalando con el chat
-  // encima. WhatsApp queda como enlace secundario dentro del panel.
+  // encima. Instagram queda como enlace secundario dentro del panel.
   const openSupport = async () => {
     if (supabase && order) {
       await supabase.from("orders").update({ status: "issue" }).eq("id", order.id);
@@ -747,9 +918,13 @@ export function EntregaWizard() {
       )}
 
       {/* BURBUJA DE SOPORTE — acompaña toda la instalación: el cliente puede
-          escribirnos en cualquier paso y nosotros a él. */}
+          escribirnos en cualquier paso y nosotros a él.
+          Se sube por encima de la zona de botones en los pasos que tienen un
+          botón abajo (ej. "Enviar código"), para no taparlo, y baja de nuevo en
+          las pantallas de solo espera. El chat sigue abriéndose hacia arriba,
+          que es donde hay pantalla libre. */}
       {order && state !== "loading" && state !== "error" && (
-        <div className="fixed bottom-5 right-5 z-[70] flex flex-col items-end gap-3">
+        <div className="fixed bottom-5 right-5 z-[70] flex flex-col items-end gap-3 transition-[bottom] duration-300">
           <AnimatePresence>
             {chatOpen && (
               <motion.div
@@ -758,7 +933,7 @@ export function EntregaWizard() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.94 }}
                 transition={{ type: "spring", stiffness: 360, damping: 28 }}
-                className="chat-panel-glass flex h-[26rem] w-[min(21rem,calc(100vw-2.5rem))] origin-bottom-right flex-col overflow-hidden rounded-3xl"
+                className="chat-panel-glass flex h-[32rem] w-[min(24rem,calc(100vw-2.5rem))] origin-bottom-right flex-col overflow-hidden rounded-3xl"
               >
                 <div className="flex items-center gap-2.5 border-b border-white/10 px-4 py-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-500/15 text-yellow-500">
@@ -772,6 +947,13 @@ export function EntregaWizard() {
                     className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 active:bg-white/10">
                     <ChevronDown size={18} />
                   </button>
+                </div>
+
+                {/* Aviso fijo: acota para qué es el chat. */}
+                <div className="border-b border-white/10 bg-yellow-500/[0.06] px-4 py-2">
+                  <p className="text-[11px] leading-snug text-yellow-500/90">
+                    Este chat es solo para coordinar tu instalación en caso de necesitar ayuda.
+                  </p>
                 </div>
 
                 <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
@@ -793,12 +975,18 @@ export function EntregaWizard() {
                   ) : (
                     messages.map((m) => {
                       const mine = m.sender === "customer";
+                      const foto = urlImagen(m.body);
                       return (
                         <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                           <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-snug ${
                             mine ? "bg-yellow-500 text-black" : "bg-white/10 text-white"
                           }`}>
-                            <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                            {foto ? (
+                              <img src={foto} alt="Foto enviada" onClick={() => setFullscreenImage(foto)}
+                                className="mb-1 max-h-48 w-full cursor-pointer rounded-lg object-cover" />
+                            ) : (
+                              <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                            )}
                             <span className={`mt-0.5 flex items-center justify-end gap-1 text-[9px] ${
                               mine ? "text-black/50" : "text-gray-500"
                             }`}>
@@ -829,17 +1017,28 @@ export function EntregaWizard() {
                         onClick={() => {
                           const code = order?.short_code || "";
                           const juego = order?.game_name ? ` (${order.game_name})` : "";
-                          window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola, necesito ayuda con mi orden ${code}${juego}.`)}`, "_blank");
+                          // Instagram no admite texto prellenado: se copia para
+                          // que el cliente solo pegue y envíe.
+                          navigator.clipboard?.writeText(`Hola, necesito ayuda con mi orden ${code}${juego}.`).catch(() => {});
+                          window.open(INSTAGRAM_DM, "_blank", "noopener");
                         }}
                         className="font-black text-white underline"
                       >
-                        Abrir WhatsApp
+                        Abrir Instagram
                       </button>
                     </span>
                   </div>
                 )}
 
                 <div className="flex items-center gap-2 border-t border-white/10 p-2.5">
+                  {/* Adjuntar foto. Sin `capture`, el móvil ofrece elegir entre
+                      tomar una foto o buscarla en la galería. */}
+                  <label className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-gray-300 ${sendingMessage ? "opacity-40" : "cursor-pointer active:bg-white/10"}`}
+                    aria-label="Enviar una foto">
+                    <ImagePlus size={18} />
+                    <input type="file" accept="image/*" className="hidden" disabled={sendingMessage}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) enviarFotoChat(f); e.target.value = ""; }} />
+                  </label>
                   <input
                     value={messageInput}
                     onChange={(e) => {
@@ -859,25 +1058,29 @@ export function EntregaWizard() {
             )}
           </AnimatePresence>
 
-          {/* Botón burbuja + badge de mensajes sin leer */}
-          <button
-            onClick={() => (chatOpen ? closeChat() : openChat())}
-            aria-label={chatOpen ? "Minimizar soporte" : `Abrir soporte${unreadCount > 0 ? ` (${unreadCount} sin leer)` : ""}`}
-            className="chat-fab relative flex h-14 w-14 items-center justify-center rounded-full text-[#1c1400] active:scale-95"
-          >
-            {chatOpen ? <ChevronDown size={24} /> : <MessageCircle size={24} />}
+          {/* Botón burbuja + badge de mensajes sin leer. El badge va FUERA del
+              botón: `.chat-fab` tiene overflow:hidden (recorta su brillo) y si
+              estuviera dentro, recortaría también el badge y se vería "comido". */}
+          <div className="relative">
+            <button
+              onClick={() => (chatOpen ? closeChat() : openChat())}
+              aria-label={chatOpen ? "Minimizar soporte" : `Abrir soporte${unreadCount > 0 ? ` (${unreadCount} sin leer)` : ""}`}
+              className="chat-fab flex h-14 w-14 items-center justify-center rounded-full text-[#1c1400] active:scale-95"
+            >
+              {chatOpen ? <ChevronDown size={24} /> : <MessageCircle size={24} />}
+            </button>
             {!chatOpen && unreadCount > 0 && (
               <motion.span
                 key={unreadCount}
                 initial={{ scale: 1.5 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 520, damping: 18 }}
-                className="chat-fab-badge absolute -right-0.5 -top-0.5 z-[2] flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#0c0f12] bg-red-500 px-1 text-[11px] font-black text-white"
+                className="chat-fab-badge pointer-events-none absolute -right-1 -top-1 z-[2] flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#0c0f12] bg-red-500 px-1 text-[11px] font-black text-white"
               >
                 {unreadCount > 9 ? "9+" : unreadCount}
               </motion.span>
             )}
-          </button>
+          </div>
         </div>
       )}
 
@@ -1045,7 +1248,6 @@ export function EntregaWizard() {
               <TransferDetailsPanel
                 code={order.short_code}
                 totalLabel={`$${(order.sale_price ?? 0).toLocaleString("es-CL")} CLP`}
-                whatsappNumber="56926411278"
                 isCollapsed={(!!order.receipt_url && order.payment_status !== "rejected") || uploadingReceipt}
               />
             </div>
@@ -1171,13 +1373,14 @@ export function EntregaWizard() {
                 initial={{ opacity: 0, scale: 0.95, filter: "blur(4px)" }}
                 animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
-                src={`/instrucciones_1/paso_${tutorialStep}.png`} 
-                alt={`Paso ${tutorialStep}`} 
-                className="w-full h-auto max-h-[50vh] landscape:max-h-[65vh] object-contain cursor-pointer" 
-                onClick={() => setFullscreenImage(`/instrucciones_1/paso_${tutorialStep}.png`)} 
+                src={pasoImg(consoleType, tutorialStep)}
+                onError={(e) => usarRespaldoInstruccion(e, tutorialStep)}
+                alt={`Paso ${tutorialStep}`}
+                className="w-full h-auto max-h-[50vh] landscape:max-h-[65vh] object-contain cursor-pointer"
+                onClick={() => setFullscreenImage(pasoImg(consoleType, tutorialStep))}
               />
-              
-              <button onClick={() => setFullscreenImage(`/instrucciones_1/paso_${tutorialStep}.png`)}
+
+              <button onClick={() => setFullscreenImage(pasoImg(consoleType, tutorialStep))}
                 className="absolute bottom-3 right-3 rounded-xl bg-black/70 p-2 text-white backdrop-blur-md hover:bg-black transition-colors shadow-xl">
                 <Maximize size={16} />
               </button>
@@ -1380,21 +1583,28 @@ export function EntregaWizard() {
                 <Check size={40} strokeWidth={3} />
               </div>
             </div>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-green-500">Credenciales recibidas</p>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-green-500">
+              {totalItems > 1 ? `Cuenta ${indiceActual} de ${totalItems}` : "Credenciales recibidas"}
+            </p>
             <h1 className="mb-2 text-2xl font-black uppercase tracking-tight text-white">¡Ya tienes acceso!</h1>
+            {totalItems > 1 && cuenta.titulo && (
+              <p className="mb-2 max-w-[290px] text-sm font-black leading-tight text-yellow-500">{cuenta.titulo}</p>
+            )}
             <p className="mb-6 max-w-[290px] text-sm leading-relaxed text-gray-400">
-              Recibimos tus credenciales. Ahora sigue las indicaciones para descargar tu juego — tu código y contraseña estarán a la vista en cada paso.
+              {totalItems > 1
+                ? "Cada juego viene en su propia cuenta, así que este proceso se repite una vez por cada uno. Instala esta y te llevamos a la siguiente."
+                : "Recibimos tus credenciales. Ahora sigue las indicaciones para descargar tu juego — tu código y contraseña estarán a la vista en cada paso."}
             </p>
 
-            {(order?.account_email || order?.account_password) && (
+            {(cuenta.email || cuenta.password) && (
               <div className="mb-6 grid w-full max-w-[290px] grid-cols-2 gap-2.5">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-left">
                   <p className="mb-1 text-[8px] font-black uppercase tracking-widest text-gray-500">Tu código</p>
-                  <p className="font-mono text-lg font-black tracking-widest text-white">{order?.account_email}</p>
+                  <p className="font-mono text-lg font-black tracking-widest text-white">{cuenta.email}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-left">
                   <p className="mb-1 text-[8px] font-black uppercase tracking-widest text-gray-500">Contraseña</p>
-                  <p className="break-all text-sm font-bold text-white">{order?.account_password}</p>
+                  <p className="break-all text-sm font-bold text-white">{cuenta.password}</p>
                 </div>
               </div>
             )}
@@ -1448,28 +1658,71 @@ export function EntregaWizard() {
 
               <div className="p-6 space-y-5 bg-[#f8f9fa]">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Juego Adquirido</p>
-                  <p className="font-bold text-gray-900 leading-tight">{order?.game_name}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">
+                    {boletaLineas.length > 1 ? `Lo que compraste (${boletaLineas.length})` : "Juego Adquirido"}
+                  </p>
+                  {boletaLineas.length <= 1 && (
+                    <p className="font-bold text-gray-900 leading-tight">{order?.game_name}</p>
+                  )}
                   {order?.sale_price != null && (
                     <p className="mt-1.5 text-sm font-black text-green-600">
                       ${order.sale_price.toLocaleString("es-CL")}
                     </p>
                   )}
                 </div>
-                
-                <div className="pt-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1 flex items-center gap-1.5"><Hash size={12}/> Código de Acceso</p>
-                  <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
-                    <p className="font-mono text-2xl font-black tracking-[0.35em] text-gray-900">{order?.account_email}</p>
-                  </div>
-                </div>
 
-                <div className="pt-1">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1 flex items-center gap-1.5"><KeyRound size={12}/> Contraseña</p>
-                  <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
-                    <p className="text-sm font-bold text-gray-900 break-all">{order?.account_password}</p>
+                {/* Una tarjeta por cuenta entregada: cada una con sus datos y su
+                    garantía, que corre desde que el cliente la instaló. */}
+                {boletaLineas.map((linea, i) => (
+                  <div key={linea.id} className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm">
+                    <div className="mb-2.5 flex items-start gap-2">
+                      {boletaLineas.length > 1 && (
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-gray-900 text-[10px] font-black text-white">
+                          {i + 1}
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-black leading-tight text-gray-900">{linea.titulo}</p>
+                        {linea.esRecuperacion && (
+                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700">
+                            <LifeBuoy size={9} /> Reposición por garantía
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {linea.vencida ? (
+                      <p className="text-[11px] font-bold leading-snug text-gray-400">
+                        Garantía finalizada el {linea.vence}. Los datos de acceso ya no se muestran aquí.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <p className="mb-1 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gray-500"><Hash size={10}/> Código</p>
+                            <p className="font-mono text-lg font-black tracking-[0.2em] text-gray-900">{linea.email || "—"}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="mb-1 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gray-500"><KeyRound size={10}/> Contraseña</p>
+                            <p className="break-all text-[13px] font-bold text-gray-900">{linea.password || "—"}</p>
+                          </div>
+                        </div>
+                        <p className="mt-2.5 flex items-start gap-1.5 border-t border-gray-100 pt-2 text-[11px] leading-snug text-gray-500">
+                          <ShieldCheck size={12} className="mt-0.5 shrink-0 text-green-600" />
+                          <span>
+                            <b className="text-gray-900">{linea.dias} días</b> de garantía · vence el {linea.vence}
+                            {linea.restantes > 0 && ` (quedan ${linea.restantes})`}
+                          </span>
+                        </p>
+                      </>
+                    )}
                   </div>
-                </div>
+                ))}
+
+                <p className="text-[11px] leading-snug text-gray-500">
+                  Esta boleta y tus datos de acceso están disponibles mientras dure la garantía.
+                  Guarda una captura.
+                </p>
               </div>
               
               {/* Bottom ticket stub */}
@@ -1491,12 +1744,49 @@ export function EntregaWizard() {
               </div>
             </div>
             
+            {/* Acceso al ticket de problemas: mientras corre la garantía. */}
+            <button onClick={() => setShowTicketModal(true)}
+              className="mt-6 w-full rounded-full border border-yellow-500/30 bg-yellow-500/[0.08] py-4 text-xs font-black uppercase tracking-widest text-yellow-500 flex items-center justify-center gap-2 active:bg-yellow-500/20">
+              <LifeBuoy size={14} /> ¿Tuviste problemas con tus juegos?
+            </button>
+
             <button onClick={() => {
                 setDownloadStep(9);
                 setState("tutorial_download");
               }}
-              className="mt-6 w-full rounded-full border border-white/10 bg-transparent py-4 text-xs font-black uppercase tracking-widest text-gray-300 transition-all hover:bg-white/5 flex items-center justify-center gap-2">
+              className="mt-3 w-full rounded-full border border-white/10 bg-transparent py-4 text-xs font-black uppercase tracking-widest text-gray-300 transition-all hover:bg-white/5 flex items-center justify-center gap-2">
               <ArrowLeft size={14} /> Revisar pasos de descarga
+            </button>
+          </motion.div>
+        )}
+
+        {/* GARANTÍA VENCIDA: el enlace ya no muestra credenciales. */}
+        {state === "expired" && (
+          <motion.div key="expired" variants={variants} initial="initial" animate="animate" exit="exit" className="flex flex-1 flex-col items-center justify-center gap-4 py-10 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-gray-400">
+              <ShieldCheck size={30} />
+            </div>
+            <div>
+              <h1 className="text-xl font-black uppercase tracking-widest text-white">Garantía finalizada</h1>
+              <p className="mt-2 max-w-[300px] text-sm leading-relaxed text-gray-400">
+                {boletaLineas.length > 1
+                  ? "La garantía de todo lo que compraste ya terminó, así que esta boleta dejó de mostrar los datos de acceso."
+                  : "Tu garantía ya terminó, así que esta boleta dejó de mostrar tus datos de acceso."}
+                {" "}Si guardaste la captura, tus cuentas siguen funcionando igual.
+              </p>
+              {boletaLineas.length > 1 && (
+                <ul className="mt-3 space-y-1 text-left">
+                  {boletaLineas.map(l => (
+                    <li key={l.id} className="text-[11px] leading-snug text-gray-500">
+                      <b className="text-gray-400">{l.titulo}</b> · venció el {l.vence}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button onClick={() => setShowTicketModal(true)}
+              className="mt-2 w-full max-w-[290px] rounded-full bg-white py-4 text-xs font-black uppercase tracking-widest text-black flex items-center justify-center gap-2 active:bg-gray-200">
+              <LifeBuoy size={14} /> Abrir un ticket
             </button>
           </motion.div>
         )}
@@ -1505,7 +1795,9 @@ export function EntregaWizard() {
         {state === "tutorial_download" && (
           <motion.div key="tutorial_download" variants={variants} initial="initial" animate="animate" exit="exit" className="flex flex-col flex-1 justify-center py-6">
             <div className="mb-6 landscape:mb-2 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest text-yellow-500 mb-1">Descarga tu juego</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-yellow-500 mb-1">
+                {totalItems > 1 && cuenta.titulo ? `${cuenta.titulo} · ${indiceActual} de ${totalItems}` : "Descarga tu juego"}
+              </p>
               <h1 className="text-xl font-black uppercase tracking-widest">Paso {downloadStep} de 18</h1>
             </div>
 
@@ -1515,13 +1807,14 @@ export function EntregaWizard() {
                 initial={{ opacity: 0, scale: 0.95, filter: "blur(4px)" }}
                 animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
-                src={`/instrucciones_1/paso_${downloadStep}.png`} 
-                alt={`Paso de descarga ${downloadStep}`} 
-                className="w-full h-auto max-h-[50vh] landscape:max-h-[65vh] object-contain cursor-pointer" 
-                onClick={() => setFullscreenImage(`/instrucciones_1/paso_${downloadStep}.png`)} 
+                src={pasoImg(consoleType, downloadStep)}
+                onError={(e) => usarRespaldoInstruccion(e, downloadStep)}
+                alt={`Paso de descarga ${downloadStep}`}
+                className="w-full h-auto max-h-[50vh] landscape:max-h-[65vh] object-contain cursor-pointer"
+                onClick={() => setFullscreenImage(pasoImg(consoleType, downloadStep))}
               />
-              
-              <button onClick={() => setFullscreenImage(`/instrucciones_1/paso_${downloadStep}.png`)}
+
+              <button onClick={() => setFullscreenImage(pasoImg(consoleType, downloadStep))}
                 className="absolute bottom-3 right-3 rounded-xl bg-black/70 p-2 text-white backdrop-blur-md hover:bg-black transition-colors shadow-xl">
                 <Maximize size={16} />
               </button>
@@ -1550,18 +1843,18 @@ export function EntregaWizard() {
             </div>
 
             {/* Recordatorio del código y contraseña */}
-            {(order?.account_email || order?.account_password) && (
+            {(cuenta.email || cuenta.password) && (
               <div className="mb-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5">
                 {downloadStep === 9 ? (
                   <>
                     <div className="min-w-0 flex-1">
                       <p className="mb-0.5 text-[8px] font-black uppercase tracking-widest text-gray-500">Tu código</p>
-                      <p className="font-mono text-base font-black leading-none tracking-[0.2em] text-white">{order?.account_email || "—"}</p>
+                      <p className="font-mono text-base font-black leading-none tracking-[0.2em] text-white">{cuenta.email || "—"}</p>
                     </div>
                     <div className="h-8 w-px shrink-0 bg-white/10" />
                     <div className="min-w-0 flex-1">
                       <p className="mb-0.5 text-[8px] font-black uppercase tracking-widest text-gray-500">Contraseña</p>
-                      <p className="truncate text-sm font-bold leading-none text-white">{order?.account_password || "—"}</p>
+                      <p className="truncate text-sm font-bold leading-none text-white">{cuenta.password || "—"}</p>
                     </div>
                   </>
                 ) : (
@@ -1569,7 +1862,7 @@ export function EntregaWizard() {
                     <p className="mb-0.5 text-[8px] font-black uppercase tracking-widest text-gray-500">
                       Contraseña <span className="text-gray-500 normal-case tracking-normal">(normalmente no se utiliza)</span>
                     </p>
-                    <p className="truncate text-sm font-bold leading-none text-white">{order?.account_password || "—"}</p>
+                    <p className="truncate text-sm font-bold leading-none text-white">{cuenta.password || "—"}</p>
                   </div>
                 )}
               </div>
@@ -1587,7 +1880,11 @@ export function EntregaWizard() {
                   else setDownloadStep(prev => prev + 1);
                 }}
                 className={`flex-1 flex items-center justify-center gap-2 rounded-full py-3.5 text-xs font-black uppercase tracking-widest transition-all ${downloadStep === 18 ? "bg-green-500 text-black hover:bg-green-400" : "bg-white text-black hover:bg-gray-200"}`}>
-                {downloadStep === 18 ? <>Confirmar que empezó a descargar <Check size={16}/></> : <>Continuar <ArrowRight size={16}/></>}
+                {downloadStep === 18
+                  ? (itemActual && indiceActual < totalItems
+                      ? <>Listo, ir a la siguiente cuenta <ArrowRight size={16}/></>
+                      : <>Confirmar que empezó a descargar <Check size={16}/></>)
+                  : <>Continuar <ArrowRight size={16}/></>}
               </button>
             </div>
             
@@ -1600,6 +1897,13 @@ export function EntregaWizard() {
         )}
 
       </AnimatePresence>
+
+      <SupportTicketModal
+        open={showTicketModal}
+        onClose={() => setShowTicketModal(false)}
+        referencia={order ? `Orden ${order.short_code}` : undefined}
+        opciones={boletaLineas.map(l => l.titulo)}
+      />
     </div>
   );
 }

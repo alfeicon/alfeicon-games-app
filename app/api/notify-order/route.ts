@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   try {
-    const { action, order, message } = await request.json();
+    const { action, order, message, pago } = await request.json();
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
 
@@ -33,9 +33,52 @@ export async function POST(request: Request) {
       case "WAITING_TOO_LONG":
         texts.push(`⏰ <b>UN CLIENTE LLEVA RATO ESPERANDO</b>\n\nYa mandó su código y sigue con la página abierta esperando sus credenciales.\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}\n<b>Esperando:</b> ${message || "un buen rato"}`);
         break;
-      case "MP_APPROVED":
-        texts.push(`💳 <b>PAGO APROBADO (MERCADO PAGO)</b>\n\nMercado Pago confirmó el pago. La orden ya está activa y el cliente puede instalar.\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}`);
+      case "MP_APPROVED": {
+        // En transferencia ves el monto directo con el cliente; en Mercado Pago
+        // no, así que el aviso cuadra la cuenta por ti: lo que pagó contra lo
+        // que debía pagar. El monto pagado viene de MP, no del navegador.
+        const clp = (n: number) => `$${Number(n || 0).toLocaleString("es-CL")}`;
+        const pagado = Number(pago?.monto ?? 0);
+        const listaPrecio = Number(order?.sale_price ?? 0);
+        const rebaja = Number(order?.discount_amount ?? 0);
+        // Lo que se le cobró ya viene con el descuento restado en `sale_price`.
+        const esperado = listaPrecio;
+
+        const lineas = [
+          `💳 <b>PAGO APROBADO (MERCADO PAGO)</b>`,
+          ``,
+          `<b>Orden:</b> <code>${shortCode}</code>`,
+          `<b>Juego:</b> ${gameName}`,
+        ];
+        if (pago?.pagador) lineas.push(`<b>Pagó:</b> ${pago.pagador}`);
+        lineas.push(``, `<b>Pagado:</b> ${clp(pagado)}`, `<b>Esperado:</b> ${clp(esperado)}`);
+        if (rebaja > 0) {
+          lineas.push(`<b>Descuento:</b> −${clp(rebaja)} (${order?.discount_code || "código"})`);
+        }
+
+        if (esperado > 0 && pagado > esperado) {
+          // Pagar de más no bloquea la entrega: la orden está pagada. Solo hay
+          // que ponerse de acuerdo con el cliente sobre el excedente.
+          lineas.push(
+            ``,
+            `🔵 <b>PAGÓ DE MÁS</b> — sobran ${clp(pagado - esperado)}.`,
+            `Puedes entregar igual. Pregúntale si lo deja como abono para su próxima compra o se lo devuelves.`,
+          );
+        } else if (esperado > 0 && pagado < esperado) {
+          lineas.push(
+            ``,
+            `⚠️ <b>NO CUADRA</b> — faltan ${clp(esperado - pagado)}.`,
+            `Revisa antes de entregar la cuenta.`,
+          );
+        } else if (esperado > 0) {
+          lineas.push(``, `✅ Cuadra. La orden ya está activa y el cliente puede instalar.`);
+        }
+
+        if (pago?.medio) lineas.push(``, `<i>${pago.medio}${pago.id ? ` · pago ${pago.id}` : ""}</i>`);
+
+        texts.push(lineas.join("\n"));
         break;
+      }
       case "RECEIPT_UPLOADED":
         texts.push(`🧾 <b>COMPROBANTE POR VALIDAR</b>\n\nEl cliente subió su comprobante de transferencia. Revísalo en Admin → Entregas → Validación.\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}\n<b>Monto:</b> $${Number(order?.sale_price ?? 0).toLocaleString("es-CL")}`);
         break;

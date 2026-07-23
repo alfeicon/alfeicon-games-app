@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Check, ChevronRight, Facebook, Instagram, LifeBuoy, MessageCircle, ShieldCheck, Youtube } from 'lucide-react';
+import { Check, ChevronRight, Facebook, Instagram, LifeBuoy, ShieldCheck, Youtube } from 'lucide-react';
 import SupportTicketModal from './SupportTicketModal';
 
 // Toques sobre el logo necesarios para abrir el modo admin (atajo oculto).
@@ -12,7 +12,6 @@ const ADMIN_TAP_WINDOW_MS = 1200;
 
 type SupportSectionProps = {
   sectionMotion: string;
-  whatsappNumber: string;
   onOpenTerms: () => void;
 };
 
@@ -22,8 +21,10 @@ const STATS = [
   { value: '7 días', label: 'Garantía incluida' },
 ];
 
+const INSTAGRAM_URL = 'https://instagram.com/alfeicon_games';
+
 const CHANNELS = [
-  { href: 'https://instagram.com/alfeicon_games', label: 'Instagram', meta: '+2.800 seguidores', icon: <Instagram size={18} />, cls: 'support-channel--ig' },
+  { href: INSTAGRAM_URL, label: 'Instagram', meta: '+2.800 seguidores', icon: <Instagram size={18} />, cls: 'support-channel--ig' },
   { href: 'https://web.facebook.com/alfeicon.games', label: 'Facebook', meta: 'Página oficial', icon: <Facebook size={18} />, cls: 'support-channel--fb' },
   { href: 'https://www.youtube.com/@alfeicon_games', label: 'YouTube', meta: 'Tutoriales en video', icon: <Youtube size={18} />, cls: 'support-channel--yt' },
 ];
@@ -31,17 +32,17 @@ const CHANNELS = [
 const FAQ = [
   { q: '¿Necesito mi consola desbloqueada?', a: 'No. Los juegos son digitales y se descargan desde la eShop oficial de Nintendo.' },
   { q: '¿Existe riesgo de baneo?', a: 'Existe un riesgo mínimo del 0.7%. El cliente acepta este punto al comprar.' },
-  { q: '¿Cuánto dura la garantía?', a: 'La garantía es de 7 días desde la entrega de tu cuenta.' },
+  { q: '¿Cuánto dura la garantía?', a: '7 días desde la entrega en juegos unitarios y 3 días en packs. Tu boleta queda disponible ese mismo plazo.' },
   { q: '¿Cuánto tiempo durará el juego?', a: 'Indefinido si sigues las instrucciones: no borres el juego ni la cuenta, ni modifiques datos.' },
 ];
 
-export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTerms }: SupportSectionProps) {
+export default function SupportSection({ sectionMotion, onOpenTerms }: SupportSectionProps) {
   const router = useRouter();
   const tapCount = useRef(0);
   const tapTimer = useRef<number | null>(null);
 
   // Formulario de consulta: queda guardado para revisarlo desde el admin, a
-  // diferencia del botón de WhatsApp donde la consulta se pierde si no la ves.
+  // diferencia de un mensaje suelto en redes, que se pierde si no lo ves.
   const [showForm, setShowForm] = useState(false);
 
   // Atajo oculto: ADMIN_TAPS toques seguidos sobre el logo abren /admin.
@@ -68,10 +69,12 @@ export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTe
             <span>Respondemos en minutos</span>
           </div>
           <h1 className="support-hero__title">¿En qué te<br/>ayudamos?</h1>
-          <p className="support-hero__sub">Escríbenos por WhatsApp o revisa las dudas frecuentes abajo.</p>
-          <a href={`https://wa.me/${whatsappNumber}`} target="_blank" className="support-wa-btn" aria-label="Abrir WhatsApp">
-            <MessageCircle size={20} />
-            <span>Chatear por WhatsApp</span>
+          <p className="support-hero__sub">
+            Abre un ticket aquí abajo y te respondemos, o escríbenos por Instagram si te acomoda más.
+          </p>
+          <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="support-ig-btn" aria-label="Escribirnos por Instagram">
+            <Instagram size={20} />
+            <span>Escríbenos por Instagram</span>
           </a>
         </div>
       </div>
@@ -85,7 +88,7 @@ export default function SupportSection({ sectionMotion, whatsappNumber, onOpenTe
           </span>
           <span className="support-ticket-banner__text">
             <span className="support-ticket-banner__title">¿Tienes problemas o dudas?</span>
-            <span className="support-ticket-banner__sub">Cuéntanos y te generamos un ticket. Te respondemos a tu WhatsApp o correo.</span>
+            <span className="support-ticket-banner__sub">Cuéntanos y te generamos un ticket. Te respondemos al contacto que nos dejes.</span>
           </span>
           <span className="support-ticket-banner__cta">
             Abrir ticket <ChevronRight size={14} strokeWidth={2.6} />

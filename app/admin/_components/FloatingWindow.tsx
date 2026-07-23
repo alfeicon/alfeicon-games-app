@@ -7,7 +7,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Minus, Lock, Unlock, ChevronsUpDown } from "lucide-react";
 
-export type WinId = "orden" | "pago" | "chat" | "finanzas";
+export type WinId = "orden" | "pago" | "chat" | "finanzas" | "boleta";
 
 export type WinState = {
   x: number;

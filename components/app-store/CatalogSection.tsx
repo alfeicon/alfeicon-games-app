@@ -35,7 +35,6 @@ type CatalogSectionProps = {
   catalogInitialCount: number;
   catalogBatchSize: number;
   loadMoreRef: RefObject<HTMLDivElement | null>;
-  whatsappNumber: string;
   comprarDirecto: (item: CatalogItem, event?: MouseEvent<HTMLButtonElement>) => void;
   addToCart: (item: CatalogItem, event?: MouseEvent<HTMLButtonElement>) => void;
   toggleSaved: (item: CatalogItem) => void;
@@ -267,7 +266,7 @@ type CatalogDetailModalProps = {
   onToggleSaved: (item: CatalogItem) => void;
 };
 
-const CatalogDetailModal = memo(function CatalogDetailModal({
+export const CatalogDetailModal = memo(function CatalogDetailModal({
   item,
   saved,
   onClose,
@@ -543,7 +542,6 @@ function CatalogSection({
   catalogInitialCount,
   catalogBatchSize,
   loadMoreRef,
-  whatsappNumber,
   comprarDirecto,
   addToCart,
   toggleSaved,
@@ -730,10 +728,10 @@ function CatalogSection({
               <div className="flex flex-col items-center py-20 text-gray-500">
                 <Search size={40} className="mb-4 opacity-20" />
                 <p className="text-sm font-bold">No encontramos resultados</p>
-                <p className="mt-1 max-w-[230px] text-center text-xs font-semibold leading-relaxed">Puedes limpiar filtros o preguntarnos por WhatsApp si buscas un juego específico.</p>
+                <p className="mt-1 max-w-[230px] text-center text-xs font-semibold leading-relaxed">Puedes limpiar filtros o preguntarnos por Instagram si buscas un juego específico.</p>
                 <div className="mt-4 flex gap-2">
                   <button onClick={limpiarFiltros} className="magnetic rounded-full bg-white px-4 py-2 text-xs font-black uppercase text-black">Ver todo</button>
-                  <a href={`https://wa.me/${whatsappNumber}`} target="_blank" className="magnetic rounded-full border border-white/10 px-4 py-2 text-xs font-black uppercase text-white">Consultar</a>
+                  <a href="https://ig.me/m/alfeicon_games" target="_blank" rel="noopener noreferrer" className="magnetic rounded-full border border-white/10 px-4 py-2 text-xs font-black uppercase text-white">Consultar</a>
                 </div>
               </div>
             )}
