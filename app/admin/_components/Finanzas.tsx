@@ -2,11 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import {
-  Banknote, CalendarDays, ChevronDown, ChevronUp, DollarSign, Handshake, Loader2, Megaphone, Plus, Receipt, RefreshCw, Trash2, TrendingDown, TrendingUp, Bot
+  Banknote, CalendarDays, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Plus, Receipt, RefreshCw, Trash2, TrendingDown, TrendingUp, Bot, X
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import type { AdSpend, AdminGame, AdminPack, Sale, SettingsState } from "../_types";
-import { fmt, fmtDate } from "../_helpers";
+import { fmt, fmtDate, fmtTime } from "../_helpers";
 
 const LABEL = "mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-600";
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none";
@@ -68,28 +68,34 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
 
   // -- AGRUPAR POR DÍAS (Calendario / Historial Diario) --
   const dailyStats = useMemo(() => {
-    const map = new Map<string, { dateStr: string; rev: number; cost: number; ad: number; salesCount: number }>();
+    const map = new Map<string, { dateStr: string; rev: number; cost: number; ad: number; sales: Sale[]; partnerProfit: number }>();
     
     // Add sales to map
     thisMonth.forEach(s => {
       const d = new Date(s.created_at).toISOString().slice(0, 10); // YYYY-MM-DD
-      if (!map.has(d)) map.set(d, { dateStr: d, rev: 0, cost: 0, ad: 0, salesCount: 0 });
+      if (!map.has(d)) map.set(d, { dateStr: d, rev: 0, cost: 0, ad: 0, sales: [], partnerProfit: 0 });
       const stat = map.get(d)!;
       stat.rev += s.price_sold;
       stat.cost += (s.cost_price ?? 0);
-      stat.salesCount++;
+      stat.sales.push(s);
+
+      const gain = s.price_sold - (s.cost_price ?? 0);
+      const pct = s.partner_pct ?? 0;
+      stat.partnerProfit += gain * pct / 100;
     });
 
     // Add ad spend to map
     thisMonthAdSpend.forEach(a => {
       const d = a.date; // already YYYY-MM-DD
-      if (!map.has(d)) map.set(d, { dateStr: d, rev: 0, cost: 0, ad: 0, salesCount: 0 });
+      if (!map.has(d)) map.set(d, { dateStr: d, rev: 0, cost: 0, ad: 0, sales: [], partnerProfit: 0 });
       const stat = map.get(d)!;
       stat.ad += a.amount;
     });
 
     return Array.from(map.values()).sort((a, b) => b.dateStr.localeCompare(a.dateStr));
   }, [thisMonth, thisMonthAdSpend]);
+
+  const [selectedDay, setSelectedDay] = useState<typeof dailyStats[0] | null>(null);
 
   // -- GESTION DE PUBLICIDAD --
   const deleteAdSpend = async (id: string) => {
@@ -133,11 +139,13 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
       ``,
       `## Resumen Global (Mes Actual)`,
       `- Ventas totales: ${thisMonth.length}`,
-      `- Ingresos totales (CLP): ${totalRevenue}`,
-      `- Costos totales (CLP): ${totalCost}`,
-      `- Ganancia bruta (CLP): ${grossProfit}`,
-      `- Gasto en publicidad (CLP): ${totalAdSpend}`,
-      `- Ganancia neta final (CLP): ${grossProfit - totalAdSpend}`,
+      `- Ingresos totales (CLP): $${totalRevenue}`,
+      `- Costos totales (CLP): $${totalCost}`,
+      `- Ganancia bruta (CLP): $${grossProfit}`,
+      `- Gasto en publicidad (CLP): $${totalAdSpend}`,
+      `- Ganancia neta final (CLP): $${grossProfit - totalAdSpend}`,
+      `- Parte de ${partnerName} (Neto tras publicidad): $${partnerNet}`,
+      `- Tu parte (Neto): $${myProfit}`,
       ``,
       `## Catálogo de Productos y Precios Actuales`,
       `### Juegos`,
@@ -148,12 +156,24 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
       `## Top 10 Artículos Más Vendidos (Mes Actual)`,
       ...topSelling.map(([title, count], i) => `${i + 1}. ${title} (${count} ventas)`),
       ``,
-      `## Desglose Diario (Mes Actual)`,
-      `Formato: Fecha | Ingresos | Costos | Ganancia Bruta | Gasto Publicidad | Ganancia Neta del Día`,
+      `## Desglose Diario Detallado (Mes Actual)`,
       ...dailyStats.map(d => {
          const dGross = d.rev - d.cost;
-         const dNet = dGross - d.ad;
-         return `- ${d.dateStr} | Ingresos: $${d.rev} | Costos: $${d.cost} | G. Bruta: $${dGross} | Publicidad: $${d.ad} | Neta: $${dNet}`;
+         const dPartnerNet = d.partnerProfit - d.ad;
+         const dMyNet = dGross - d.partnerProfit;
+         return [
+           `### ${d.dateStr} (Total del Día: Ingresos $${d.rev}, Costos $${d.cost}, Publicidad $${d.ad})`,
+           `- Ganancia Bruta: $${dGross} | Parte ${partnerName}: $${dPartnerNet} | Tu Parte: $${dMyNet}`,
+           `**Detalle de Ventas del Día:**`,
+           ...(d.sales.length > 0 ? d.sales.map(s => {
+              const gain = s.price_sold - (s.cost_price ?? 0);
+              const pct = s.partner_pct ?? 0;
+              const pGain = gain * pct / 100;
+              const mGain = gain - pGain;
+              return `- [${s.item_type.toUpperCase()}] ${s.item_title} | Venta: $${s.price_sold} | Costo: $${s.cost_price ?? 0} | G. Bruta: $${gain} | ${partnerName} (${pct}%): $${pGain} | Tú: $${mGain}`;
+           }) : ["- Sin ventas este día (solo registro de publicidad)."]),
+           ""
+         ].join("\\n");
       }),
       ``,
       `## Detalle de Gastos en Publicidad (Mes Actual)`,
@@ -162,12 +182,13 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
           : ["- No hay gastos de publicidad registrados este mes."]),
       ``,
       `## INSTRUCCIONES PARA LA IA`,
-      `Actúa como un analista financiero experto y asesor de negocios para esta tienda de videojuegos digitales.`,
-      `1. Analiza los márgenes de ganancia basándote en los precios de los juegos/packs y sus costos.`,
-      `2. Observa el desglose diario para identificar patrones (ej. si algunos días venden mucho más y por qué).`,
-      `3. Evalúa la eficiencia del gasto publicitario frente a las ganancias generadas.`,
-      `4. Entrégame un diagnóstico claro de la salud financiera del negocio este mes.`,
-      `5. Provee entre 3 y 5 recomendaciones accionables y estratégicas para optimizar la rentabilidad (ej. subir/bajar precios, cambiar estrategias de ads, enfocar ventas en ciertos packs/juegos).`
+      `Actúa como un analista financiero experto y consultor de negocios para esta tienda de videojuegos digitales.`,
+      `Revisa cuidadosamente el informe detallado arriba y provee el siguiente análisis:`,
+      `1. **Rentabilidad y Márgenes**: Analiza los márgenes de ganancia basándote en los precios de los juegos/packs y sus costos. Identifica cuáles productos dejan más ganancia real.`,
+      `2. **Tendencias Diarias**: Observa el desglose diario para identificar patrones (ej. si algunos días venden mucho más, o si hay días donde la publicidad superó la ganancia de ventas).`,
+      `3. **Eficiencia Publicitaria**: Evalúa la eficiencia del gasto publicitario frente a las ganancias netas generadas en esos días o en el mes.`,
+      `4. **Equidad del Socio**: Revisa la proporción de lo que se lleva el socio (${partnerName}) vs lo que me llevo yo, e indícame si el impacto de la publicidad (que paga el socio) equilibra el trato o si hay desbalances.`,
+      `5. **Recomendaciones de Alto Valor**: Provee entre 3 y 5 recomendaciones accionables y estratégicas para optimizar la rentabilidad general de la empresa (ej. subir/bajar precios a artículos específicos, cambiar estrategias de publicidad, renegociar porcentajes, o enfocar marketing en ciertos packs/juegos rentables).`
     ];
 
     const blob = new Blob([lines.join("\\n")], { type: "text/markdown;charset=utf-8" });
@@ -256,7 +277,7 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
               <CalendarDays size={16} className="text-emerald-400" />
               Calendario de Ganancias (Día a Día)
             </h2>
-            <p className="text-[11px] text-gray-500 mt-1 mb-4">Resumen de ingresos, costos y publicidad de cada día con actividad en el mes.</p>
+            <p className="text-[11px] text-gray-500 mt-1 mb-4">Resumen de ingresos, costos y publicidad de cada día con actividad en el mes. Haz clic en un día para ver el detalle de cada venta.</p>
             
             {dailyStats.length === 0 ? (
               <div className="brand-shell rounded-2xl p-8 text-center">
@@ -267,17 +288,21 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
                 {dailyStats.map((d, i) => {
                   const dGross = d.rev - d.cost;
                   const dNet = dGross - d.ad;
+                  const dPartnerNet = d.partnerProfit - d.ad;
+                  const dMyNet = dGross - d.partnerProfit;
                   
                   // Darle un poco de estilo si fue un día muy bueno
-                  const isGreatDay = dNet > 15000; // Ejemplo estático > 15k
+                  const isGreatDay = dNet > 15000;
                   const isLoss = dNet < 0;
 
                   return (
-                    <div key={d.dateStr} className={`rounded-2xl p-4 border transition-all ${isGreatDay ? 'bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)]' : isLoss ? 'bg-red-500/5 border-red-500/20' : 'brand-shell border-white/5'}`}>
+                    <div key={d.dateStr} 
+                      onClick={() => setSelectedDay(d)}
+                      className={`cursor-pointer rounded-2xl p-4 border transition-all hover:scale-[1.02] active:scale-95 ${isGreatDay ? 'bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)] hover:border-emerald-500/40' : isLoss ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/40' : 'brand-shell border-white/5 hover:border-white/20'}`}>
                       <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-3">
                         <p className="font-black tracking-widest text-white">{fmtDate(d.dateStr)}</p>
                         <span className="text-[10px] font-black bg-white/10 px-2 py-0.5 rounded-full text-gray-300">
-                          {d.salesCount} {d.salesCount === 1 ? 'venta' : 'ventas'}
+                          {d.sales.length} {d.sales.length === 1 ? 'venta' : 'ventas'}
                         </span>
                       </div>
                       
@@ -296,10 +321,18 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
                             <span className="font-semibold text-pink-400">-${fmt(d.ad)}</span>
                           </div>
                         )}
+                        <div className="pt-2 mt-2 border-t border-white/5 flex justify-between">
+                          <span className="text-gray-400">Tú ganas</span>
+                          <span className="font-semibold text-emerald-400">${fmt(dMyNet)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Paga {partnerName}</span>
+                          <span className={`font-semibold ${dPartnerNet >= 0 ? 'text-pink-400' : 'text-red-400'}`}>${fmt(dPartnerNet)}</span>
+                        </div>
                       </div>
                       
                       <div className="mt-4 pt-3 border-t border-white/5 flex justify-between items-end">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-600">Neto</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-600">Total Neto</span>
                         <span className={`text-lg font-black ${dNet >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           ${fmt(dNet)}
                         </span>
@@ -414,6 +447,99 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
           </div>
         </div>
       )}
+
+      {/* DETALLE DEL DIA (MODAL) */}
+      {selectedDay && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" 
+             onClick={() => setSelectedDay(null)}>
+          <div className="brand-shell relative w-full max-w-2xl overflow-hidden rounded-3xl max-h-[90vh] flex flex-col" 
+               onClick={e => e.stopPropagation()}>
+            <div className="border-b border-white/10 px-6 py-5 flex justify-between items-center bg-white/5">
+              <div>
+                <h3 className="text-lg font-black tracking-widest text-emerald-400 uppercase">Detalle del Día</h3>
+                <p className="text-sm text-gray-300 font-bold">{fmtDate(selectedDay.dateStr)}</p>
+              </div>
+              <button onClick={() => setSelectedDay(null)} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                <X size={20} className="text-gray-400 hover:text-white" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Resumen del dia en modal */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Ingresos</p>
+                  <p className="text-xl font-black text-green-400">${fmt(selectedDay.rev)}</p>
+                </div>
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Tu Parte (Neta)</p>
+                  <p className="text-xl font-black text-emerald-400">${fmt(selectedDay.rev - selectedDay.cost - selectedDay.partnerProfit)}</p>
+                </div>
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Parte {partnerName} (Neta)</p>
+                  <p className="text-xl font-black text-pink-400">${fmt(selectedDay.partnerProfit - selectedDay.ad)}</p>
+                </div>
+              </div>
+
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-500 mb-3 flex items-center gap-2">
+                <Receipt size={14} className="text-emerald-400" /> Ventas de la jornada ({selectedDay.sales.length})
+              </h4>
+
+              {selectedDay.sales.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">No hay ventas registradas este día (solo publicidad).</p>
+              ) : (
+                <div className="space-y-3">
+                  {selectedDay.sales.map(s => {
+                    const gain = s.price_sold - (s.cost_price ?? 0);
+                    const pct = s.partner_pct ?? 0;
+                    const pGain = gain * pct / 100;
+                    const mGain = gain - pGain;
+                    
+                    return (
+                      <div key={s.id} className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 transition-colors hover:bg-white/[0.05]">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <div className={`mb-1 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest ${s.item_type === "pack" ? "text-purple-400" : "text-blue-400"}`}>
+                              {s.item_type === "pack" ? <Gift size={10} /> : <Gamepad2 size={10} />}
+                              {s.item_type === "pack" ? "Pack" : "Juego"}
+                            </div>
+                            <p className="text-sm font-bold text-white">{s.item_title}</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5">{fmtTime(s.created_at)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Venta</p>
+                            <p className="text-lg font-black text-green-400">${fmt(s.price_sold)}</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-white/5">
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Costo</p>
+                            <p className="text-xs font-bold text-orange-400">${fmt(s.cost_price ?? 0)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">G. Bruta</p>
+                            <p className="text-xs font-bold text-gray-300">${fmt(gain)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Tú Ganas</p>
+                            <p className="text-xs font-black text-emerald-400">${fmt(mGain)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">{partnerName} ({pct}%)</p>
+                            <p className="text-xs font-black text-pink-400">${fmt(pGain)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
