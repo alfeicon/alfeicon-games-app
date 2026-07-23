@@ -149,9 +149,9 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
       ``,
       `## Catálogo de Productos y Precios Actuales`,
       `### Juegos`,
-      ...games.map(g => `- ${g.title}: $${g.price} (Costo: $${g.cost_price})`),
+      ...games.map(g => `- ${g.title}: $${g.price}`),
       `### Packs`,
-      ...packs.map(p => `- ${p.title}: $${p.price} (Costo: $${p.cost_price})`),
+      ...packs.map(p => `- ${p.title}: $${p.price}`),
       ``,
       `## Top 10 Artículos Más Vendidos (Mes Actual)`,
       ...topSelling.map(([title, count], i) => `${i + 1}. ${title} (${count} ventas)`),
@@ -159,18 +159,18 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
       `## Desglose Diario Detallado (Mes Actual)`,
       ...dailyStats.map(d => {
          const dGross = d.rev - d.cost;
-         const dPartnerNet = d.partnerProfit - d.ad;
          const dMyNet = dGross - d.partnerProfit;
          return [
-           `### ${d.dateStr} (Total del Día: Ingresos $${d.rev}, Costos $${d.cost}, Publicidad $${d.ad})`,
-           `- Ganancia Bruta: $${dGross} | Parte ${partnerName}: $${dPartnerNet} | Tu Parte: $${dMyNet}`,
+           `### ${d.dateStr} (Total del Día: Ingresos $${d.rev}, Costos $${d.cost}, Publicidad Pagada Hoy $${d.ad})`,
+           `- Ganancia Bruta del Día: $${dGross} | Parte ${partnerName} (de las ventas): $${d.partnerProfit} | Tu Parte: $${dMyNet}`,
            `**Detalle de Ventas del Día:**`,
            ...(d.sales.length > 0 ? d.sales.map(s => {
               const gain = s.price_sold - (s.cost_price ?? 0);
               const pct = s.partner_pct ?? 0;
               const pGain = gain * pct / 100;
               const mGain = gain - pGain;
-              return `- [${s.item_type.toUpperCase()}] ${s.item_title} | Venta: $${s.price_sold} | Costo: $${s.cost_price ?? 0} | G. Bruta: $${gain} | ${partnerName} (${pct}%): $${pGain} | Tú: $${mGain}`;
+              const isPack = s.item_type === "pack" || s.item_title.toLowerCase().includes("pack");
+              return `- [${isPack ? "PACK" : "GAME"}] ${s.item_title} | Venta: $${s.price_sold} | Costo: $${s.cost_price ?? 0} | G. Bruta: $${gain} | ${partnerName} (${pct}%): $${pGain} | Tú: $${mGain}`;
            }) : ["- Sin ventas este día (solo registro de publicidad)."]),
            ""
          ].join("\\n");
@@ -184,11 +184,11 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
       `## INSTRUCCIONES PARA LA IA`,
       `Actúa como un analista financiero experto y consultor de negocios para esta tienda de videojuegos digitales.`,
       `Revisa cuidadosamente el informe detallado arriba y provee el siguiente análisis:`,
-      `1. **Rentabilidad y Márgenes**: Analiza los márgenes de ganancia basándote en los precios de los juegos/packs y sus costos. Identifica cuáles productos dejan más ganancia real.`,
-      `2. **Tendencias Diarias**: Observa el desglose diario para identificar patrones (ej. si algunos días venden mucho más, o si hay días donde la publicidad superó la ganancia de ventas).`,
-      `3. **Eficiencia Publicitaria**: Evalúa la eficiencia del gasto publicitario frente a las ganancias netas generadas en esos días o en el mes.`,
-      `4. **Equidad del Socio**: Revisa la proporción de lo que se lleva el socio (${partnerName}) vs lo que me llevo yo, e indícame si el impacto de la publicidad (que paga el socio) equilibra el trato o si hay desbalances.`,
-      `5. **Recomendaciones de Alto Valor**: Provee entre 3 y 5 recomendaciones accionables y estratégicas para optimizar la rentabilidad general de la empresa (ej. subir/bajar precios a artículos específicos, cambiar estrategias de publicidad, renegociar porcentajes, o enfocar marketing en ciertos packs/juegos rentables).`
+      `1. **Rentabilidad y Márgenes**: Analiza los márgenes de ganancia basándote en las ventas reales (ingreso vs costo). Identifica cuáles productos dejan más ganancia real.`,
+      `2. **Tendencias Diarias**: Observa el desglose diario para identificar patrones de venta.`,
+      `3. **Eficiencia Publicitaria**: Evalúa la eficiencia del gasto publicitario total frente a las ganancias netas generadas en el mes.`,
+      `4. **Equidad del Socio**: Ten en cuenta que el socio (${partnerName}) recibe un porcentaje de ganancia solo sobre ciertas ventas (como verás en el detalle diario), pero él es quien paga el 100% de los gastos de publicidad (como se ve en el total global). Revisa si la ganancia neta final de ${partnerName} ($${partnerNet}) luego de descontar la publicidad justifica su inversión, o si hay desbalances respecto a tu ganancia ($${myProfit}).`,
+      `5. **Recomendaciones de Alto Valor**: Provee entre 3 y 5 recomendaciones accionables y estratégicas para optimizar la rentabilidad general de la empresa.`
     ];
 
     const blob = new Blob([lines.join("\\n")], { type: "text/markdown;charset=utf-8" });
@@ -287,8 +287,8 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {dailyStats.map((d, i) => {
                   const dGross = d.rev - d.cost;
-                  const dNet = dGross - d.ad;
-                  const dPartnerNet = d.partnerProfit - d.ad;
+                  const dNet = dGross; // Para el día a día no descontamos publicidad del neto para no alterar percepción
+                  const dPartnerProfit = d.partnerProfit;
                   const dMyNet = dGross - d.partnerProfit;
                   
                   // Darle un poco de estilo si fue un día muy bueno
@@ -326,13 +326,13 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
                           <span className="font-semibold text-emerald-400">${fmt(dMyNet)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-400">Paga {partnerName}</span>
-                          <span className={`font-semibold ${dPartnerNet >= 0 ? 'text-pink-400' : 'text-red-400'}`}>${fmt(dPartnerNet)}</span>
+                          <span className="text-gray-400">Paga {partnerName} (Ventas)</span>
+                          <span className="font-semibold text-pink-400">${fmt(dPartnerProfit)}</span>
                         </div>
                       </div>
                       
                       <div className="mt-4 pt-3 border-t border-white/5 flex justify-between items-end">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-600">Total Neto</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-600">G. Bruta del Día</span>
                         <span className={`text-lg font-black ${dNet >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           ${fmt(dNet)}
                         </span>
@@ -476,8 +476,8 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
                   <p className="text-xl font-black text-emerald-400">${fmt(selectedDay.rev - selectedDay.cost - selectedDay.partnerProfit)}</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Parte {partnerName} (Neta)</p>
-                  <p className="text-xl font-black text-pink-400">${fmt(selectedDay.partnerProfit - selectedDay.ad)}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Parte {partnerName} (Ventas)</p>
+                  <p className="text-xl font-black text-pink-400">${fmt(selectedDay.partnerProfit)}</p>
                 </div>
               </div>
 
