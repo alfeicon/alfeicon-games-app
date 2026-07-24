@@ -25,14 +25,15 @@ export async function POST(request: Request) {
     let packContents = "";
     if (order?.pack_ids && order.pack_ids.length > 0 && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-      const { data: packItems } = await supabase
-        .from("pack_items")
-        .select("title")
-        .in("pack_id", order.pack_ids)
-        .order("sort_order");
+      
+      const { data: packsData } = await supabase
+        .from("packs")
+        .select("source_message, title")
+        .in("id", order.pack_ids);
         
-      if (packItems && packItems.length > 0) {
-        packContents = "---- List Game ----\n" + packItems.map((pi: any) => pi.title).join("\n") + "\n----End Game List ----";
+      if (packsData && packsData.length > 0) {
+        // Enviar el mensaje original crudo tal cual llegó del proveedor (o el título si no hay mensaje)
+        packContents = packsData.map((p: any) => p.source_message || `---- List Game ----\n${p.title}\n----End Game List ----`).join("\n\n");
       }
     }
 
