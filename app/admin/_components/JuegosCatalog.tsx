@@ -82,7 +82,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       const data = await res.json();
       if (!res.ok) return;
       const priceUSD = data.priceUSD; 
-      const priceCLP_approx = Math.round(priceUSD * 1000);
+      const priceCLP_approx = Math.round(priceUSD * 1000) + 10990;
       const priceCLP = data.priceCLP_exact > 0 ? data.priceCLP_exact : priceCLP_approx;
       
       setQuickForms(prev => {
@@ -192,7 +192,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       if (!res.ok) throw new Error(data.error || "No encontrado");
       
       const priceUSD = data.priceUSD; 
-      const priceCLP_approx = Math.round(priceUSD * 1000);
+      const priceCLP_approx = Math.round(priceUSD * 1000) + 10990;
       const priceCLP = data.priceCLP_exact > 0 ? data.priceCLP_exact : priceCLP_approx;
       
       setForm(f => {
