@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Gamepad2, HardDrive, ImagePlus, Loader2, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { Gamepad2, HardDrive, ImagePlus, Loader2, Plus, Save, Search, Trash2, X, Zap } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import GameCard from "@/components/GameCard";
 import GameStoreCard from "@/components/app-store/GameStoreCard";
@@ -57,8 +57,86 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
   const [form, setForm] = useState<GameForm>(emptyForm);
   const [modalOpen, setModalOpen] = useState(false);
   const [loadingEshop, setLoadingEshop] = useState(false);
+  const [isQuickEdit, setIsQuickEdit] = useState(false);
+  const [quickForms, setQuickForms] = useState<Record<string, { cost_price: string; eshop_price: string; price: string }>>({});
 
   const selectedGame = useMemo(() => games.find(g => g.id === selectedId) ?? null, [games, selectedId]);
+
+  useEffect(() => {
+    if (isQuickEdit) {
+      const initial: Record<string, { cost_price: string; eshop_price: string; price: string }> = {};
+      games.forEach(g => {
+        initial[g.id] = { 
+          cost_price: g.cost_price ? String(g.cost_price) : "", 
+          eshop_price: g.eshop_price ? String(g.eshop_price) : "", 
+          price: String(g.price) 
+        };
+      });
+      setQuickForms(initial);
+    }
+  }, [isQuickEdit, games]);
+
+  const fetchQuickEshopPrice = async (gameId: string, title: string) => {
+    try {
+      const res = await fetch(`/api/eshop-price?q=${encodeURIComponent(title)}`);
+      const data = await res.json();
+      if (!res.ok) return;
+      const priceUSD = data.priceUSD; 
+      const priceCLP_approx = Math.round(priceUSD * 1000);
+      const priceCLP = data.priceCLP_exact > 0 ? data.priceCLP_exact : priceCLP_approx;
+      
+      setQuickForms(prev => {
+        const current = prev[gameId];
+        if (!current) return prev;
+        const nextEshop = String(priceCLP);
+        const nextPrice = calcSalePrice(nextEshop, current.cost_price) || current.price;
+        return { ...prev, [gameId]: { ...current, eshop_price: nextEshop, price: nextPrice } };
+      });
+    } catch (err) {}
+  };
+
+  const autoFetchAllPrices = async () => {
+    if (!confirm("Esto buscará en la eShop el precio de todos los juegos filtrados que NO tengan precio eShop actualmente. Tomará unos segundos por juego. ¿Continuar?")) return;
+    setLoading(true);
+    let fetchCount = 0;
+    for (const game of filtered) {
+      const current = quickForms[game.id];
+      if (!current?.eshop_price || toPrice(current.eshop_price) === 0) {
+        await fetchQuickEshopPrice(game.id, game.title);
+        fetchCount++;
+        await new Promise(r => setTimeout(r, 600)); // Evitar bloqueos
+      }
+    }
+    setLoading(false);
+    showNotice("success", `Auto-completado finalizado. ${fetchCount} actualizados.`);
+  };
+
+  const saveQuickEdits = async () => {
+    setLoading(true);
+    let errorCount = 0;
+    let savedCount = 0;
+    for (const game of filtered) {
+      const qf = quickForms[game.id];
+      if (!qf) continue;
+      const cp = toPrice(qf.cost_price);
+      const ep = toPrice(qf.eshop_price);
+      const p = toPrice(qf.price);
+      if (cp !== (game.cost_price || 0) || ep !== (game.eshop_price || 0) || p !== game.price) {
+        const { error } = await supabase.from("games").update({
+          cost_price: cp > 0 ? cp : null,
+          eshop_price: ep > 0 ? ep : null,
+          price: p
+        }).eq("id", game.id);
+        if (error) errorCount++;
+        else savedCount++;
+      }
+    }
+    setLoading(false);
+    if (errorCount > 0) showNotice("error", `Hubo ${errorCount} errores al guardar`);
+    else if (savedCount > 0) showNotice("success", `Se guardaron ${savedCount} juegos correctamente.`);
+    else showNotice("info", "No había cambios que guardar.");
+    onReload();
+  };
 
   const counts = useMemo(() => ({
     all:      games.length,
@@ -185,6 +263,13 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
             {games.length} en catálogo · {counts.active} activos
           </p>
         </div>
+        <button onClick={() => setIsQuickEdit(!isQuickEdit)}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all duration-200 active:scale-95 ${
+            isQuickEdit ? "bg-[#33FF00] text-black hover:bg-[#33FF00]/90" : "bg-white/10 text-white hover:bg-white/15"
+          }`}>
+          <Zap size={12} strokeWidth={3} className={isQuickEdit ? "fill-black" : "fill-white/30"} /> 
+          {isQuickEdit ? "Salir Rápida" : "Edición Rápida"}
+        </button>
         <button onClick={newGame}
           className="flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition-all duration-200 hover:bg-white/90 active:scale-95">
           <Plus size={12} strokeWidth={3} /> Nuevo
@@ -223,6 +308,64 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <Search size={24} className="text-gray-800" />
               <p className="text-xs text-gray-700">Sin resultados</p>
+            </div>
+          ) : isQuickEdit ? (
+            <div className="flex flex-col gap-2 pb-20">
+              <div className="mb-2 flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3">
+                <p className="text-xs font-semibold text-white/70">Modo de Edición Rápida ({filtered.length} juegos visibles)</p>
+                <div className="flex gap-2">
+                  <button onClick={autoFetchAllPrices} className="flex items-center gap-1.5 rounded-lg bg-blue-500/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-400 transition-all hover:bg-blue-500/30">
+                    <Search size={12} strokeWidth={3} /> Auto eShop
+                  </button>
+                  <button onClick={saveQuickEdits} className="flex items-center gap-1.5 rounded-lg bg-[#33FF00]/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#33FF00] transition-all hover:bg-[#33FF00]/30">
+                    <Save size={12} strokeWidth={3} /> Guardar Todos
+                  </button>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-[36px_1fr_100px_130px_100px] gap-3 px-3 text-[9px] font-black uppercase tracking-widest text-gray-500">
+                <div />
+                <div>Juego</div>
+                <div>Costo ($)</div>
+                <div>eShop ($)</div>
+                <div>Final ($)</div>
+              </div>
+
+              {filtered.map(game => {
+                const qf = quickForms[game.id] || { cost_price: "", eshop_price: "", price: "" };
+                return (
+                  <div key={game.id} className="flex items-center gap-3 rounded-xl bg-white/5 p-2 pr-4 transition-all hover:bg-white/10">
+                    <img src={game.image_url} alt="" className="aspect-square w-9 shrink-0 rounded-lg object-cover" />
+                    <div className="min-w-0 flex-1 truncate text-xs font-bold text-white">
+                      {game.title}
+                    </div>
+                    <div className="w-[100px]">
+                      <input value={qf.cost_price} onChange={e => {
+                        const val = e.target.value;
+                        setQuickForms(prev => ({
+                          ...prev, [game.id]: { ...qf, cost_price: val, price: calcSalePrice(qf.eshop_price, val) || qf.price }
+                        }));
+                      }} placeholder="0" className="w-full rounded-lg bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none focus:bg-black/60" />
+                    </div>
+                    <div className="flex w-[130px] gap-1">
+                      <input value={qf.eshop_price} onChange={e => {
+                        const val = e.target.value;
+                        setQuickForms(prev => ({
+                          ...prev, [game.id]: { ...qf, eshop_price: val, price: calcSalePrice(val, qf.cost_price) || qf.price }
+                        }));
+                      }} placeholder="0" className="w-full min-w-0 flex-1 rounded-lg bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none focus:bg-black/60" />
+                      <button onClick={() => fetchQuickEshopPrice(game.id, game.title)} className="shrink-0 rounded-lg bg-white/10 p-1.5 text-gray-400 hover:bg-white/20 hover:text-white">
+                        <Search size={12} />
+                      </button>
+                    </div>
+                    <div className="w-[100px]">
+                      <input value={qf.price} onChange={e => {
+                        setQuickForms(prev => ({ ...prev, [game.id]: { ...qf, price: e.target.value } }));
+                      }} placeholder="0" className="w-full rounded-lg bg-[#33FF00]/10 px-2.5 py-1.5 text-xs font-bold text-[#33FF00] outline-none focus:bg-[#33FF00]/20" />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
