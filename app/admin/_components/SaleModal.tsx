@@ -16,7 +16,7 @@ type Props = {
   settings: SettingsState;
   loading: boolean;
   setLoading: (v: boolean) => void;
-  showNotice: (type: "success" | "error", text: string) => void;
+  showNotice: (type: "success" | "error" | "info", text: string, playSound?: boolean) => void;
   onClose: () => void;
   onReload: () => Promise<void>;
 };

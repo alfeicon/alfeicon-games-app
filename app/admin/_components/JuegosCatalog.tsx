@@ -46,7 +46,7 @@ type Props = {
   games: AdminGame[];
   loading: boolean;
   setLoading: (v: boolean) => void;
-  showNotice: (type: "success" | "error", text: string) => void;
+  showNotice: (type: "success" | "error" | "info", text: string, playSound?: boolean) => void;
   onReload: () => Promise<void>;
 };
 

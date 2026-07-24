@@ -32,7 +32,7 @@ const VACIO = {
 type Props = {
   loading: boolean;
   setLoading: (v: boolean) => void;
-  showNotice: (type: "success" | "error", text: string) => void;
+  showNotice: (type: "success" | "error" | "info", text: string, playSound?: boolean) => void;
 };
 
 export function Descuentos({ loading, setLoading, showNotice }: Props) {

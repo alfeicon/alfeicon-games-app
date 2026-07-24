@@ -21,7 +21,7 @@ type Props = {
   gameName: string;
   garantiaJuegoDias: number;
   garantiaPackDias: number;
-  showNotice: (type: "success" | "error", text: string) => void;
+  showNotice: (type: "success" | "error" | "info", text: string, playSound?: boolean) => void;
   /** Cuántas cuentas tiene la orden, costo total, y si hay credenciales listas. */
   onItemsLoad?: (count: number, totalCost: number, hasCreds: boolean) => void;
   games?: AdminGame[];
