@@ -126,7 +126,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       if (data.priceCLP_exact > 0) {
         showNotice("success", `¡Precio eShop Chile exacto! (${priceCLP} CLP)`);
       } else {
-        showNotice("error", `No encontré el chileno. Dejamos el EEUU aprox: ${data.priceUSD} USD`);
+        showNotice("info", `No encontré el chileno. Dejamos el EEUU aprox: ${data.priceUSD} USD`);
       }
     } catch (err: any) {
       showNotice("error", err.message || "No se encontró el juego en eShop");
