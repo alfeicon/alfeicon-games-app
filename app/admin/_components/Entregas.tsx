@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake, Send, MessageCircle, Receipt, ArrowLeft, CheckCheck, ShoppingCart, ShieldCheck
+  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake, Send, MessageCircle, Receipt, ArrowLeft, CheckCheck, ShoppingCart, ShieldCheck, User, Mail
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { urlImagen } from "@/lib/chat-image";
@@ -151,6 +151,16 @@ const STEPS: { key: Order["status"]; label: string }[] = [
   { key: "completed", label: "Completa" },
 ];
 
+/**
+ * Nombre del cliente para identificar la orden de un vistazo.
+ *
+ * OJO: hoy solo lo traen las órdenes de Mercado Pago — lo escribe el webhook
+ * con los datos del pagador (app/api/mp-webhook/route.ts). El flujo de
+ * transferencia nunca le pide el nombre al cliente, así que ahí siempre es
+ * null y hay que seguir identificando por número de orden o código.
+ */
+const nombreCliente = (o: Order) => (o.client_name || "").trim();
+
 // Tabla de Historial para desktop: aprovecha el ancho disponible mostrando
 // precio y ganancia sin tener que abrir cada orden. Vive fuera de Entregas
 // para no perder su identidad (y remontar toda la tabla) en cada tecla que
@@ -161,6 +171,7 @@ function HistoryTable({ items, onSelect }: { items: Order[]; onSelect: (item: Or
       <thead>
         <tr className="border-b border-white/10 text-left text-[9px] font-black uppercase tracking-widest text-gray-600">
           <th className="px-4 py-2 font-black">Orden</th>
+          <th className="px-2 py-2 font-black">Cliente</th>
           <th className="px-2 py-2 font-black">Juego</th>
           <th className="px-2 py-2 font-black">Fecha</th>
           <th className="px-2 py-2 font-black">Código cliente</th>
@@ -178,6 +189,16 @@ function HistoryTable({ items, onSelect }: { items: Order[]; onSelect: (item: Or
             <tr key={item.id} onClick={() => onSelect(item)}
               className="cursor-pointer border-b border-white/[0.04] transition-colors hover:bg-white/[0.04]">
               <td className="px-4 py-2.5 text-[11px] font-bold text-gray-400">{item.order_number ? `#${item.order_number}` : item.short_code}</td>
+              <td className="max-w-[150px] px-2 py-2.5">
+                {nombreCliente(item) ? (
+                  <>
+                    <p className="truncate text-[11.5px] font-bold text-gray-200">{nombreCliente(item)}</p>
+                    {item.client_email && <p className="truncate text-[10px] text-gray-600">{item.client_email}</p>}
+                  </>
+                ) : (
+                  <span className="text-[11px] text-gray-700">—</span>
+                )}
+              </td>
               <td className="max-w-[240px] truncate px-2 py-2.5 text-[12px] font-bold text-white">{item.game_name}</td>
               <td className="px-2 py-2.5 text-[11px] text-gray-500">{fmtDate(item.created_at)}</td>
               <td className="px-2 py-2.5 text-[11px] text-gray-500">{item.console_code || "—"}</td>
@@ -617,12 +638,14 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
         ? form.pack_ids
         : [...currentPackIds, item.id];
 
-    // Auto-fill prices if empty
+    // Auto-fill o sumar precios si ya había algo
+    const currentSale = Number(form.sale_price) || 0;
+    const currentCost = Number(form.cost_price) || 0;
     setForm({
       ...form,
       game_name: parts.join(' + ') + ' + ',
-      sale_price: form.sale_price === "" ? (item.price || "") : form.sale_price,
-      cost_price: form.cost_price === "" ? (item.cost || "") : form.cost_price,
+      sale_price: currentSale + (item.price || 0) || "",
+      cost_price: currentCost + (item.cost || 0) || "",
       pack_ids,
     });
     setShowSuggestions(false);
@@ -642,16 +665,29 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
   // Compras a medio camino: eligieron método de pago y no completaron. No son
   // trabajo pendiente, pero saber cuántas son dice mucho, así que van aparte.
+  // Las rechazadas viven acá y no en Validación: la pelota está en el cliente,
+  // que tiene que volver a subir su comprobante. Cuando lo hace, el portal
+  // deja el pago en 'pending' otra vez y la orden reaparece en Validación.
   const awaitingPayment = useMemo(
     () => orders.filter(o =>
       o.status === 'draft' &&
-      o.payment_status === 'pending' &&
-      !o.receipt_url,
+      ((o.payment_status === 'pending' && !o.receipt_url) || o.payment_status === 'rejected'),
     ),
     [orders],
   );
   const cancelledOrders = useMemo(() => orders.filter(o => o.payment_status === 'cancelled'), [orders]);
-  const activeOrders = useMemo(() => orders.filter(o => !['draft', 'completed', 'issue'].includes(o.status)), [orders]);
+  // Una orden con el pago aprobado ya es trabajo activo aunque su `status` siga
+  // en 'draft': el cliente recién sale de 'draft' cuando ingresa su código de
+  // Nintendo. Sin esta segunda condición esas órdenes no caían en NINGUNA
+  // pestaña (salían de Validación al aprobar y no entraban a Activas hasta que
+  // llegaba el código), así que desaparecían del panel a mitad del proceso.
+  const activeOrders = useMemo(
+    () => orders.filter(o =>
+      !['draft', 'completed', 'issue'].includes(o.status) ||
+      (o.status === 'draft' && o.payment_status === 'approved'),
+    ),
+    [orders],
+  );
   // Los problemas tienen su propia pestaña: son tickets abiertos, no entregas
   // terminadas. Antes caían en el historial junto a las completadas.
   const issueOrders = useMemo(() => orders.filter(o => o.status === 'issue'), [orders]);
@@ -688,7 +724,11 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       o.game_name.toLowerCase().includes(q) ||
       o.short_code.toLowerCase().includes(q) ||
       String(o.order_number ?? "").includes(q) ||
-      (o.console_code || "").toLowerCase().includes(q)
+      (o.console_code || "").toLowerCase().includes(q) ||
+      // Por nombre y correo: es como llega el cliente cuando escribe por un
+      // problema ("soy Fulano, compré la semana pasada"), sin su código.
+      (o.client_name || "").toLowerCase().includes(q) ||
+      (o.client_email || "").toLowerCase().includes(q)
     );
   }, [historyOrders, historySearch]);
 
@@ -705,7 +745,10 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
   // Secciones para "Activas"
   const activeSections = [
-    { label: "Esperando código de Nintendo", status: "pending_console_code", items: activeOrders.filter(o => o.status === 'pending_console_code'), icon: Clock },
+    // Los 'draft' que llegan aquí ya tienen el pago aprobado (ver activeOrders):
+    // están exactamente en el mismo punto que un 'pending_console_code', solo
+    // que su fila todavía no se actualizó porque el cliente no abrió el enlace.
+    { label: "Esperando código de Nintendo", status: "pending_console_code", items: activeOrders.filter(o => o.status === 'pending_console_code' || o.status === 'draft'), icon: Clock },
     { label: "Código recibido (¡Tienes que preparar!)", status: "pending_setup", items: activeOrders.filter(o => o.status === 'pending_setup'), icon: AlertCircle, color: "text-yellow-500" },
     { label: "Cliente avisado (Barra en 85%)", status: "preparing", items: activeOrders.filter(o => o.status === 'preparing'), icon: CheckCircle2 },
     { label: "Credenciales Listas (Esperando confirmación)", status: "ready", items: activeOrders.filter(o => o.status === 'ready'), icon: KeyRound },
@@ -854,15 +897,72 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     await onReload();
   };
 
-  const confirmDraft = async (order: Order) => {
+  /**
+   * Aprobar el pago y dejar la orden lista para trabajar. Las dos cosas van
+   * juntas a propósito: aprobar sin sacarla de 'draft' la hacía desaparecer de
+   * todas las pestañas, y sacarla de 'draft' sin aprobar dejaba al cliente
+   * trabado en la pantalla de pago. Es el mismo par que aplica el webhook de
+   * Mercado Pago (app/api/mp-webhook/route.ts).
+   */
+  const aprobarPago = async (order: Order) => {
     if (!supabase) return;
     setLoading(true);
-    const { error } = await supabase.from("orders").update({ status: "pending_console_code" }).eq("id", order.id);
+    const { error } = await supabase.from("orders").update({
+      payment_status: "approved",
+      status: order.status === "draft" ? "pending_console_code" : order.status,
+    }).eq("id", order.id);
     setLoading(false);
-    if (error) { showNotice("error", `No se pudo confirmar: ${error.message}`); return; }
-    showNotice("success", "Entrega confirmada y movida a Activas.");
-    setActiveTab("active");
+    if (error) { showNotice("error", `No se pudo aprobar: ${error.message}`); return false; }
+    if (selectedOrder?.id === order.id) {
+      setSelectedOrder({
+        ...selectedOrder,
+        payment_status: "approved",
+        status: selectedOrder.status === "draft" ? "pending_console_code" : selectedOrder.status,
+      });
+      setForm(prev => prev.status === "draft" ? { ...prev, status: "pending_console_code" } : prev);
+    }
     await onReload();
+    return true;
+  };
+
+  /**
+   * Rechazar un comprobante SIN borrar la orden. El portal del cliente ya sabe
+   * leer 'rejected': le avisa con un modal, le muestra el aviso en rojo y le
+   * deja volver a subir la foto, lo que devuelve el pago a 'pending' y la
+   * orden a Validación. Borrarla, como se hacía antes, obligaba a rehacer la
+   * compra entera por una foto borrosa o un monto mal escrito.
+   */
+  const rechazarPago = async (order: Order) => {
+    if (!supabase) return;
+    const ok = window.confirm(
+      "El cliente verá que su comprobante fue rechazado y podrá subir otro.\n\n" +
+      "La orden NO se borra. ¿Rechazar el comprobante?",
+    );
+    if (!ok) return;
+    setLoading(true);
+    const { error } = await supabase.from("orders").update({ payment_status: "rejected" }).eq("id", order.id);
+    setLoading(false);
+    if (error) { showNotice("error", `No se pudo rechazar: ${error.message}`); return; }
+    if (selectedOrder?.id === order.id) setSelectedOrder({ ...selectedOrder, payment_status: "rejected" });
+    showNotice("success", "Comprobante rechazado — el cliente puede subir otro.");
+    await onReload();
+  };
+
+  const confirmDraft = async (order: Order) => {
+    // Sin comprobante y con un método que exige pago, confirmar significa
+    // "lo cobré por fuera": conviene avisarlo antes de destrabar al cliente.
+    const gated = order.payment_method === "transferencia" || order.payment_method === "mercadopago";
+    if (gated && order.payment_status !== "approved" && !order.receipt_url) {
+      const ok = window.confirm(
+        "Esta orden no tiene comprobante y el cliente aún no aparece como pagado.\n\n" +
+        "Al confirmar se dará el pago por aprobado y podrá continuar con la instalación. ¿Seguir?",
+      );
+      if (!ok) return;
+    }
+    const done = await aprobarPago(order);
+    if (!done) return;
+    showNotice("success", "Pago aprobado — la orden pasó a Activas, esperando el código.");
+    setActiveTab("active");
   };
 
   // Reinicia el proceso: el cliente vuelve a empezar.
@@ -889,18 +989,26 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const OrderItem = ({ item }: { item: Order }) => {
     // Órdenes que eligieron método y no completaron: sin comprobante (transfer)
     // ni confirmación (MP). El tiempo es la única pista de si ya se abandonó.
-    const esperandoPago = item.status === "draft" && item.payment_status === "pending" && !item.receipt_url;
-    const abandonada = esperandoPago && probableAbandono(item.created_at);
+    const rechazado = item.payment_status === "rejected";
+    const esperandoPago = item.status === "draft" && ((item.payment_status === "pending" && !item.receipt_url) || rechazado);
+    // Una rechazada no está abandonada: el cliente acaba de recibir el aviso.
+    const abandonada = esperandoPago && !rechazado && probableAbandono(item.created_at);
+    // Un 'draft' ya pagado está funcionalmente en "esperando código": la fila
+    // solo cambia cuando el cliente abre su enlace. Mostrarlo como borrador
+    // haría creer que falta confirmarlo otra vez.
+    const displayStatus: Order["status"] =
+      item.status === "draft" && item.payment_status === "approved" ? "pending_console_code" : item.status;
+    const esBorrador = displayStatus === "draft";
     return (
     <div className="group relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]">
 
       <button onClick={() => select(item)} className="flex items-center gap-4 flex-1 min-w-0 text-left">
-        <div className={`flex shrink-0 items-center justify-center rounded-xl border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[item.status]}`}>
-          {item.status === 'ready' || item.status === 'completed' ? <CheckCircle2 size={11} className="mr-1" /> :
-           item.status === 'issue' ? <AlertCircle size={11} className="mr-1" /> :
-           item.status === 'draft' ? <HelpCircle size={11} className="mr-1" /> :
+        <div className={`flex shrink-0 items-center justify-center rounded-xl border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[displayStatus]}`}>
+          {displayStatus === 'ready' || displayStatus === 'completed' ? <CheckCircle2 size={11} className="mr-1" /> :
+           displayStatus === 'issue' ? <AlertCircle size={11} className="mr-1" /> :
+           displayStatus === 'draft' ? <HelpCircle size={11} className="mr-1" /> :
            <Clock size={11} className="mr-1" />}
-          {STATUS_LABELS[item.status]}
+          {STATUS_LABELS[displayStatus]}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -926,22 +1034,40 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                 <Receipt size={9} /> Comprobante
               </span>
             )}
+            {/* Le rechazaste el comprobante: está pendiente de que suba otro. */}
+            {rechazado && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-red-400">
+                <AlertCircle size={9} /> Rechazado
+              </span>
+            )}
           </p>
-          <p className="mt-0.5 truncate text-[10px] text-gray-600">
-            {item.short_code} · {fmtTime(item.created_at)} · {fmtDate(item.created_at)}
-            {item.console_code ? ` · Código Cliente: ${item.console_code}` : ''}
+          <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-gray-600">
+            {/* El nombre va primero y más claro: es lo que sirve para cruzar la
+                orden con un mensaje o una transferencia cuando algo falla. */}
+            {nombreCliente(item) && (
+              <>
+                <User size={9} className="shrink-0 text-gray-500" />
+                <span className="truncate font-bold text-gray-300">{nombreCliente(item)}</span>
+                <span className="text-gray-700">·</span>
+              </>
+            )}
+            <span className="truncate">
+              {item.short_code} · {fmtTime(item.created_at)} · {fmtDate(item.created_at)}
+              {item.console_code ? ` · Código Cliente: ${item.console_code}` : ''}
+            </span>
           </p>
           {/* En "esperando pago", cuánto lleva sin avanzar. Pasado el umbral se
               marca como probable abandono para que sepas que puedes borrarla. */}
           {esperandoPago && (
-            <p className={`mt-0.5 text-[10px] font-bold ${abandonada ? "text-orange-400" : "text-gray-600"}`}>
-              {abandonada ? "⚠ Probablemente abandonada · " : "Esperando · "}{haceCuanto(item.created_at)}
+            <p className={`mt-0.5 text-[10px] font-bold ${abandonada ? "text-orange-400" : rechazado ? "text-red-400/80" : "text-gray-600"}`}>
+              {rechazado ? "Esperando que suba otro comprobante · " : abandonada ? "⚠ Probablemente abandonada · " : "Esperando · "}
+              {haceCuanto(item.created_at)}
             </p>
           )}
         </div>
       </button>
 
-      {item.status === "draft" && (
+      {esBorrador && (
         <div className="flex shrink-0 gap-2">
            <button onClick={() => del(item)} disabled={loading} className="p-2 text-gray-600 hover:text-red-400 hover:bg-white/5 rounded-full transition-colors"><X size={16} /></button>
            <button onClick={() => confirmDraft(item)} disabled={loading} className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest bg-purple-500 hover:bg-purple-400 text-black rounded-full transition-colors flex items-center gap-1.5"><Check size={12} strokeWidth={3} /> Confirmar</button>
@@ -1068,6 +1194,26 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                       </span>
                     )}
                   </div>
+                  {/* Cliente en la cabecera: se ve desde cualquier pestaña del
+                      modal, no solo desde "Orden". */}
+                  {selectedOrder && nombreCliente(selectedOrder) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-gray-200">
+                        <User size={11} className="text-gray-500" />
+                        {nombreCliente(selectedOrder)}
+                      </span>
+                      {selectedOrder.client_email && (
+                        <button type="button"
+                          onClick={() => { navigator.clipboard.writeText(selectedOrder.client_email!); showNotice("success", "Correo copiado."); }}
+                          title="Copiar correo"
+                          className="flex items-center gap-1 text-[10.5px] text-gray-500 transition-colors hover:text-white">
+                          <Mail size={10} />
+                          <span className="max-w-[220px] truncate">{selectedOrder.client_email}</span>
+                          <Copy size={9} className="opacity-60" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <button 
                     onClick={() => { setQuery(""); setShowSuggestions(true); }}
                     className="mt-1 flex items-center gap-2 rounded-lg py-1 px-2 -ml-2 text-sm font-black text-white hover:bg-white/5 transition-colors max-w-full"
@@ -1283,25 +1429,43 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
                         {selectedOrder.payment_status === "pending" ? (
                           <div className="flex flex-col gap-2">
-                            <button type="button" onClick={async () => {
-                              if(!supabase) return;
+                            <button type="button" disabled={loading} onClick={async () => {
                               // "approved" es el valor que destraba el gate de pago en
                               // /entrega/[code] y deja pasar al tutorial. No cambiar.
-                              await supabase.from("orders").update({ payment_status: "approved" }).eq("id", selectedOrder.id);
-                              setSelectedOrder({ ...selectedOrder, payment_status: "approved" });
-                              showNotice("success", "Pago aprobado");
-                              onReload();
-                            }} className="w-full rounded-full bg-green-500 py-2.5 text-[11px] font-black uppercase tracking-widest text-black transition-colors hover:bg-green-400 active:scale-95">
-                              Aprobar Pago
+                              // Además saca la orden de 'draft': si no, quedaba fuera
+                              // de todas las pestañas hasta que llegara el código.
+                              const done = await aprobarPago(selectedOrder);
+                              if (!done) return;
+                              showNotice("success", "Pago aprobado — la orden pasó a Activas, esperando el código.");
+                              setActiveTab("active");
+                            }} className="w-full rounded-full bg-green-500 py-2.5 text-[11px] font-black uppercase tracking-widest text-black transition-colors hover:bg-green-400 active:scale-95 disabled:opacity-60">
+                              {loading ? "Aprobando…" : "Aprobar Pago"}
                             </button>
-                            <button type="button" onClick={async () => {
-                              if(!supabase) return;
-                              if(!confirm("¿Rechazar este comprobante y borrar la orden?")) return;
-                              await supabase.from("orders").delete().eq("id", selectedOrder.id);
-                              onReload();
-                              close();
-                            }} className="w-full rounded-full border border-red-500/20 bg-red-500/10 py-2.5 text-[11px] font-black uppercase tracking-widest text-red-500 transition-colors hover:bg-red-500/20 active:scale-95">
-                              Rechazar
+                            <button type="button" disabled={loading} onClick={() => rechazarPago(selectedOrder)}
+                              className="w-full rounded-full border border-red-500/20 bg-red-500/10 py-2.5 text-[11px] font-black uppercase tracking-widest text-red-500 transition-colors hover:bg-red-500/20 active:scale-95 disabled:opacity-60">
+                              Rechazar comprobante
+                            </button>
+                            <p className="px-1 text-center text-[10px] leading-snug text-gray-600">
+                              Rechazar no borra la orden: el cliente recibe el aviso y puede subir otro comprobante.
+                            </p>
+                          </div>
+                        ) : selectedOrder.payment_status === "rejected" ? (
+                          // Rechazado: la pelota está en el cliente, pero se puede
+                          // aprobar igual si el comprobante era válido después de todo.
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center justify-center gap-2 rounded-full border border-red-500/25 bg-red-500/10 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-red-400">
+                              <AlertCircle size={14} /> Comprobante rechazado
+                            </div>
+                            <p className="px-1 text-center text-[10px] leading-snug text-gray-600">
+                              Esperando que el cliente suba uno nuevo. Vuelve a Validación cuando lo haga.
+                            </p>
+                            <button type="button" disabled={loading} onClick={async () => {
+                              const done = await aprobarPago(selectedOrder);
+                              if (!done) return;
+                              showNotice("success", "Pago aprobado — la orden pasó a Activas, esperando el código.");
+                              setActiveTab("active");
+                            }} className="w-full rounded-full border border-green-500/25 bg-green-500/10 py-2.5 text-[11px] font-black uppercase tracking-widest text-green-400 transition-colors hover:bg-green-500/20 active:scale-95 disabled:opacity-60">
+                              Aprobar de todas formas
                             </button>
                           </div>
                         ) : (
@@ -1430,7 +1594,9 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                             <span className="text-[9px] font-black uppercase tracking-widest text-green-700">Entrega completada</span>
                           </div>
                           <h1 className="mt-2 text-xl font-black tracking-tight text-black">¡Gracias por tu compra!</h1>
-                          {selectedOrder?.payment_method === "mercadopago" && selectedOrder?.client_name && (
+                          {/* Ya no se limita a Mercado Pago: las transferencias
+                              también piden el nombre al subir el comprobante. */}
+                          {selectedOrder && nombreCliente(selectedOrder) && (
                             <div className="mt-4 inline-flex flex-col items-center gap-0.5 rounded-xl border border-blue-500/20 bg-blue-500/[0.05] px-4 py-2">
                               <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">Comprador</p>
                               <p className="text-sm font-bold text-gray-800 leading-tight">{selectedOrder.client_name}</p>
@@ -1841,6 +2007,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                     <p className="px-6 py-2 text-[10px] leading-relaxed text-gray-600">
                       Eligieron un método de pago y no completaron. Las de Mercado Pago se aprueban solas
                       cuando llega la confirmación; las de transferencia, cuando suban su comprobante.
+                      Las marcadas <span className="font-black text-red-400">Rechazado</span> ya subieron uno
+                      que no aprobaste: vuelven a Validación en cuanto suban otro.
                     </p>
                     {awaitingPayment.map(item => filaSeleccionable(item, "await"))}
                   </>
@@ -1919,7 +2087,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                   <input
                     value={historySearch}
                     onChange={e => setHistorySearch(e.target.value)}
-                    placeholder="Buscar por juego, orden o código..."
+                    placeholder="Buscar por cliente, correo, juego, orden o código..."
                     className="w-full rounded-xl border border-white/8 bg-white/5 py-2 pl-9 pr-3 text-[12px] text-white outline-none placeholder:text-gray-700 focus:border-yellow-500/40"
                   />
                 </div>

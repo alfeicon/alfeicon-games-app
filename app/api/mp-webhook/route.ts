@@ -38,6 +38,17 @@ function signatureIsValid(req: NextRequest, dataId: string): boolean {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * Nombre del pagador tal como lo manda Mercado Pago. Con Checkout Pro estos
+ * campos vienen vacíos a menudo (sobre todo si la persona paga con su cuenta
+ * MP ya iniciada), así que se consulta en las dos ubicaciones donde la API los
+ * publica: `payment.payer` y `payment.additional_info.payer`.
+ */
+type MpPayer = { first_name?: string | null; last_name?: string | null } | null | undefined;
+
+const nombreDePagador = (p: MpPayer) =>
+  [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim();
+
 export async function POST(req: NextRequest) {
   try {
     const token = process.env.MP_ACCESS_TOKEN;
@@ -121,7 +132,15 @@ export async function POST(req: NextRequest) {
     }
 
     const clientEmail = payment.payer?.email || null;
-    const clientName = [payment.payer?.first_name, payment.payer?.last_name].filter(Boolean).join(" ") || null;
+    // El nombre real, si MP lo mandó en cualquiera de sus dos ubicaciones.
+    const nombreReal = nombreDePagador(payment.payer) || nombreDePagador(payment.additional_info?.payer);
+    if (!nombreReal) {
+      // Queda en el log para poder distinguir "MP no lo manda" de "hay un bug".
+      console.warn("[mp-webhook] Pago sin nombre de pagador:", paymentId, JSON.stringify(payment.payer ?? {}));
+    }
+    // Último recurso: la parte antes del @. No es su nombre, pero permite
+    // distinguir dos órdenes iguales del mismo día sin abrir cada una.
+    const clientName = nombreReal || (clientEmail ? String(clientEmail).split("@")[0] : "") || null;
 
     await supabase
       .from("orders")

@@ -195,11 +195,21 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
     const pack = packs.find(p => p.id === selectedId);
     if (!window.confirm(`¿Eliminar "${pack?.title}"?`)) return;
     setLoading(true);
+    
     await supabase.from("pack_items").delete().eq("pack_id", selectedId);
     const { error } = await supabase.from("packs").delete().eq("id", selectedId);
+    
+    if (error) { 
+      // Si falla por constraints (ej. ya se vendió), lo ocultamos
+      await supabase.from("packs").update({ is_active: false }).eq("id", selectedId);
+      showNotice("error", "El pack tiene ventas en el historial. Se ha ocultado en lugar de eliminarse.");
+    } else {
+      showNotice("success", "Pack eliminado."); 
+    }
+    
     setLoading(false);
-    if (error) { showNotice("error", "No se pudo eliminar."); return; }
-    showNotice("success", "Pack eliminado."); close(); await onReload();
+    close(); 
+    await onReload();
   };
 
   return (

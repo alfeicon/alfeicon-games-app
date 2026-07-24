@@ -1,8 +1,36 @@
 import { DATA_IMAGENES } from "@/app/data/imagenes";
+import { supabase } from "@/lib/supabase/client";
 
 export const PARTNER_PCT_KEY = "partner_split_pct";
 export const PARTNER_NAME_KEY = "partner_name";
 export const DEFAULT_PARTNER_NAME = "Diego";
+
+/**
+ * Avisa a la tienda que sus datos cacheados quedaron viejos.
+ *
+ * La home y /juego/[slug] se sirven con ISR de 5 minutos, así que sin esto un
+ * precio nuevo tarda hasta ese rato en verse. Se llama después de guardar, no
+ * antes: si la escritura falla no hay nada que invalidar.
+ *
+ * Es deliberadamente silenciosa. Que falle el refresco no invalida el guardado
+ * —el dato ya está en Supabase— y no tiene sentido mostrarle al admin un error
+ * por algo que se arregla solo cuando expire el caché.
+ */
+export async function revalidarTienda(tags: Array<"catalog" | "news" | "settings">) {
+  if (!supabase) return;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+    await fetch("/api/revalidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ tags }),
+    });
+  } catch (e) {
+    console.error("[revalidarTienda] no se pudo refrescar la tienda", e);
+  }
+}
 
 export const fmt = (n: number) => n.toLocaleString("es-CL");
 export const toPrice = (v: string) => Number(v.replace(/[^0-9]/g, "")) || 0;

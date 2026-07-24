@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+/**
+ * Todo texto que venga del cliente (mensajes, nombres) pasa por aquí: un "<" o
+ * un "&" sueltos rompen el parse_mode "HTML" de Telegram y el aviso no llega.
+ */
+const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +19,17 @@ export async function POST(request: Request) {
     let texts: string[] = [];
     const shortCode = order?.short_code || "Desconocido";
     const gameName = order?.game_name || "Desconocido";
+    const salePrice = order?.sale_price || 0;
+
+    // Obtener los juegos si es un pack
+    let packContents = "";
+    if (order?.id && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+      const { data: items } = await supabase.from("order_items").select("title").eq("order_id", order.id).order("sort_order");
+      if (items && items.length > 1) { // Solo mostrar contenido si hay más de 1 ítem (es un pack)
+        packContents = "---- List Game ----\n" + items.map(i => i.title).join("\n") + "\n----End Game List ----";
+      }
+    }
 
     switch (action) {
       case "CODE_SUBMITTED":
@@ -22,9 +39,8 @@ export async function POST(request: Request) {
       case "SUPPORT_REQUEST": {
         // Viene de la tienda, no de una orden: `game_name` trae el nombre y
         // `short_code` el contacto que dejó la persona.
-        const escape = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const body = escape(String(message || "")).slice(0, 400);
-        texts.push(`🙋 <b>NUEVA CONSULTA DESDE LA TIENDA</b>\n\n<b>De:</b> ${escape(gameName)}\n<b>Contacto:</b> ${escape(shortCode)}\n\n"${body}"`);
+        const body = escapeHtml(String(message || "")).slice(0, 400);
+        texts.push(`🙋 <b>NUEVA CONSULTA DESDE LA TIENDA</b>\n\n<b>De:</b> ${escapeHtml(gameName)}\n<b>Contacto:</b> ${escapeHtml(shortCode)}\n\n"${body}"`);
         break;
       }
       case "MP_REJECTED":
@@ -39,17 +55,22 @@ export async function POST(request: Request) {
         // que debía pagar. El monto pagado viene de MP, no del navegador.
         const clp = (n: number) => `$${Number(n || 0).toLocaleString("es-CL")}`;
         const pagado = Number(pago?.monto ?? 0);
-        const listaPrecio = Number(order?.sale_price ?? 0);
+        const listaPrecio = salePrice;
         const rebaja = Number(order?.discount_amount ?? 0);
         // Lo que se le cobró ya viene con el descuento restado en `sale_price`.
         const esperado = listaPrecio;
 
         const lineas = [
-          `💳 <b>PAGO APROBADO (MERCADO PAGO)</b>`,
-          ``,
-          `<b>Orden:</b> <code>${shortCode}</code>`,
-          `<b>Juego:</b> ${gameName}`,
+          `💳 <b>RECIBIÓ UNA COMPRA DE:</b>`,
+          `- ${gameName} - ${clp(esperado)}`,
         ];
+        if (packContents) lineas.push(`\n${packContents}\n`);
+        
+        lineas.push(
+          `<b>Monto:</b> ${clp(pagado)}`,
+          ``,
+          `<b>Orden:</b> <code>${shortCode}</code>`
+        );
         if (pago?.pagador) lineas.push(`<b>Pagó:</b> ${pago.pagador}`);
         lineas.push(``, `<b>Pagado:</b> ${clp(pagado)}`, `<b>Esperado:</b> ${clp(esperado)}`);
         if (rebaja > 0) {
@@ -79,9 +100,23 @@ export async function POST(request: Request) {
         texts.push(lineas.join("\n"));
         break;
       }
-      case "RECEIPT_UPLOADED":
-        texts.push(`🧾 <b>COMPROBANTE POR VALIDAR</b>\n\nEl cliente subió su comprobante de transferencia. Revísalo en Admin → Entregas → Validación.\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}\n<b>Monto:</b> $${Number(order?.sale_price ?? 0).toLocaleString("es-CL")}`);
+      case "RECEIPT_UPLOADED": {
+        // El titular se incluye cuando viene: es el dato que permite calzar el
+        // depósito del banco con esta orden sin abrir el panel.
+        const titular = (order?.client_name || "").trim();
+        const clp = (n: number) => `$${Number(n || 0).toLocaleString("es-CL")}`;
+        
+        texts.push(
+          `🧾 <b>RECIBIÓ UNA COMPRA DE: (POR VALIDAR)</b>\n` +
+          `- ${gameName} - ${clp(salePrice)}\n\n` +
+          (packContents ? `${packContents}\n\n` : "") +
+          `<b>Monto:</b> ${clp(salePrice)}\n\n` +
+          `El cliente subió su comprobante de transferencia. Revísalo en Admin → Entregas → Validación.\n\n` +
+          `<b>Orden:</b> <code>${shortCode}</code>` +
+          (titular ? `\n<b>Transfiere:</b> ${escapeHtml(titular)}` : ""),
+        );
         break;
+      }
       case "COMPLETED":
         texts.push(`✅ <b>ENTREGA COMPLETADA</b>\n\nEl cliente confirmó que instaló el juego correctamente.\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}`);
         break;
@@ -89,9 +124,6 @@ export async function POST(request: Request) {
         texts.push(`🆘 <b>PROBLEMA REPORTADO (SOPORTE)</b>\n\nEl cliente presionó el botón de Soporte porque tuvo un problema durante la instalación.\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}`);
         break;
       case "NEW_MESSAGE": {
-        // Escapamos el mensaje del cliente porque es texto libre: si no, un
-        // "<" o "&" sueltos rompen el parse_mode "HTML" de Telegram.
-        const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const messageBody = escapeHtml(String(message || "")).slice(0, 300);
         texts.push(`💬 <b>NUEVO MENSAJE DE SOPORTE</b>\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}\n\n"${messageBody}"`);
         break;

@@ -60,6 +60,15 @@ export function EntregaWizard() {
   // instala uno, confirma, y el wizard lo lleva al siguiente.
   const [items, setItems] = useState<OrderItem[]>([]);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  // Nombre de quien hace la transferencia. `null` = el cliente todavía no lo
+  // toca, y el campo muestra lo que ya tenga la orden (p. ej. al volver tras un
+  // rechazo). No se usa un efecto para precargarlo para no arrastrar el valor
+  // viejo si la orden se recarga.
+  const [nombreTitularInput, setNombreTitularInput] = useState<string | null>(null);
+  const nombreTitular = nombreTitularInput ?? order?.client_name ?? "";
+  // Dos palabras: un nombre suelto ("Juan") no alcanza para calzarlo con el
+  // depósito que llega al banco, que viene con nombre y apellido.
+  const nombreTitularOk = nombreTitular.trim().split(/\s+/).filter(Boolean).length >= 2;
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [state, setState] = useState<WizardState>("loading");
   const [consoleType, setConsoleType] = useState<"switch1" | "switch2" | null>(null);
@@ -384,7 +393,10 @@ export function EntregaWizard() {
             const lista = await loadItems(order.id);
             const siguiente = lista.find(i => !i.completed_at);
             // Si el estado o los datos clave cambiaron, actualizamos.
-            if (data.status !== order.status || data.account_email !== order.account_email) {
+            // payment_status entra aquí porque aprobar o rechazar un comprobante
+            // no toca `status`: sin esto, con el realtime caído el cliente se
+            // quedaba mirando "comprobante en revisión" para siempre.
+            if (data.status !== order.status || data.account_email !== order.account_email || data.payment_status !== order.payment_status) {
               setOrder(data as Order);
               determineNextState(data as Order, lista);
             } else if (state === "waiting_setup" && siguiente?.account_email && data.status === "ready") {
@@ -402,7 +414,7 @@ export function EntregaWizard() {
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [state, order?.id, order?.status, order?.account_email]);
+  }, [state, order?.id, order?.status, order?.account_email, order?.payment_status]);
 
   // Chat de soporte: carga el historial y se suscribe a mensajes nuevos en
   // tiempo real mientras la burbuja está activa (mismo patrón de canal/limpieza
@@ -575,15 +587,26 @@ export function EntregaWizard() {
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("comprobantes").getPublicUrl(path);
       const url = pub.publicUrl;
-      const { error: updErr } = await supabase.from("orders").update({ receipt_url: url, payment_status: "pending" }).eq("id", order.id);
+      // El nombre viaja en el mismo update que el comprobante: en transferencia
+      // es el único dato que permite calzar el depósito del banco con la orden
+      // (en Mercado Pago lo trae solo el webhook, con los datos del pagador).
+      const nombre = nombreTitular.trim();
+      const patch = {
+        receipt_url: url,
+        payment_status: "pending" as const,
+        ...(nombre ? { client_name: nombre } : {}),
+      };
+      const { error: updErr } = await supabase.from("orders").update(patch).eq("id", order.id);
       if (updErr) throw updErr;
-      setOrder({ ...order, receipt_url: url, payment_status: "pending" });
+      const ordenActualizada = { ...order, ...patch };
+      setOrder(ordenActualizada);
 
       // Avisar por Telegram: esto sí requiere que el admin entre a validar.
+      // Se manda la orden YA actualizada para que el aviso incluya el nombre.
       fetch("/api/notify-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "RECEIPT_UPLOADED", order }),
+        body: JSON.stringify({ action: "RECEIPT_UPLOADED", order: ordenActualizada }),
       }).catch(err => console.error("Error sending notification", err));
     } catch (e) {
       console.error("[entrega] error subiendo comprobante", e);
@@ -1284,7 +1307,33 @@ export function EntregaWizard() {
                 </button>
               )}
 
-              <label className={`flex w-full items-center justify-center gap-2 rounded-full py-2 text-xs font-black uppercase tracking-wide ${uploadingReceipt ? "bg-white/10 text-gray-400" : "cursor-pointer bg-white text-black"}`}>
+              {/* Nombre del titular: va antes de la foto porque es lo que nos
+                  permite calzar el depósito que llega al banco con esta orden.
+                  Sin él, dos compras del mismo monto el mismo día son
+                  indistinguibles. */}
+              <label className="mb-2.5 block">
+                <span className="mb-1 block text-[10.5px] font-bold text-gray-400">
+                  ¿A nombre de quién viene la transferencia?
+                </span>
+                <input
+                  type="text"
+                  value={nombreTitular}
+                  onChange={(e) => setNombreTitularInput(e.target.value)}
+                  placeholder="Nombre y apellido"
+                  autoComplete="name"
+                  disabled={uploadingReceipt}
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-[13px] font-semibold text-white outline-none transition-colors placeholder:font-normal placeholder:text-gray-600 focus:border-yellow-500/50 disabled:opacity-60"
+                />
+                {nombreTitular.trim() !== "" && !nombreTitularOk && (
+                  <span className="mt-1 block text-[10.5px] text-yellow-500">
+                    Escribe nombre y apellido, tal como aparece en tu cuenta.
+                  </span>
+                )}
+              </label>
+
+              <label className={`flex w-full items-center justify-center gap-2 rounded-full py-2 text-xs font-black uppercase tracking-wide ${
+                uploadingReceipt || !nombreTitularOk ? "cursor-not-allowed bg-white/10 text-gray-500" : "cursor-pointer bg-white text-black"
+              }`}>
                 {uploadingReceipt ? (
                   <><Loader2 size={15} className="animate-spin" /> Subiendo...</>
                 ) : (
@@ -1294,13 +1343,15 @@ export function EntregaWizard() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  disabled={uploadingReceipt}
+                  disabled={uploadingReceipt || !nombreTitularOk}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) subirComprobante(f); e.currentTarget.value = ""; }}
                 />
               </label>
 
               <p className="mt-2 text-center text-[10.5px] leading-snug text-gray-500">
-                Al confirmar tu pago continúas con la instalación.
+                {nombreTitularOk
+                  ? "Al confirmar tu pago continúas con la instalación."
+                  : "Escribe el nombre del titular para poder subir tu comprobante."}
               </p>
             </div>
 
@@ -1568,9 +1619,16 @@ export function EntregaWizard() {
               <p className="text-[8px] text-gray-500 uppercase tracking-widest text-center">Tiempo estimado: 5 a 120 min</p>
             </div>
 
-            <button onClick={() => setState("input_code")} className="mt-1 text-[8px] text-gray-500 hover:text-white uppercase tracking-widest underline decoration-gray-700 underline-offset-4 transition-colors">
-              ¿Te equivocaste de código? Volver
-            </button>
+            {/* Botón para cambiar código si demoró mucho */}
+            <div className="mt-2 w-full max-w-[280px] rounded-xl border border-white/10 bg-white/5 p-3 text-center">
+              <p className="text-[10px] text-gray-400 mb-2 leading-tight">
+                ¿Se demoró mucho tu entrega y te cambió el código de la consola?
+              </p>
+              <button onClick={() => setState("input_code")} className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 px-3 py-2 text-[10px] font-bold text-white uppercase tracking-widest transition-colors">
+                <KeyRound size={12} />
+                Haz click aquí para cambiarlo
+              </button>
+            </div>
           </motion.div>
         )}
 

@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 import { SETTING_KEYS } from "@/lib/settings";
 import type { Provider, SettingsState } from "../_types";
 import { Descuentos } from "./Descuentos";
-import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY, toPct, toPrice } from "../_helpers";
+import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY, revalidarTienda, toPct, toPrice } from "../_helpers";
 
 // Días de garantía: entero entre 1 y 90. Un 0 dejaría la entrega vencida al
 // instante y le borraría la cuenta al cliente en el siguiente cron.
@@ -53,6 +53,9 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
         saveSetting(PARTNER_PCT_KEY, toPct(form.partnerSplitPct)),
         saveTextSetting(PARTNER_NAME_KEY, form.partnerName.trim() || DEFAULT_PARTNER_NAME),
       ]);
+      // El precio de Nintendo Online y el incremento de packs se muestran en la
+      // tienda, así que hay que botar su caché para que el cambio se vea ya.
+      revalidarTienda(["settings", "catalog"]);
       showNotice("success", "Configuración guardada.");
     } catch {
       showNotice("error", "No se pudo guardar.");
