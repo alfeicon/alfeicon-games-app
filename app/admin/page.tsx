@@ -183,7 +183,9 @@ export default function AdminPage() {
       window.clearTimeout(idleTimer);
       idleTimer = window.setTimeout(async () => {
         showNotice("info", "Sesión cerrada por inactividad", true);
-        await supabase.auth.signOut();
+        if (supabase) {
+          await supabase.auth.signOut();
+        }
         resetAll();
         window.location.href = "/admin/login";
       }, 15 * 60 * 1000);
