@@ -323,11 +323,12 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                 </div>
               </div>
               
-              <div className="grid grid-cols-[36px_1fr_100px_130px_100px] gap-3 px-3 text-[9px] font-black uppercase tracking-widest text-gray-500">
+              <div className="grid grid-cols-[36px_1fr_100px_130px_70px_100px] gap-3 px-3 text-[9px] font-black uppercase tracking-widest text-gray-500">
                 <div />
                 <div>Juego</div>
                 <div>Costo ($)</div>
                 <div>eShop ($)</div>
+                <div>Actual ($)</div>
                 <div>Final ($)</div>
               </div>
 
@@ -357,6 +358,9 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                       <button onClick={() => fetchQuickEshopPrice(game.id, game.title)} className="shrink-0 rounded-lg bg-white/10 p-1.5 text-gray-400 hover:bg-white/20 hover:text-white">
                         <Search size={12} />
                       </button>
+                    </div>
+                    <div className="flex w-[70px] items-center">
+                      <span className="text-xs text-gray-500 line-through decoration-white/20">{game.price}</span>
                     </div>
                     <div className="w-[100px]">
                       <input value={qf.price} onChange={e => {
