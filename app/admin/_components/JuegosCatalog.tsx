@@ -347,7 +347,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                 const qf = quickForms[game.id] || { cost_price: "", eshop_price: "", price: "" };
                 return (
                   <div key={game.id} className="flex items-center gap-3 rounded-xl bg-white/5 p-2 pr-4 transition-all hover:bg-white/10">
-                    <img src={game.image_url} alt="" className="aspect-square w-9 shrink-0 rounded-lg object-cover" />
+                    <img src={game.image_url || ""} alt="" className="aspect-square w-9 shrink-0 rounded-lg object-cover" />
                     <div className="min-w-0 flex-1 truncate text-xs font-bold text-white">
                       {game.title}
                     </div>
