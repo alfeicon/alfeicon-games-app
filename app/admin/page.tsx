@@ -3,9 +3,9 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff,
+  AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, ChevronLeft,
   Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X, PiggyBank,
-  Pin, PinOff, RefreshCw, Search, Plus, Store
+  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -80,11 +80,13 @@ export default function AdminPage() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [menuClosing, setMenuClosing] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [noticeLeaving, setNoticeLeaving] = useState(false);
+  type AppNotice = { id: string; type: "success" | "error" | "info"; text: string; timestamp: number; leaving: boolean; showToast: boolean };
+  const [notices, setNotices] = useState<AppNotice[]>([]);
+  const [noticesOpen, setNoticesOpen] = useState(false);
+  const [noticesClosing, setNoticesClosing] = useState(false);
+  const [bellY, setBellY] = useState<number | null>(null);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const noticeTimer = useRef<number | null>(null);
   // Arrastre del bottom sheet en móvil: el dedo lo baja y al soltar decide
   // entre cerrar o volver a su sitio.
   const [sheetDrag, setSheetDrag] = useState(0);
@@ -108,15 +110,27 @@ export default function AdminPage() {
   const [firstLoadDone, setFirstLoadDone] = useState(false);
   const didLoadRef = useRef(false);
 
+  const closeNoticesPanel = useCallback(() => {
+    setNoticesClosing(true);
+    setTimeout(() => {
+      setNoticesOpen(false);
+      setNoticesClosing(false);
+    }, 300);
+  }, []);
+
   const showNotice = useCallback((type: "success" | "error" | "info", text: string, playSound = false) => {
-    if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    setNoticeLeaving(false);
-    setNotice({ type: type === "info" ? "success" : type, text });
-    // Se desmonta en dos pasos para que alcance a correr la animación de salida.
-    noticeTimer.current = window.setTimeout(() => {
-      setNoticeLeaving(true);
-      window.setTimeout(() => { setNotice(null); setNoticeLeaving(false); }, 220);
-    }, TOAST_MS) as unknown as number;
+    const id = Date.now().toString() + Math.random().toString();
+    const timestamp = Date.now();
+    const noticeType = type === "info" ? "success" : type;
+    
+    setNotices(prev => [{ id, type: noticeType, text, timestamp, leaving: false, showToast: true }, ...prev]);
+    
+    window.setTimeout(() => {
+      setNotices(prev => prev.map(n => n.id === id ? { ...n, leaving: true } : n));
+      window.setTimeout(() => {
+        setNotices(prev => prev.map(n => n.id === id ? { ...n, showToast: false } : n));
+      }, 220);
+    }, TOAST_MS);
 
     if (playSound) {
       try {
@@ -145,8 +159,8 @@ export default function AdminPage() {
       } catch(e) {}
     }
 
-    // Reportar a Telegram si es un error
-    if (type === "error") {
+    // Reportar a Telegram si es un error, ignorando errores de búsqueda esperados
+    if (type === "error" && text !== "No game found" && text !== "No se encontró el juego en eShop") {
       fetch("/api/notify-error", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -989,26 +1003,111 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* Toast — descartable al tocarlo, con barra de tiempo restante */}
-        {notice && (
-          <button
-            onClick={() => { if (noticeTimer.current) clearTimeout(noticeTimer.current); setNotice(null); setNoticeLeaving(false); }}
-            style={{ ["--toast-ms" as string]: `${TOAST_MS}ms` }}
-            className={`fixed bottom-[86px] left-4 right-4 z-[100] overflow-hidden rounded-2xl text-left shadow-2xl backdrop-blur-md sm:bottom-6 sm:left-auto sm:right-6 sm:w-auto sm:min-w-[280px] ${
-              noticeLeaving ? "admin-toast-out" : "admin-toast"
-            } ${
-              notice.type === "success"
-                ? "border border-green-500/25 bg-green-500/12 text-green-300"
-                : "border border-red-500/25 bg-red-500/12 text-red-300"
-            }`}>
-            <span className="flex items-center gap-2.5 px-4 py-3 text-sm font-semibold">
-              {notice.type === "success"
-                ? <CheckCircle2 size={15} className="shrink-0" />
-                : <AlertCircle size={15} className="shrink-0" />}
-              {notice.text}
-            </span>
-            <span className={`admin-toast-bar block h-0.5 w-full ${notice.type === "success" ? "bg-green-400/50" : "bg-red-400/50"}`} />
+        {/* Trigger invisible en el borde derecho (Hover para asomar, Clic para abrir) */}
+        <div className="group fixed bottom-0 right-0 top-0 z-[90] hidden w-6 cursor-pointer items-center justify-center transition-all hover:w-16 sm:flex"
+             onClick={() => setNoticesOpen(true)}
+             onMouseMove={(e) => setBellY(e.clientY)}
+             onMouseLeave={() => setBellY(null)}
+             aria-label="Abrir notificaciones">
+          
+          {/* Zona de hover (gradiente sutil) */}
+          <div className="absolute inset-y-0 right-0 w-full bg-gradient-to-l from-white/[0.03] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+          
+          {/* Indicador visual que se asoma */}
+          <div 
+            style={bellY !== null ? { top: `${bellY}px`, marginTop: '-32px' } : {}}
+            className="absolute right-0 flex h-16 w-12 translate-x-full items-center justify-start rounded-l-2xl border border-r-0 border-white/[0.08] bg-[#0c0f12]/80 pl-2 text-white/40 shadow-[0_0_20px_rgba(0,0,0,0.5)] backdrop-blur-md transition-all duration-300 group-hover:translate-x-0 group-hover:text-white group-hover:shadow-[0_0_30px_rgba(255,255,255,0.05)]">
+            <ChevronLeft size={16} className="shrink-0 transition-transform duration-300 group-hover:-translate-x-1" />
+            <div className="relative ml-1">
+              <Bell size={16} />
+              {notices.length > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-[#0c0f12] bg-blue-500 px-1 text-[8px] font-black text-white">
+                  {notices.length}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Botón tradicional de campana (Sólo visible en móviles) */}
+        <div className="fixed bottom-4 right-4 z-[90] sm:hidden">
+          <button onClick={() => setNoticesOpen(true)} aria-label="Notificaciones"
+            className="admin-press relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-[#0c0f12]/90 text-gray-400 shadow-2xl backdrop-blur-md">
+            <Bell size={20} />
+            {notices.length > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-[#0c0f12] bg-blue-500 px-1 text-[10px] font-black text-white">
+                {notices.length}
+              </span>
+            )}
           </button>
+        </div>
+
+        {/* Stacked Toasts (Esquina superior derecha) */}
+        <div className="pointer-events-none fixed right-4 top-16 z-[100] flex flex-col items-end gap-2 sm:right-6 sm:top-20">
+          {notices.filter(n => n.showToast).slice(0, 4).map(notice => (
+            <div key={notice.id}
+              className={`pointer-events-auto relative overflow-hidden rounded-2xl border px-4 py-3 text-left shadow-2xl backdrop-blur-md transition-all sm:min-w-[280px] sm:max-w-sm ${
+                notice.leaving ? "admin-toast-out" : "admin-toast"
+              } ${
+                notice.type === "success"
+                  ? "border-green-500/25 bg-green-500/12 text-green-300"
+                  : "border-red-500/25 bg-red-500/12 text-red-300"
+              }`}>
+              <div className="flex items-center gap-2.5 text-sm font-semibold">
+                {notice.type === "success" ? <CheckCircle2 size={15} className="shrink-0" /> : <AlertCircle size={15} className="shrink-0" />}
+                <span className="flex-1">{notice.text}</span>
+                <button onClick={() => setNotices(prev => prev.map(n => n.id === notice.id ? { ...n, leaving: true, showToast: false } : n))}
+                  className="rounded-lg p-1 opacity-50 hover:bg-white/10 hover:opacity-100">
+                  <X size={14} />
+                </button>
+              </div>
+              <span style={{ ["--toast-ms" as string]: `${TOAST_MS}ms` }} className={`admin-toast-bar absolute bottom-0 left-0 h-0.5 w-full ${notice.type === "success" ? "bg-green-400/50" : "bg-red-400/50"}`} />
+            </div>
+          ))}
+        </div>
+
+        {/* Panel Lateral Historial de Notificaciones */}
+        {(noticesOpen || noticesClosing) && (
+          <div className="fixed inset-0 z-[110] flex justify-end">
+            <div className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${noticesClosing ? "opacity-0" : "opacity-100"}`} onClick={closeNoticesPanel} />
+            <div className={`relative flex w-full max-w-sm flex-col border-l border-white/10 bg-[#0c0f12] shadow-2xl ${noticesClosing ? "admin-drawer-out" : "admin-drawer-in"}`}>
+              <div className="flex items-center justify-between border-b border-white/[0.05] p-5">
+                <div className="flex items-center gap-3">
+                  <Bell size={18} className="text-white" />
+                  <h2 className="text-sm font-black uppercase tracking-widest text-white">Notificaciones</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setNotices([])} title="Limpiar historial" className="rounded-lg p-2 text-gray-500 hover:bg-white/10 hover:text-white">
+                    <Trash2 size={15} />
+                  </button>
+                  <button onClick={closeNoticesPanel} className="rounded-lg p-2 text-gray-500 hover:bg-white/10 hover:text-white">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-5">
+                {notices.length === 0 ? (
+                  <p className="mt-10 text-center text-xs font-bold uppercase tracking-widest text-gray-600">No hay notificaciones</p>
+                ) : (
+                  <div className="space-y-3">
+                    {notices.map(notice => (
+                      <div key={notice.id} className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                        <div className={`mt-0.5 shrink-0 ${notice.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                          {notice.type === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <p className="text-xs font-medium text-white/90">{notice.text}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600">
+                            {new Date(notice.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

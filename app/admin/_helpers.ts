@@ -34,6 +34,10 @@ export async function revalidarTienda(tags: Array<"catalog" | "news" | "settings
 
 export const fmt = (n: number) => n.toLocaleString("es-CL");
 export const toPrice = (v: string) => Number(v.replace(/[^0-9]/g, "")) || 0;
+export const formatPriceInput = (v: string) => {
+  const n = v.replace(/[^0-9]/g, "");
+  return n ? parseInt(n, 10).toLocaleString("es-CL") : "";
+};
 export const toPct = (v: string) => Math.min(100, Math.max(0, Number(v.replace(/[^0-9]/g, "")) || 0));
 export const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });

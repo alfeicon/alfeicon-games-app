@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGamesAmerica } from "nintendo-switch-eshop";
 
+const normalizeTitle = (title: string) => {
+  return title
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // quita acentos
+    .replace(/[™®©]/gi, "") // quita símbolos de marca registrada
+    .replace(/[-:]/g, " ") // reemplaza guiones y dos puntos por espacios
+    .replace(/[^\w\s]/g, "") // quita otros caracteres especiales
+    .replace(/\s+/g, " ") // colapsa espacios
+    .trim();
+};
+
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get("q");
+  const imgUrl = req.nextUrl.searchParams.get("img");
   
   if (!query) {
     return NextResponse.json({ error: "Missing query" }, { status: 400 });
@@ -11,13 +24,60 @@ export async function GET(req: NextRequest) {
   try {
     const games = await getGamesAmerica();
     
-    const searchTerms = query.toLowerCase().trim().split(' ').filter(Boolean);
+    let matches: any[] = [];
     
-    // Find games matching all terms
-    const matches = games.filter(g => {
-      const title = g.title.toLowerCase();
-      return searchTerms.every(term => title.includes(term));
-    });
+    // 1. Intentar hacer match perfecto usando el slug extraído de la URL de la imagen
+    let imgSlug = "";
+    if (imgUrl) {
+      const match = imgUrl.match(/\/games\/switch\/[^/]+\/([^/]+)/);
+      if (match && match[1]) {
+        imgSlug = match[1];
+        matches = games.filter(g => {
+          const gameSlug = g.slug || (g.url ? g.url.split('/').filter(Boolean).pop() : "");
+          return gameSlug === imgSlug;
+        });
+      }
+    }
+    
+    // 2. Si no hay imagen, no tiene slug válido o no encontró match, buscamos por texto
+    if (matches.length === 0) {
+      const queryNormalized = normalizeTitle(query);
+      const searchTerms = queryNormalized.split(' ').filter(Boolean);
+      
+      matches = games.filter(g => {
+        const title = normalizeTitle(g.title);
+        return searchTerms.every(term => title.includes(term));
+      });
+    }
+
+    // 3. Fallback absoluto: Si no encontró nada en Algolia pero tenemos el slug, intentar scrapear directo
+    if (matches.length === 0 && imgSlug) {
+      try {
+        const clRes = await fetch(`https://www.nintendo.com/es-cl/store/products/${imgSlug}/`);
+        if (clRes.ok) {
+          const clText = await clRes.text();
+          const priceMatch = clText.match(/v_price=([0-9.]+)/);
+          const titleMatch = clText.match(/<title[^>]*>([^<]+)<\/title>/);
+          let chilePrice = 0;
+          if (priceMatch) {
+            chilePrice = Math.round(parseFloat(priceMatch[1]));
+          }
+          if (chilePrice > 0) {
+             let title = query;
+             if (titleMatch) {
+               title = titleMatch[1].split(' para Nintendo Switch')[0].split(' - ')[0];
+             }
+             return NextResponse.json({
+               title,
+               priceUSD: 0,
+               priceCLP_exact: chilePrice
+             });
+          }
+        }
+      } catch (e) {
+        console.error("Direct fallback slug fetch failed", e);
+      }
+    }
 
     if (matches.length === 0) {
       return NextResponse.json({ error: "No game found" }, { status: 404 });

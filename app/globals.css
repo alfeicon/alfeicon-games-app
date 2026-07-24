@@ -4516,3 +4516,22 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .admin-topbar-progress { animation: none; opacity: 0.5; }
 }
+
+/* Drawer Animations for Notifications */
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes drawerOut {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+.admin-drawer-in {
+  animation: drawerIn 350ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.admin-drawer-out {
+  animation: drawerOut 250ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}

@@ -1,13 +1,13 @@
 "use client";
 
-import { FormEvent, useMemo, useState, useEffect } from "react";
+import { FormEvent, useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Gamepad2, HardDrive, ImagePlus, Loader2, Plus, Save, Search, Trash2, X, Zap } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import GameCard from "@/components/GameCard";
 import GameStoreCard from "@/components/app-store/GameStoreCard";
 import type { AdminGame } from "../_types";
-import { fmt, toPrice, findImage } from "../_helpers";
+import { fmt, toPrice, findImage, formatPriceInput } from "../_helpers";
 
 type GameForm = {
   title: string; price: string; cost_price: string; eshop_price: string; image_url: string;
@@ -21,13 +21,15 @@ const emptyForm: GameForm = {
 };
 
 const toForm = (g: AdminGame): GameForm => ({
-  title: g.title, price: String(g.price),
-  cost_price: g.cost_price ? String(g.cost_price) : "",
-  eshop_price: g.eshop_price ? String(g.eshop_price) : "",
+  title: g.title, 
+  price: formatPriceInput(String(g.price)),
+  cost_price: g.cost_price ? formatPriceInput(String(g.cost_price)) : "",
+  eshop_price: g.eshop_price ? formatPriceInput(String(g.eshop_price)) : "",
   image_url: g.image_url || "",
   storage_required: g.storage_required || "",
   console: g.console === "switch2" ? "switch2" : "switch",
-  is_offer: g.is_offer, offer_price: g.offer_price ? String(g.offer_price) : "",
+  is_offer: g.is_offer, 
+  offer_price: g.offer_price ? formatPriceInput(String(g.offer_price)) : "",
   is_active: g.is_active,
 });
 
@@ -59,6 +61,8 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
   const [loadingEshop, setLoadingEshop] = useState(false);
   const [isQuickEdit, setIsQuickEdit] = useState(false);
   const [quickForms, setQuickForms] = useState<Record<string, { cost_price: string; eshop_price: string; price: string }>>({});
+  const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
+  const abortFetchRef = useRef(false);
 
   const selectedGame = useMemo(() => games.find(g => g.id === selectedId) ?? null, [games, selectedId]);
 
@@ -67,18 +71,18 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       const initial: Record<string, { cost_price: string; eshop_price: string; price: string }> = {};
       games.forEach(g => {
         initial[g.id] = { 
-          cost_price: g.cost_price ? String(g.cost_price) : "", 
-          eshop_price: g.eshop_price ? String(g.eshop_price) : "", 
-          price: String(g.price) 
+          cost_price: g.cost_price ? formatPriceInput(String(g.cost_price)) : "", 
+          eshop_price: g.eshop_price ? formatPriceInput(String(g.eshop_price)) : "", 
+          price: formatPriceInput(String(g.price)) 
         };
       });
       setQuickForms(initial);
     }
   }, [isQuickEdit, games]);
 
-  const fetchQuickEshopPrice = async (gameId: string, title: string) => {
+  const fetchQuickEshopPrice = async (gameId: string, title: string, imgUrl?: string) => {
     try {
-      const res = await fetch(`/api/eshop-price?q=${encodeURIComponent(title)}`);
+      const res = await fetch(`/api/eshop-price?q=${encodeURIComponent(title)}&img=${encodeURIComponent(imgUrl || "")}`);
       const data = await res.json();
       if (!res.ok) return;
       const priceUSD = data.priceUSD; 
@@ -88,45 +92,58 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       setQuickForms(prev => {
         const current = prev[gameId];
         if (!current) return prev;
-        const nextEshop = String(priceCLP);
-        const nextPrice = calcSalePrice(nextEshop, current.cost_price) || current.price;
-        return { ...prev, [gameId]: { ...current, eshop_price: nextEshop, price: nextPrice } };
+        const nextEshop = formatPriceInput(String(priceCLP));
+        const nextPrice = calcSalePrice(nextEshop, current.cost_price);
+        return { ...prev, [gameId]: { ...current, eshop_price: nextEshop, price: nextPrice ? formatPriceInput(nextPrice) : current.price } };
       });
     } catch (err) {}
   };
 
   const autoFetchAllPrices = async () => {
-    if (!confirm("Esto buscará en la eShop el precio de todos los juegos filtrados que NO tengan precio eShop actualmente. Tomará unos segundos por juego. ¿Continuar?")) return;
+    const targetGames = selectedGames.size > 0 ? filtered.filter(g => selectedGames.has(g.id)) : filtered;
+    if (!confirm(`Esto buscará en la eShop el precio de ${targetGames.length} juegos (los que NO tengan precio). Tomará unos segundos por juego. ¿Continuar?`)) return;
     
-    const gamesToFetch = filtered.filter(g => {
+    const gamesToFetch = targetGames.filter(g => {
       const current = quickForms[g.id];
       return !current?.eshop_price || toPrice(current.eshop_price) === 0;
     });
     
     const total = gamesToFetch.length;
     if (total === 0) {
-      return showNotice("info", "Todos los juegos visibles ya tienen precio eShop.");
+      return showNotice("info", "Los juegos seleccionados ya tienen precio eShop.");
     }
 
     setLoading(true);
+    abortFetchRef.current = false;
     let fetchCount = 0;
+    let wasCancelled = false;
     for (const game of gamesToFetch) {
+      if (abortFetchRef.current) {
+        wasCancelled = true;
+        break;
+      }
       fetchCount++;
       showNotice("info", `${game.title} # ${fetchCount} / ${total} ..... procesando`);
-      await fetchQuickEshopPrice(game.id, game.title);
+      await fetchQuickEshopPrice(game.id, game.title, game.image_url || "");
       showNotice("success", `${game.title} # ${fetchCount} / ${total} ..... completado`);
       await new Promise(r => setTimeout(r, 600)); // Evitar bloqueos
     }
     setLoading(false);
-    showNotice("success", `Auto-completado finalizado. ${fetchCount} actualizados.`);
+    if (wasCancelled) {
+      showNotice("error", `Proceso cancelado. ${fetchCount} actualizados.`);
+    } else {
+      showNotice("success", `Auto-completado finalizado. ${fetchCount} actualizados.`);
+    }
   };
 
   const saveQuickEdits = async () => {
     if (!supabase) return;
+    const targetGames = selectedGames.size > 0 ? filtered.filter(g => selectedGames.has(g.id)) : filtered;
+    
     setLoading(true);
     let errorCount = 0;
     let savedCount = 0;
-    for (const game of filtered) {
+    for (const game of targetGames) {
       const qf = quickForms[game.id];
       if (!qf) continue;
       const cp = toPrice(qf.cost_price);
@@ -180,13 +197,23 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
   const calcSalePrice = (eshopStr: string, costStr: string) => {
     const eshop = toPrice(eshopStr);
     const cost = toPrice(costStr);
-    if (eshop <= 0) return "";
+    if (eshop <= 0 && cost <= 0) return "";
     
-    let baseMarketing = Math.round((eshop * 0.47) / 1000) * 1000 - 10;
-    let baseMargin = cost > 0 ? Math.round(((cost + 9000) / 0.965) / 1000) * 1000 - 10 : 0;
+    // 1. Costo Real Ajustado (+35% caídas)
+    const costoReal = cost * 1.35;
     
-    let finalBase = Math.max(baseMarketing, baseMargin);
+    // 2. Precio Piso de Seguridad (costoReal + publi 3500 + ganancia 4000) / factor 0.965
+    const precioPiso = (costoReal + 3500 + 4000) / 0.965;
+    
+    // 3. Comparar 53% OFF (0.47) vs Precio Piso
+    const precioEshop47 = eshop * 0.47;
+    let calculated = Math.max(precioEshop47, precioPiso);
+    
+    // 4. Redondear a .990
+    let finalBase = Math.round(calculated / 1000) * 1000 - 10;
+    
     if (finalBase < 990) finalBase = 990;
+    
     return String(finalBase);
   };
 
@@ -198,7 +225,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
     setLoadingEshop(true);
     showNotice("success", "Buscando en eShop...");
     try {
-      const res = await fetch(`/api/eshop-price?q=${encodeURIComponent(form.title)}`);
+      const res = await fetch(`/api/eshop-price?q=${encodeURIComponent(form.title)}&img=${encodeURIComponent(form.image_url || "")}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No encontrado");
       
@@ -207,9 +234,9 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       const priceCLP = data.priceCLP_exact > 0 ? data.priceCLP_exact : priceCLP_approx;
       
       setForm(f => {
-        const nextEshop = String(priceCLP);
+        const nextEshop = formatPriceInput(String(priceCLP));
         const nextPrice = calcSalePrice(nextEshop, f.cost_price);
-        return { ...f, eshop_price: nextEshop, price: nextPrice || f.price };
+        return { ...f, eshop_price: nextEshop, price: nextPrice ? formatPriceInput(nextPrice) : f.price };
       });
       
       if (data.priceCLP_exact > 0) {
@@ -325,17 +352,30 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
               <div className="mb-2 flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3">
                 <p className="text-xs font-semibold text-white/70">Modo de Edición Rápida ({filtered.length} juegos visibles)</p>
                 <div className="flex gap-2">
-                  <button onClick={autoFetchAllPrices} className="flex items-center gap-1.5 rounded-lg bg-blue-500/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-400 transition-all hover:bg-blue-500/30">
-                    <Search size={12} strokeWidth={3} /> Auto eShop
+                  {loading && (
+                    <button onClick={() => { abortFetchRef.current = true; }} className="flex items-center gap-1.5 rounded-lg bg-red-500/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-400 transition-all hover:bg-red-500/30">
+                      <X size={12} strokeWidth={3} /> Cancelar
+                    </button>
+                  )}
+                  <button onClick={autoFetchAllPrices} disabled={loading} className={`flex items-center gap-1.5 rounded-lg bg-blue-500/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-400 transition-all ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-500/30'}`}>
+                    <Search size={12} strokeWidth={3} /> Auto eShop {selectedGames.size > 0 ? `(${selectedGames.size})` : ""}
                   </button>
-                  <button onClick={saveQuickEdits} className="flex items-center gap-1.5 rounded-lg bg-[#33FF00]/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#33FF00] transition-all hover:bg-[#33FF00]/30">
-                    <Save size={12} strokeWidth={3} /> Guardar Todos
+                  <button onClick={saveQuickEdits} disabled={loading} className={`flex items-center gap-1.5 rounded-lg bg-[#33FF00]/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#33FF00] transition-all ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#33FF00]/30'}`}>
+                    <Save size={12} strokeWidth={3} /> Guardar {selectedGames.size > 0 ? `(${selectedGames.size})` : "Todos"}
                   </button>
                 </div>
               </div>
               
               <div className="grid grid-cols-[36px_1fr_100px_130px_70px_100px] gap-3 px-3 text-[9px] font-black uppercase tracking-widest text-gray-500">
-                <div />
+                <div className="flex items-center justify-center">
+                  <input type="checkbox" 
+                    checked={filtered.length > 0 && selectedGames.size === filtered.length}
+                    onChange={e => {
+                      if (e.target.checked) setSelectedGames(new Set(filtered.map(g => g.id)));
+                      else setSelectedGames(new Set());
+                    }}
+                    className="h-3 w-3 rounded border-white/20 bg-white/10 accent-blue-500" />
+                </div>
                 <div>Juego</div>
                 <div>Costo ($)</div>
                 <div>eShop ($)</div>
@@ -347,35 +387,46 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                 const qf = quickForms[game.id] || { cost_price: "", eshop_price: "", price: "" };
                 return (
                   <div key={game.id} className="flex items-center gap-3 rounded-xl bg-white/5 p-2 pr-4 transition-all hover:bg-white/10">
-                    <img src={game.image_url || ""} alt="" className="aspect-square w-9 shrink-0 rounded-lg object-cover" />
-                    <div className="min-w-0 flex-1 truncate text-xs font-bold text-white">
-                      {game.title}
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center">
+                      <input type="checkbox"
+                        checked={selectedGames.has(game.id)}
+                        onChange={e => {
+                          const next = new Set(selectedGames);
+                          if (e.target.checked) next.add(game.id);
+                          else next.delete(game.id);
+                          setSelectedGames(next);
+                        }}
+                        className="h-3 w-3 rounded border-white/20 bg-white/10 accent-blue-500" />
+                    </div>
+                    <div className="min-w-0 flex-1 flex items-center gap-2 truncate text-xs font-bold text-white">
+                      <img src={game.image_url || ""} alt="" className="aspect-square w-8 shrink-0 rounded-lg object-cover" />
+                      <span className="truncate">{game.title}</span>
                     </div>
                     <div className="w-[100px]">
                       <input value={qf.cost_price} onChange={e => {
-                        const val = e.target.value;
+                        const val = formatPriceInput(e.target.value);
                         setQuickForms(prev => ({
-                          ...prev, [game.id]: { ...qf, cost_price: val, price: calcSalePrice(qf.eshop_price, val) || qf.price }
+                          ...prev, [game.id]: { ...qf, cost_price: val, price: formatPriceInput(calcSalePrice(qf.eshop_price, val)) || qf.price }
                         }));
                       }} placeholder="0" className="w-full rounded-lg bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none focus:bg-black/60" />
                     </div>
                     <div className="flex w-[130px] gap-1">
                       <input value={qf.eshop_price} onChange={e => {
-                        const val = e.target.value;
+                        const val = formatPriceInput(e.target.value);
                         setQuickForms(prev => ({
-                          ...prev, [game.id]: { ...qf, eshop_price: val, price: calcSalePrice(val, qf.cost_price) || qf.price }
+                          ...prev, [game.id]: { ...qf, eshop_price: val, price: formatPriceInput(calcSalePrice(val, qf.cost_price)) || qf.price }
                         }));
                       }} placeholder="0" className="w-full min-w-0 flex-1 rounded-lg bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none focus:bg-black/60" />
-                      <button onClick={() => fetchQuickEshopPrice(game.id, game.title)} className="shrink-0 rounded-lg bg-white/10 p-1.5 text-gray-400 hover:bg-white/20 hover:text-white">
+                      <button onClick={() => fetchQuickEshopPrice(game.id, game.title, game.image_url || "")} className="shrink-0 rounded-lg bg-white/10 p-1.5 text-gray-400 hover:bg-white/20 hover:text-white">
                         <Search size={12} />
                       </button>
                     </div>
                     <div className="flex w-[70px] items-center">
-                      <span className="text-xs text-gray-500 line-through decoration-white/20">{game.price}</span>
+                      <span className="text-xs text-gray-500 line-through decoration-white/20">{formatPriceInput(String(game.price))}</span>
                     </div>
                     <div className="w-[100px]">
                       <input value={qf.price} onChange={e => {
-                        setQuickForms(prev => ({ ...prev, [game.id]: { ...qf, price: e.target.value } }));
+                        setQuickForms(prev => ({ ...prev, [game.id]: { ...qf, price: formatPriceInput(e.target.value) } }));
                       }} placeholder="0" className="w-full rounded-lg bg-[#33FF00]/10 px-2.5 py-1.5 text-xs font-bold text-[#33FF00] outline-none focus:bg-[#33FF00]/20" />
                     </div>
                   </div>
@@ -450,125 +501,160 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
               </div>
 
               {/* Form */}
-              <div className="flex-1 overflow-y-auto pb-6">
-                <form onSubmit={save} className="space-y-5 p-5">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="sm:col-span-2">
-                      <span className={LABEL}>Nombre</span>
+              <div className="flex-1 overflow-y-auto pb-24">
+                <form onSubmit={save} className="space-y-6 p-5">
+                  
+                  {/* General */}
+                  <div className="rounded-2xl border border-white/[0.05] bg-white/[0.02] p-4 space-y-4">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-2">Información General</h3>
+                    
+                    <label className="block">
+                      <span className={LABEL}>Nombre del juego</span>
                       <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
-                        className={INPUT} placeholder="Nombre del juego" />
-                    </label>
-                    <label>
-                      <span className={LABEL}>Precio eShop (oficial en CLP)</span>
-                      <div className="flex gap-2">
-                        <input value={form.eshop_price} onChange={e => {
-                          const val = e.target.value;
-                          setForm(f => {
-                            const nextPrice = calcSalePrice(val, f.cost_price);
-                            return { ...f, eshop_price: val, price: nextPrice || f.price };
-                          });
-                        }}
-                          inputMode="numeric" className={`${INPUT} min-w-0 flex-1`} placeholder="0" />
-                        <button type="button" onClick={fetchEshopPrice} disabled={!form.title.trim() || loadingEshop}
-                          className="shrink-0 rounded-xl border border-white/8 bg-white/4 p-2.5 text-gray-500 transition-all hover:border-white/14 hover:bg-white/8 hover:text-white disabled:opacity-30 active:scale-95"
-                          title="Obtener precio eShop">
-                          {loadingEshop ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-                        </button>
-                      </div>
-                    </label>
-                    <label>
-                      <span className={LABEL}>Precio venta CLP</span>
-                      <input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })}
-                        inputMode="numeric" className={INPUT} placeholder="0" />
-                    </label>
-                    <label>
-                      <span className={LABEL}>Costo (lo que pagaste)</span>
-                      <input value={form.cost_price} onChange={e => {
-                          const val = e.target.value;
-                          setForm(f => {
-                            const nextPrice = calcSalePrice(f.eshop_price, val);
-                            return { ...f, cost_price: val, price: nextPrice || f.price };
-                          });
-                        }}
-                        inputMode="numeric" className={INPUT} placeholder="0" />
-                      {form.price && form.cost_price && toPrice(form.price) > 0 && toPrice(form.cost_price) > 0 && (
-                        <p className="mt-1 text-[10px] font-bold text-green-500">
-                          Ganancia: ${(toPrice(form.price) - toPrice(form.cost_price)).toLocaleString("es-CL")}
-                          {" "}({Math.round((1 - toPrice(form.cost_price) / toPrice(form.price)) * 100)}%)
-                        </p>
-                      )}
-                    </label>
-                    <label>
-                      <span className={LABEL}>Espacio</span>
-                      <input value={form.storage_required} onChange={e => setForm({ ...form, storage_required: e.target.value })}
-                        className={INPUT} placeholder="Ej: 12.3 GB" />
+                        className={INPUT} placeholder="Ej: Super Mario Odyssey" />
                     </label>
 
-                    {/* Console toggle */}
-                    <div className="sm:col-span-2">
-                      <span className={LABEL}>Consola</span>
-                      <div className="relative mt-1.5 flex overflow-hidden rounded-xl border border-white/8 bg-white/4 p-0.5">
-                        <span className={`absolute bottom-0.5 top-0.5 w-[calc(50%-0.125rem)] rounded-[10px] bg-white/10 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${form.console === "switch2" ? "translate-x-[calc(100%+0.25rem)]" : "translate-x-0"}`} />
-                        {(["switch", "switch2"] as const).map(c => (
-                          <button key={c} type="button" onClick={() => setForm({ ...form, console: c })}
-                            className={`relative z-10 flex-1 rounded-[10px] py-2 text-[9px] font-black uppercase tracking-widest transition-colors duration-200 ${form.console === c ? "text-white" : "text-gray-700 hover:text-gray-500"}`}>
-                            {c === "switch" ? "Switch 1 y 2" : "Solo Switch 2"}
-                          </button>
-                        ))}
+                    <div className="space-y-4">
+                      <div>
+                        <span className={LABEL}>Consola</span>
+                        <div className="relative mt-1.5 flex overflow-hidden rounded-xl border border-white/8 bg-black/20 p-0.5">
+                          <span className={`absolute bottom-0.5 top-0.5 w-[calc(50%-0.125rem)] rounded-[10px] bg-white/10 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${form.console === "switch2" ? "translate-x-[calc(100%+0.25rem)]" : "translate-x-0"}`} />
+                          {(["switch", "switch2"] as const).map(c => (
+                            <button key={c} type="button" onClick={() => setForm({ ...form, console: c })}
+                              className={`relative z-10 flex-1 rounded-[10px] py-2 text-[9px] font-black uppercase tracking-widest transition-colors duration-200 ${form.console === c ? "text-white" : "text-gray-500 hover:text-gray-400"}`}>
+                              {c === "switch" ? "Switch 1 y 2" : "Solo Switch 2"}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                      <label className="block">
+                        <span className={LABEL}>Espacio</span>
+                        <input value={form.storage_required} onChange={e => setForm({ ...form, storage_required: e.target.value })}
+                          className={INPUT} placeholder="Ej: 12.3 GB" />
+                      </label>
                     </div>
 
-                    {/* Image URL */}
-                    <label className="sm:col-span-2">
-                      <span className={LABEL}>Imagen URL</span>
-                      <div className="mt-1.5 flex gap-2">
+                    <label className="block">
+                      <span className={LABEL}>URL de la Imagen</span>
+                      <div className="relative mt-1.5 flex items-center">
                         <input value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })}
-                          className="min-w-0 flex-1 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-white/16 placeholder:text-gray-700"
-                          placeholder="https://…" />
+                          className={`${INPUT} pr-12`} placeholder="https://assets.nintendo.com/..." />
                         <button type="button" onClick={fillImg} disabled={!form.title.trim()}
-                          className="shrink-0 rounded-xl border border-white/8 bg-white/4 p-2.5 text-gray-500 transition-all hover:border-white/14 hover:bg-white/8 hover:text-white disabled:opacity-30 active:scale-95">
-                          <ImagePlus size={15} />
+                          className="absolute right-1.5 rounded-lg bg-white/10 p-1.5 text-white/70 transition-all hover:bg-white/20 hover:text-white disabled:opacity-30 active:scale-95">
+                          <ImagePlus size={14} />
                         </button>
                       </div>
                     </label>
                   </div>
 
-                  {/* Flags */}
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { key: "is_active", label: "Activo", checked: form.is_active, onChange: (v: boolean) => setForm(f => ({ ...f, is_active: v })) },
-                      { key: "is_offer",  label: "Oferta",  checked: form.is_offer,  onChange: (v: boolean) => setForm(f => ({ ...f, is_offer: v })) },
-                    ].map(({ key, label, checked, onChange }) => (
-                      <label key={key} className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/3 px-3 py-3 transition-all hover:bg-white/5">
-                        <span className="text-[10px] font-bold text-gray-400">{label}</span>
-                        <div className={`relative h-4 w-7 rounded-full transition-all duration-200 ${checked ? "bg-white" : "bg-white/10"}`}
-                          onClick={() => onChange(!checked)}>
-                          <div className={`absolute top-0.5 h-3 w-3 rounded-full bg-black transition-transform duration-200 ${checked ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                  {/* Precios */}
+                  <div className="rounded-2xl border border-blue-500/10 bg-blue-500/[0.02] p-4 space-y-4">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-400/70 mb-2">Precios y Rentabilidad</h3>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <label>
+                        <span className={LABEL}>eShop Oficial (CLP)</span>
+                        <div className="relative mt-1.5 flex items-center">
+                          <input value={form.eshop_price} onChange={e => {
+                            const val = formatPriceInput(e.target.value);
+                            setForm(f => {
+                              const nextPrice = calcSalePrice(val, f.cost_price);
+                              return { ...f, eshop_price: val, price: nextPrice ? formatPriceInput(nextPrice) : f.price };
+                            });
+                          }}
+                            inputMode="numeric" className={`${INPUT} border-blue-500/20 bg-blue-500/5 focus:border-blue-500/40 pr-12`} placeholder="0" />
+                          <button type="button" onClick={fetchEshopPrice} disabled={!form.title.trim() || loadingEshop}
+                            className="absolute right-1.5 rounded-lg bg-blue-500/20 p-1.5 text-blue-300 transition-all hover:bg-blue-500/30 hover:text-white disabled:opacity-30 active:scale-95"
+                            title="Buscar precio en eShop">
+                            {loadingEshop ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                          </button>
                         </div>
-                        <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="sr-only" />
                       </label>
-                    ))}
-                    <label>
-                      <span className={LABEL}>Precio oferta</span>
-                      <input value={form.offer_price} onChange={e => setForm({ ...form, offer_price: e.target.value })}
-                        inputMode="numeric" disabled={!form.is_offer}
-                        className="mt-1.5 w-full rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-orange-500/40 disabled:opacity-30 placeholder:text-gray-700"
-                        placeholder="0" />
-                    </label>
+
+                      <label>
+                        <span className={LABEL}>Costo (compra)</span>
+                        <input value={form.cost_price} onChange={e => {
+                            const val = formatPriceInput(e.target.value);
+                            setForm(f => {
+                              const nextPrice = calcSalePrice(f.eshop_price, val);
+                              return { ...f, cost_price: val, price: nextPrice ? formatPriceInput(nextPrice) : f.price };
+                            });
+                          }}
+                          inputMode="numeric" className={INPUT} placeholder="0" />
+                      </label>
+                    </div>
+
+                    <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-3">
+                      <label>
+                        <span className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-green-500">Precio Final de Venta</span>
+                        <input value={form.price} onChange={e => setForm({ ...form, price: formatPriceInput(e.target.value) })}
+                          inputMode="numeric" className="w-full rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-3 text-lg font-bold text-white outline-none transition-all placeholder:text-green-500/30 focus:border-green-500/60 focus:bg-green-500/20" placeholder="0" />
+                      </label>
+                      {form.price && form.cost_price && toPrice(form.price) > 0 && toPrice(form.cost_price) > 0 && (
+                        <div className="mt-2 flex items-center justify-between text-[11px] font-bold">
+                          <span className="text-green-500/70">Ganancia calculada:</span>
+                          <span className="text-green-400">
+                            ${fmt(toPrice(form.price) - toPrice(form.cost_price))} 
+                            <span className="ml-1 opacity-70">({Math.round((1 - toPrice(form.cost_price) / toPrice(form.price)) * 100)}%)</span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {!form.is_active && (
-                    <p className="rounded-xl border border-yellow-500/15 bg-yellow-500/8 px-3 py-2.5 text-[11px] font-semibold text-yellow-400">
-                      Inactivo · no aparece en la tienda pública
-                    </p>
-                  )}
+                  {/* Estado y Oferta */}
+                  <div className="rounded-2xl border border-white/[0.05] bg-white/[0.02] p-4 space-y-4">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-2">Visibilidad en Tienda</h3>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className={`flex cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-3.5 transition-all ${form.is_active ? 'border-green-500/30 bg-green-500/10' : 'border-white/8 bg-black/20 hover:bg-white/5'}`}>
+                        <div>
+                          <span className={`block text-[10px] font-bold ${form.is_active ? 'text-green-400' : 'text-gray-400'}`}>Juego Activo</span>
+                          <span className="mt-0.5 block text-[8px] uppercase tracking-widest text-white/40">{form.is_active ? 'Visible en tienda' : 'Oculto'}</span>
+                        </div>
+                        <div className={`relative h-4 w-7 rounded-full transition-all duration-200 ${form.is_active ? "bg-green-500" : "bg-white/10"}`}
+                          onClick={(e) => { e.preventDefault(); setForm(f => ({ ...f, is_active: !f.is_active })); }}>
+                          <div className={`absolute top-0.5 h-3 w-3 rounded-full bg-black transition-transform duration-200 ${form.is_active ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                        </div>
+                        <input type="checkbox" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="sr-only" />
+                      </label>
 
-                  <button disabled={loading}
-                    className="flex w-full items-center justify-center gap-2 rounded-full bg-white py-3 text-xs font-black uppercase tracking-widest text-black transition-all duration-200 hover:bg-white/90 disabled:opacity-50 active:scale-[0.98]">
-                    {loading ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                    {loading ? "Guardando…" : "Guardar cambios"}
-                  </button>
+                      <label className={`flex cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-3.5 transition-all ${form.is_offer ? 'border-orange-500/30 bg-orange-500/10' : 'border-white/8 bg-black/20 hover:bg-white/5'}`}>
+                        <div>
+                          <span className={`block text-[10px] font-bold ${form.is_offer ? 'text-orange-400' : 'text-gray-400'}`}>Oferta</span>
+                          <span className="mt-0.5 block text-[8px] uppercase tracking-widest text-white/40">Destacar rebaja</span>
+                        </div>
+                        <div className={`relative h-4 w-7 rounded-full transition-all duration-200 ${form.is_offer ? "bg-orange-500" : "bg-white/10"}`}
+                          onClick={(e) => { e.preventDefault(); setForm(f => ({ ...f, is_offer: !f.is_offer })); }}>
+                          <div className={`absolute top-0.5 h-3 w-3 rounded-full bg-black transition-transform duration-200 ${form.is_offer ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                        </div>
+                        <input type="checkbox" checked={form.is_offer} onChange={e => setForm(f => ({ ...f, is_offer: e.target.checked }))} className="sr-only" />
+                      </label>
+                    </div>
+
+                    {form.is_offer && (
+                      <div className="animate-soft-in">
+                        <label>
+                          <span className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-orange-400">Precio Especial de Oferta</span>
+                          <input value={form.offer_price} onChange={e => setForm({ ...form, offer_price: formatPriceInput(e.target.value) })}
+                            inputMode="numeric"
+                            className="w-full rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-3 text-sm font-bold text-white outline-none transition-all placeholder:text-orange-500/30 focus:border-orange-500/60 focus:bg-orange-500/20"
+                            placeholder="0" />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
                 </form>
+              </div>
+
+              {/* Sticky Footer */}
+              <div className="shrink-0 border-t border-white/[0.05] bg-black/40 p-5 backdrop-blur-xl">
+                <button disabled={loading} onClick={save}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3.5 text-sm font-black uppercase tracking-widest text-black shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all duration-200 hover:bg-white/90 hover:shadow-[0_0_25px_rgba(255,255,255,0.25)] disabled:opacity-50 active:scale-[0.98]">
+                  {loading ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  {loading ? "Guardando…" : "Guardar Cambios"}
+                </button>
               </div>
             </div>
 
