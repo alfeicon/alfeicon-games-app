@@ -97,21 +97,32 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
 
   const autoFetchAllPrices = async () => {
     if (!confirm("Esto buscará en la eShop el precio de todos los juegos filtrados que NO tengan precio eShop actualmente. Tomará unos segundos por juego. ¿Continuar?")) return;
+    
+    const gamesToFetch = filtered.filter(g => {
+      const current = quickForms[g.id];
+      return !current?.eshop_price || toPrice(current.eshop_price) === 0;
+    });
+    
+    const total = gamesToFetch.length;
+    if (total === 0) {
+      return showNotice("info", "Todos los juegos visibles ya tienen precio eShop.");
+    }
+
     setLoading(true);
     let fetchCount = 0;
-    for (const game of filtered) {
-      const current = quickForms[game.id];
-      if (!current?.eshop_price || toPrice(current.eshop_price) === 0) {
-        await fetchQuickEshopPrice(game.id, game.title);
-        fetchCount++;
-        await new Promise(r => setTimeout(r, 600)); // Evitar bloqueos
-      }
+    for (const game of gamesToFetch) {
+      fetchCount++;
+      showNotice("info", `${game.title} # ${fetchCount} / ${total} ..... procesando`);
+      await fetchQuickEshopPrice(game.id, game.title);
+      showNotice("success", `${game.title} # ${fetchCount} / ${total} ..... completado`);
+      await new Promise(r => setTimeout(r, 600)); // Evitar bloqueos
     }
     setLoading(false);
     showNotice("success", `Auto-completado finalizado. ${fetchCount} actualizados.`);
   };
 
   const saveQuickEdits = async () => {
+    if (!supabase) return;
     setLoading(true);
     let errorCount = 0;
     let savedCount = 0;
