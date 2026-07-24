@@ -10,19 +10,20 @@ import type { AdminGame } from "../_types";
 import { fmt, toPrice, findImage } from "../_helpers";
 
 type GameForm = {
-  title: string; price: string; cost_price: string; image_url: string;
+  title: string; price: string; cost_price: string; eshop_price: string; image_url: string;
   storage_required: string; console: "switch" | "switch2";
   is_offer: boolean; offer_price: string; is_active: boolean;
 };
 
 const emptyForm: GameForm = {
-  title: "", price: "", cost_price: "", image_url: "", storage_required: "",
+  title: "", price: "", cost_price: "", eshop_price: "", image_url: "", storage_required: "",
   console: "switch", is_offer: false, offer_price: "", is_active: true,
 };
 
 const toForm = (g: AdminGame): GameForm => ({
   title: g.title, price: String(g.price),
   cost_price: g.cost_price ? String(g.cost_price) : "",
+  eshop_price: g.eshop_price ? String(g.eshop_price) : "",
   image_url: g.image_url || "",
   storage_required: g.storage_required || "",
   console: g.console === "switch2" ? "switch2" : "switch",
@@ -86,14 +87,45 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
     showNotice("success", `Imagen: ${m.name}`);
   };
 
+  const fetchEshopPrice = async () => {
+    if (!form.title.trim()) {
+      showNotice("error", "Escribe un nombre de juego primero");
+      return;
+    }
+    showNotice("success", "Buscando en eShop...");
+    try {
+      const res = await fetch(`/api/eshop-price?q=${encodeURIComponent(form.title)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No encontrado");
+      
+      const priceUSD = data.priceUSD; 
+      const priceCLP = Math.round(priceUSD * 1000);
+      
+      let baseFinal = Math.round((priceCLP * 0.43) / 1000) * 1000 - 10;
+      if (baseFinal < 0) baseFinal = 990;
+
+      setForm(f => ({ 
+        ...f, 
+        eshop_price: String(priceCLP),
+        price: String(baseFinal)
+      }));
+      showNotice("success", `¡Precio encontrado! (${data.priceUSD} USD)`);
+    } catch (err: any) {
+      showNotice("error", err.message || "No se encontró el juego en eShop");
+    }
+  };
+
   const save = async (e: FormEvent) => {
     e.preventDefault(); if (!supabase) return;
     const payload = {
-      title: form.title.trim(), price: toPrice(form.price),
+      title: form.title.trim(), 
+      price: toPrice(form.price),
       cost_price: toPrice(form.cost_price),
+      eshop_price: toPrice(form.eshop_price),
       image_url: form.image_url.trim() || null,
       storage_required: form.storage_required.trim() || null,
-      console: form.console, is_offer: form.is_offer,
+      console: form.console, 
+      is_offer: form.is_offer,
       offer_price: form.is_offer ? toPrice(form.offer_price) : null,
       is_active: form.is_active,
     };
@@ -247,6 +279,28 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                       <span className={LABEL}>Nombre</span>
                       <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
                         className={INPUT} placeholder="Nombre del juego" />
+                    </label>
+                    <label>
+                      <span className={LABEL}>Precio eShop (oficial en CLP)</span>
+                      <div className="flex gap-2">
+                        <input value={form.eshop_price} onChange={e => {
+                          const val = e.target.value;
+                          setForm({ ...form, eshop_price: val });
+                          // Auto calculate discount if typed manually
+                          const clp = toPrice(val);
+                          if (clp > 0) {
+                            let baseFinal = Math.round((clp * 0.43) / 1000) * 1000 - 10;
+                            if (baseFinal < 0) baseFinal = 990;
+                            setForm(f => ({ ...f, eshop_price: val, price: String(baseFinal) }));
+                          }
+                        }}
+                          inputMode="numeric" className={`${INPUT} min-w-0 flex-1`} placeholder="0" />
+                        <button type="button" onClick={fetchEshopPrice} disabled={!form.title.trim()}
+                          className="shrink-0 rounded-xl border border-white/8 bg-white/4 p-2.5 text-gray-500 transition-all hover:border-white/14 hover:bg-white/8 hover:text-white disabled:opacity-30 active:scale-95"
+                          title="Obtener precio eShop">
+                          <Search size={15} />
+                        </button>
+                      </div>
                     </label>
                     <label>
                       <span className={LABEL}>Precio venta CLP</span>

@@ -20,6 +20,8 @@ create table if not exists public.games (
   console text not null default 'switch' check (console in ('switch', 'switch2')),
   is_offer boolean not null default false,
   offer_price integer check (offer_price is null or offer_price >= 0),
+  eshop_price integer check (eshop_price is null or eshop_price >= 0),
+  cost_price integer check (cost_price is null or cost_price >= 0),
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

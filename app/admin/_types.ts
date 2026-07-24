@@ -4,6 +4,7 @@ export type AdminGame = {
   console: string | null; is_offer: boolean;
   offer_price: number | null; is_active: boolean;
   cost_price: number;
+  eshop_price: number | null;
 };
 
 export type AdminPack = {
