@@ -69,9 +69,9 @@ export async function POST(request: Request) {
           `💳 <b>RECIBIÓ UNA COMPRA DE:</b>`,
           `- ${gameName} - ${clp(esperado)}`,
         ];
-        if (packContents) lineas.push(`\n${packContents}\n`);
         
         lineas.push(
+          ``,
           `<b>Monto:</b> ${clp(pagado)}`,
           ``,
           `<b>Orden:</b> <code>${shortCode}</code>`
@@ -103,6 +103,7 @@ export async function POST(request: Request) {
         if (pago?.medio) lineas.push(``, `<i>${pago.medio}${pago.id ? ` · pago ${pago.id}` : ""}</i>`);
 
         texts.push(lineas.join("\n"));
+        if (packContents) texts.push(packContents);
         break;
       }
       case "RECEIPT_UPLOADED": {
@@ -114,12 +115,12 @@ export async function POST(request: Request) {
         texts.push(
           `🧾 <b>RECIBIÓ UNA COMPRA DE: (POR VALIDAR)</b>\n` +
           `- ${gameName} - ${clp(salePrice)}\n\n` +
-          (packContents ? `${packContents}\n\n` : "") +
           `<b>Monto:</b> ${clp(salePrice)}\n\n` +
           `El cliente subió su comprobante de transferencia. Revísalo en Admin → Entregas → Validación.\n\n` +
           `<b>Orden:</b> <code>${shortCode}</code>` +
           (titular ? `\n<b>Transfiere:</b> ${escapeHtml(titular)}` : ""),
         );
+        if (packContents) texts.push(packContents);
         break;
       }
       case "COMPLETED":
