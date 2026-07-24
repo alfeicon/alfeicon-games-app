@@ -56,6 +56,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<GameForm>(emptyForm);
   const [modalOpen, setModalOpen] = useState(false);
+  const [loadingEshop, setLoadingEshop] = useState(false);
 
   const selectedGame = useMemo(() => games.find(g => g.id === selectedId) ?? null, [games, selectedId]);
 
@@ -105,6 +106,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       showNotice("error", "Escribe un nombre de juego primero");
       return;
     }
+    setLoadingEshop(true);
     showNotice("success", "Buscando en eShop...");
     try {
       const res = await fetch(`/api/eshop-price?q=${encodeURIComponent(form.title)}`);
@@ -124,10 +126,12 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       if (data.priceCLP_exact > 0) {
         showNotice("success", `¡Precio eShop Chile exacto! (${priceCLP} CLP)`);
       } else {
-        showNotice("success", `¡Precio aprox. encontrado! (${data.priceUSD} USD)`);
+        showNotice("error", `No encontré el chileno. Dejamos el EEUU aprox: ${data.priceUSD} USD`);
       }
     } catch (err: any) {
       showNotice("error", err.message || "No se encontró el juego en eShop");
+    } finally {
+      setLoadingEshop(false);
     }
   };
 
@@ -307,10 +311,10 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                           });
                         }}
                           inputMode="numeric" className={`${INPUT} min-w-0 flex-1`} placeholder="0" />
-                        <button type="button" onClick={fetchEshopPrice} disabled={!form.title.trim()}
+                        <button type="button" onClick={fetchEshopPrice} disabled={!form.title.trim() || loadingEshop}
                           className="shrink-0 rounded-xl border border-white/8 bg-white/4 p-2.5 text-gray-500 transition-all hover:border-white/14 hover:bg-white/8 hover:text-white disabled:opacity-30 active:scale-95"
                           title="Obtener precio eShop">
-                          <Search size={15} />
+                          {loadingEshop ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
                         </button>
                       </div>
                     </label>
