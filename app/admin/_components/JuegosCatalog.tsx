@@ -101,7 +101,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       const priceUSD = data.priceUSD; 
       const priceCLP = Math.round(priceUSD * 1000);
       
-      let baseFinal = Math.round((priceCLP * 0.43) / 1000) * 1000 - 10;
+      let baseFinal = Math.round((priceCLP * 0.47) / 1000) * 1000 - 10;
       if (baseFinal < 0) baseFinal = 990;
 
       setForm(f => ({ 
@@ -289,7 +289,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                           // Auto calculate discount if typed manually
                           const clp = toPrice(val);
                           if (clp > 0) {
-                            let baseFinal = Math.round((clp * 0.43) / 1000) * 1000 - 10;
+                            let baseFinal = Math.round((clp * 0.47) / 1000) * 1000 - 10;
                             if (baseFinal < 0) baseFinal = 990;
                             setForm(f => ({ ...f, eshop_price: val, price: String(baseFinal) }));
                           }
