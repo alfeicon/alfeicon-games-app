@@ -112,14 +112,20 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       if (!res.ok) throw new Error(data.error || "No encontrado");
       
       const priceUSD = data.priceUSD; 
-      const priceCLP = Math.round(priceUSD * 1000);
+      const priceCLP_approx = Math.round(priceUSD * 1000);
+      const priceCLP = data.priceCLP_exact > 0 ? data.priceCLP_exact : priceCLP_approx;
       
       setForm(f => {
         const nextEshop = String(priceCLP);
         const nextPrice = calcSalePrice(nextEshop, f.cost_price);
         return { ...f, eshop_price: nextEshop, price: nextPrice || f.price };
       });
-      showNotice("success", `¡Precio encontrado! (${data.priceUSD} USD)`);
+      
+      if (data.priceCLP_exact > 0) {
+        showNotice("success", `¡Precio eShop Chile exacto! (${priceCLP} CLP)`);
+      } else {
+        showNotice("success", `¡Precio aprox. encontrado! (${data.priceUSD} USD)`);
+      }
     } catch (err: any) {
       showNotice("error", err.message || "No se encontró el juego en eShop");
     }

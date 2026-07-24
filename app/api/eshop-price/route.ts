@@ -27,9 +27,29 @@ export async function GET(req: NextRequest) {
     matches.sort((a, b) => a.title.length - b.title.length);
     const bestMatch = matches[0];
 
+    // Intentar buscar el precio exacto en la tienda chilena usando el slug
+    let chilePrice = 0;
+    try {
+      if (bestMatch.url) {
+        const slugMatch = bestMatch.url.match(/\/store\/products\/([^/]+)/);
+        if (slugMatch) {
+          const slug = slugMatch[1];
+          const clRes = await fetch(`https://www.nintendo.com/es-cl/store/products/${slug}/`);
+          const clText = await clRes.text();
+          const priceMatch = clText.match(/v_price=([0-9.]+)/);
+          if (priceMatch) {
+            chilePrice = Math.round(parseFloat(priceMatch[1]));
+          }
+        }
+      }
+    } catch (e) {
+      console.error("No se pudo scrapear el precio de Chile", e);
+    }
+
     return NextResponse.json({ 
       title: bestMatch.title,
-      priceUSD: bestMatch.msrp || 0
+      priceUSD: bestMatch.msrp || 0,
+      priceCLP_exact: chilePrice
     });
     
   } catch (err: any) {
