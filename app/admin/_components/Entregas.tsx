@@ -845,6 +845,10 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
           ({ error } = await supabase.from("orders").update(payloadWithoutPackIds).eq("id", selectedOrder.id));
         }
         if (error) throw error;
+        
+        setSelectedOrder({ ...selectedOrder, ...payload } as any);
+        setOpenedForm(form);
+
         showNotice("success", missingPackIdsColumn
           ? "Orden actualizada — falta correr orders-delete-pack-on-sale.sql en Supabase para el borrado automático de packs."
           : (payload.status === "ready" ? "Datos guardados — orden marcada como Lista." : "Orden actualizada."));
@@ -914,12 +918,15 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     setLoading(false);
     if (error) { showNotice("error", `No se pudo aprobar: ${error.message}`); return false; }
     if (selectedOrder?.id === order.id) {
-      setSelectedOrder({
+      const updatedOrder = {
         ...selectedOrder,
-        payment_status: "approved",
+        payment_status: "approved" as const,
         status: selectedOrder.status === "draft" ? "pending_console_code" : selectedOrder.status,
-      });
-      setForm(prev => prev.status === "draft" ? { ...prev, status: "pending_console_code" } : prev);
+      };
+      setSelectedOrder(updatedOrder);
+      const f = toForm(updatedOrder);
+      setForm(f);
+      setOpenedForm(f);
     }
     await onReload();
     return true;

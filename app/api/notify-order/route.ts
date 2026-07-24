@@ -21,13 +21,18 @@ export async function POST(request: Request) {
     const gameName = order?.game_name || "Desconocido";
     const salePrice = order?.sale_price || 0;
 
-    // Obtener los juegos si es un pack
+    // Obtener los juegos si la orden incluye packs
     let packContents = "";
-    if (order?.id && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (order?.pack_ids && order.pack_ids.length > 0 && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-      const { data: items } = await supabase.from("order_items").select("title").eq("order_id", order.id).order("sort_order");
-      if (items && items.length > 1) { // Solo mostrar contenido si hay más de 1 ítem (es un pack)
-        packContents = "---- List Game ----\n" + items.map(i => i.title).join("\n") + "\n----End Game List ----";
+      const { data: packItems } = await supabase
+        .from("pack_items")
+        .select("title")
+        .in("pack_id", order.pack_ids)
+        .order("sort_order");
+        
+      if (packItems && packItems.length > 0) {
+        packContents = "---- List Game ----\n" + packItems.map((pi: any) => pi.title).join("\n") + "\n----End Game List ----";
       }
     }
 
