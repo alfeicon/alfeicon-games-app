@@ -87,6 +87,19 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
     showNotice("success", `Imagen: ${m.name}`);
   };
 
+  const calcSalePrice = (eshopStr: string, costStr: string) => {
+    const eshop = toPrice(eshopStr);
+    const cost = toPrice(costStr);
+    if (eshop <= 0) return "";
+    
+    let baseMarketing = Math.round((eshop * 0.47) / 1000) * 1000 - 10;
+    let baseMargin = cost > 0 ? Math.round(((cost + 9000) / 0.965) / 1000) * 1000 - 10 : 0;
+    
+    let finalBase = Math.max(baseMarketing, baseMargin);
+    if (finalBase < 990) finalBase = 990;
+    return String(finalBase);
+  };
+
   const fetchEshopPrice = async () => {
     if (!form.title.trim()) {
       showNotice("error", "Escribe un nombre de juego primero");
@@ -101,14 +114,11 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
       const priceUSD = data.priceUSD; 
       const priceCLP = Math.round(priceUSD * 1000);
       
-      let baseFinal = Math.round((priceCLP * 0.47) / 1000) * 1000 - 10;
-      if (baseFinal < 0) baseFinal = 990;
-
-      setForm(f => ({ 
-        ...f, 
-        eshop_price: String(priceCLP),
-        price: String(baseFinal)
-      }));
+      setForm(f => {
+        const nextEshop = String(priceCLP);
+        const nextPrice = calcSalePrice(nextEshop, f.cost_price);
+        return { ...f, eshop_price: nextEshop, price: nextPrice || f.price };
+      });
       showNotice("success", `¡Precio encontrado! (${data.priceUSD} USD)`);
     } catch (err: any) {
       showNotice("error", err.message || "No se encontró el juego en eShop");
@@ -285,14 +295,10 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                       <div className="flex gap-2">
                         <input value={form.eshop_price} onChange={e => {
                           const val = e.target.value;
-                          setForm({ ...form, eshop_price: val });
-                          // Auto calculate discount if typed manually
-                          const clp = toPrice(val);
-                          if (clp > 0) {
-                            let baseFinal = Math.round((clp * 0.47) / 1000) * 1000 - 10;
-                            if (baseFinal < 0) baseFinal = 990;
-                            setForm(f => ({ ...f, eshop_price: val, price: String(baseFinal) }));
-                          }
+                          setForm(f => {
+                            const nextPrice = calcSalePrice(val, f.cost_price);
+                            return { ...f, eshop_price: val, price: nextPrice || f.price };
+                          });
                         }}
                           inputMode="numeric" className={`${INPUT} min-w-0 flex-1`} placeholder="0" />
                         <button type="button" onClick={fetchEshopPrice} disabled={!form.title.trim()}
@@ -309,7 +315,13 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                     </label>
                     <label>
                       <span className={LABEL}>Costo (lo que pagaste)</span>
-                      <input value={form.cost_price} onChange={e => setForm({ ...form, cost_price: e.target.value })}
+                      <input value={form.cost_price} onChange={e => {
+                          const val = e.target.value;
+                          setForm(f => {
+                            const nextPrice = calcSalePrice(f.eshop_price, val);
+                            return { ...f, cost_price: val, price: nextPrice || f.price };
+                          });
+                        }}
                         inputMode="numeric" className={INPUT} placeholder="0" />
                       {form.price && form.cost_price && toPrice(form.price) > 0 && toPrice(form.cost_price) > 0 && (
                         <p className="mt-1 text-[10px] font-bold text-green-500">
