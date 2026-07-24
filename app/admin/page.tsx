@@ -994,7 +994,7 @@ export default function AdminPage() {
           <button
             onClick={() => { if (noticeTimer.current) clearTimeout(noticeTimer.current); setNotice(null); setNoticeLeaving(false); }}
             style={{ ["--toast-ms" as string]: `${TOAST_MS}ms` }}
-            className={`fixed bottom-[86px] left-4 right-4 z-50 overflow-hidden rounded-2xl text-left shadow-2xl backdrop-blur-md sm:bottom-6 sm:left-auto sm:right-6 sm:w-auto sm:min-w-[280px] ${
+            className={`fixed bottom-[86px] left-4 right-4 z-[100] overflow-hidden rounded-2xl text-left shadow-2xl backdrop-blur-md sm:bottom-6 sm:left-auto sm:right-6 sm:w-auto sm:min-w-[280px] ${
               noticeLeaving ? "admin-toast-out" : "admin-toast"
             } ${
               notice.type === "success"
