@@ -597,26 +597,54 @@ function limpiarJuegos(textoBloque) {
     })
     .map(j => j.replace(/^\d+[\.\)\-]\s*/, "").replace(/&apos;/g, "'").replace(/["“”]/g, "").replace(/DLC only/gi, "(DLC)").trim());
 }
-function extraerPrecioCLP(texto, aumento) {
+function calcularPrecioVentaFinal(costoUSD) {
+  const costoCLP = costoUSD * 1000;
+  
+  let multiplicador = 2.15;
+  if (costoUSD <= 8) {
+    multiplicador = 2.50;
+  } else if (costoUSD <= 15) {
+    multiplicador = 2.35;
+  }
+  
+  const precioBase = (costoCLP * multiplicador) / 0.965;
+  
+  // Redondeo a 990 (ejemplo: 14200 -> 13990, 14600 -> 14990)
+  let precioFinal = Math.round(precioBase / 1000) * 1000 - 10;
+  if (precioFinal < 0) precioFinal = 990;
+  
+  return precioFinal;
+}
+
+function extraerPrecioCLP(texto) {
   const parseMontoCLP = (valor) => parseInt(valor.replace(/[^\d]/g, ""), 10);
+  let costoUSD = null;
 
   let match = texto.match(/(?:Precio|Valor|Monto|Total|CLP|🇨🇱)[^\d]{0,20}([0-9]{1,3}(?:[.\s]?[0-9]{3})+)/i);
-  if (match) return parseMontoCLP(match[1]) + aumento;
+  if (match) {
+    costoUSD = parseMontoCLP(match[1]) / 1000;
+  } else {
+    match = texto.match(/(?:^|\n)\s*\$?\s*([0-9]{1,3}(?:[.\s]?[0-9]{3})+)(?:\s*CLP)?/i);
+    if (match) {
+      costoUSD = parseMontoCLP(match[1]) / 1000;
+    } else {
+      match = texto.match(/([0-9]+(?:[.,][0-9]+)?)\s*(?:USDT|USD)\b/i);
+      if (match) {
+        costoUSD = parseFloat(match[1].replace(",", "."));
+      } else {
+        match = texto.match(/Price[^\n0-9]*([0-9]+(?:[.,][0-9]+)?)/i);
+        if (match) {
+          costoUSD = parseFloat(match[1].replace(",", "."));
+        } else {
+          match = texto.match(/(?:^|\n)\s*([0-9]+(?:[.,][0-9]+)?)\$\s*(?:\n|$)/);
+          if (match) costoUSD = parseFloat(match[1].replace(",", "."));
+        }
+      }
+    }
+  }
 
-  match = texto.match(/(?:^|\n)\s*\$?\s*([0-9]{1,3}(?:[.\s]?[0-9]{3})+)(?:\s*CLP)?/i);
-  if (match) return parseMontoCLP(match[1]) + aumento;
-
-  match = texto.match(/([0-9]+(?:[.,][0-9]+)?)\s*(?:USDT|USD)\b/i);
-  if (match) return Math.round(parseFloat(match[1].replace(",", ".")) * 1000) + aumento;
-
-  match = texto.match(/Price[^\n0-9]*([0-9]+(?:[.,][0-9]+)?)/i);
-  if (match) return Math.round(parseFloat(match[1].replace(",", ".")) * 1000) + aumento;
-
-  // Línea suelta tipo "10$" sin ninguna palabra clave antes (Price/Precio/USD).
-  match = texto.match(/(?:^|\n)\s*([0-9]+(?:[.,][0-9]+)?)\$\s*(?:\n|$)/);
-  if (match) return Math.round(parseFloat(match[1].replace(",", ".")) * 1000) + aumento;
-
-  return null;
+  if (costoUSD === null) return null;
+  return calcularPrecioVentaFinal(costoUSD);
 }
 function subirPackLogica(mensaje, chatID) {
   try {
@@ -629,7 +657,7 @@ function subirPackLogica(mensaje, chatID) {
       return;
     }
 
-    const precioFinal = extraerPrecioCLP(mensajeLimpio, obtenerAumentoPackCLP());
+    const precioFinal = extraerPrecioCLP(mensajeLimpio);
 
     if (!precioFinal) {
       enviarMensaje(chatID, "❌ Error: No encontré precio.");
