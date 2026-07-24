@@ -3,6 +3,7 @@
 
 import { startTransition, useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
+import Image from "next/image";
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageCircle, Heart, ArrowRight, ShoppingCart, Plus, Landmark, Ticket } from 'lucide-react';
 import AppDock, { type SectionId } from '@/components/app-store/AppDock';
@@ -503,9 +504,9 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     }
   }, [appSettings, descuento]);
 
-  // Transferencia: crea la orden (transferencia pendiente, con el monto en
+  // Transferencia: crea la orden (transferencia pendiente, con the monto en
   // sale_price) y lleva al cliente a su portal /entrega/[code], donde ve los
-  // datos, sube el comprobante y espera la aprobación. Si el insert falla
+  // datos, sube el comprobante y espera la aprobación. Si the insert falla
   // (p. ej. falta correr order-receipts.sql), cae al panel de datos en el modal.
   const iniciarTransferencia = useCallback(async (data: {items: CatalogItem[], origin: {x:number, y:number}}) => {
     if (pagoEnCursoRef.current) return; // doble toque: la orden ya se está creando
@@ -963,7 +964,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                 <div className="mb-5 flex items-center gap-4">
                   <div className="liquid-glass relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl">
                     {purchaseModalData.items.length === 1 && purchaseModalData.items[0].img ? (
-                      <img src={purchaseModalData.items[0].img} alt={purchaseModalData.items[0].titulo} className="relative z-[1] h-full w-full object-cover" />
+                      <Image src={purchaseModalData.items[0].img} alt={purchaseModalData.items[0].titulo} fill className="relative z-[1] object-cover" />
                     ) : (
                       <ShoppingCart size={24} className="relative z-[1] text-gray-300" />
                     )}
@@ -1035,10 +1036,11 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                       {/* Logo oficial de Mercado Pago desde /public/mercadopago.svg.
                           Si el archivo no existe, cae al ícono de respaldo (fondo blanco). */}
                       <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl shadow-sm">
-                        <img
+                        <Image
                           src="/mercadopago.svg"
                           alt="Mercado Pago"
-                          className="h-full w-full object-cover"
+                          fill
+                          className="object-cover"
                         />
                       </div>
                       <div className="text-left">
@@ -1074,13 +1076,15 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Pagas seguro con</p>
                     <div className="flex flex-wrap items-center justify-center gap-1.5">
                       {paymentLogos.map((l) => (
-                        <img
+                        <Image
                           key={l.name}
                           src={l.logo}
                           alt={l.name}
                           title={l.name}
+                          width={24}
+                          height={24}
                           loading="lazy"
-                          className="h-6 rounded bg-white px-1 py-0.5 object-contain"
+                          className="rounded bg-white px-1 py-0.5 object-contain"
                         />
                       ))}
                     </div>
@@ -1143,8 +1147,9 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
             onAnimationComplete={() => setFlyingToCart(prev => prev.filter(f => f.key !== fly.key))}
           >
             {fly.img ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={fly.img} alt="" />
+              <div className="absolute left-0 top-0 h-full w-full opacity-40">
+                <Image src={fly.img} alt="" fill className="object-cover" />
+              </div>
             ) : (
               <Plus size={18} strokeWidth={3} />
             )}

@@ -22,6 +22,7 @@ import { Ajustes } from "./_components/Ajustes";
 import { Soporte } from "./_components/Soporte";
 import { SaleModal } from "./_components/SaleModal";
 import { CommandPalette, type Command } from "./_components/CommandPalette";
+import { useAdminStore } from "./_store/adminStore";
 import type { Order } from "./_types";
 
 const defaultSettings: SettingsState = {
@@ -93,17 +94,20 @@ export default function AdminPage() {
   const [sheetPhase, setSheetPhase] = useState<"in" | "drag" | "settle">("in");
   const sheetStartY = useRef(0);
 
-  const [games, setGames] = useState<AdminGame[]>([]);
-  const [packs, setPacks] = useState<AdminPack[]>([]);
-  const [news, setNews] = useState<AdminNews[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [adSpend, setAdSpend] = useState<AdSpend[]>([]);
-  // Visitas de la tienda (tabla page_views). Solo se necesitan las recientes.
-  const [views, setViews] = useState<{ created_at: string; item_id: string | null; source: string | null }[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [supportRequests, setSupportRequests] = useState<SupportRequest[]>([]);
-  const [settings, setSettings] = useState<SettingsState>(defaultSettings);
+  const {
+    games, setGames,
+    packs, setPacks,
+    news, setNews,
+    orders, setOrders,
+    sales, setSales,
+    adSpend, setAdSpend,
+    views, setViews,
+    providers, setProviders,
+    supportRequests, setSupportRequests,
+    settings, setSettings,
+    resetAll
+  } = useAdminStore();
+
   const [salesTableExists, setSalesTableExists] = useState<boolean | null>(null);
   const [salesError, setSalesError] = useState<string | null>(null);
   const [newsTableExists, setNewsTableExists] = useState<boolean | null>(null);
@@ -117,6 +121,7 @@ export default function AdminPage() {
       setNoticesClosing(false);
     }, 300);
   }, []);
+
 
   const showNotice = useCallback((type: "success" | "error" | "info", text: string, playSound = false) => {
     const id = Date.now().toString() + Math.random().toString();
@@ -168,6 +173,31 @@ export default function AdminPage() {
       }).catch(console.error);
     }
   }, []);
+
+  // Inactividad: Cierre de sesión automático tras 15 minutos sin interactuar.
+  useEffect(() => {
+    if (!isLoggedIn || !supabase) return;
+    
+    let idleTimer: number;
+    const resetIdleTimer = () => {
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(async () => {
+        showNotice("info", "Sesión cerrada por inactividad", true);
+        await supabase.auth.signOut();
+        resetAll();
+        window.location.href = "/admin/login";
+      }, 15 * 60 * 1000);
+    };
+
+    resetIdleTimer();
+    const events = ["mousemove", "keydown", "wheel", "touchstart", "click"];
+    events.forEach(e => window.addEventListener(e, resetIdleTimer));
+
+    return () => {
+      window.clearTimeout(idleTimer);
+      events.forEach(e => window.removeEventListener(e, resetIdleTimer));
+    };
+  }, [isLoggedIn, supabase, showNotice]);
 
   const loadGames = useCallback(async () => {
     if (!supabase) return;
@@ -393,7 +423,7 @@ export default function AdminPage() {
       if (!ok) {
         didLoadRef.current = false;
         setFirstLoadDone(false);
-        setGames([]); setPacks([]); setNews([]); setSales([]); setAdSpend([]);
+        resetAll();
       }
     });
     return () => listener.subscription.unsubscribe();
@@ -534,18 +564,10 @@ export default function AdminPage() {
     setSheetDrag(0);
   };
 
-  const signIn = async (e: FormEvent) => {
-    e.preventDefault(); if (!supabase) return;
-    setLoading(true); setAuthError("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) setAuthError("Login inválido o usuario sin acceso.");
-  };
-
   const signOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
-    setGames([]); setPacks([]); setNews([]); setSales([]); setAdSpend([]);
+    window.location.href = "/admin/login";
   };
 
   // Comandos de la paleta: las secciones más las acciones globales.
@@ -586,76 +608,19 @@ export default function AdminPage() {
   }
 
   // ── Login ────────────────────────────────────────────────────────────────
+  if (!isLoggedIn) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#090b0d]">
+        <Loader2 className="animate-spin text-gray-700" size={22} />
+      </div>
+    );
+  }
+
+  // ── Renderizado del Panel ────────────────────────────────────────────────
   const activeOrdersCount = orders.filter(o => o.status === "pending_setup" || o.status === "issue").length;
   const newSupportCount = supportRequests.filter(r => r.status === "nueva").length;
   const badgeFor = (id: AdminSection) =>
     id === "entregas" ? activeOrdersCount : id === "soporte" ? newSupportCount : 0;
-
-  if (!isLoggedIn) {
-    return (
-      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#090b0d] p-6">
-        {/* Ambient glow */}
-        <div className="pointer-events-none absolute left-1/2 top-0 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/[0.04] blur-3xl" />
-
-        <div className="animate-soft-in relative z-10 w-full max-w-sm">
-          <div className="mb-10">
-            <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-              <ShieldCheck size={20} className="text-white" />
-            </div>
-            <h1 className="text-2xl font-black uppercase tracking-widest">Acceso admin</h1>
-            <p className="mt-1 text-sm text-gray-600">Panel de gestión Alfeicon</p>
-          </div>
-
-          <form onSubmit={signIn} className="space-y-4">
-            <label className="block">
-              <span className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-600">Email</span>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                className="premium-control w-full rounded-2xl px-4 py-3.5 text-sm outline-none transition-all focus:border-white/30" />
-            </label>
-            <label className="block">
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-600">Contraseña</span>
-                {capsOn && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-yellow-500">
-                    <span className="h-1.5 w-1.5 rounded-full bg-yellow-500" /> Caps Lock
-                  </span>
-                )}
-              </div>
-              <div className="relative">
-                <input type={showPassword ? "text" : "password"} value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  onKeyDown={e => setCapsOn(e.getModifierState("CapsLock"))}
-                  onKeyUp={e => setCapsOn(e.getModifierState("CapsLock"))}
-                  required
-                  className="premium-control w-full rounded-2xl py-3.5 pl-4 pr-11 text-sm outline-none transition-all focus:border-white/30" />
-                <button type="button" onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-600 transition-colors hover:text-white">
-                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </label>
-
-            {authError && (
-              <div className="animate-soft-in flex items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/8 px-3.5 py-2.5">
-                <AlertCircle size={13} className="shrink-0 text-red-400" />
-                <p className="text-xs font-semibold text-red-300">{authError}</p>
-              </div>
-            )}
-
-            <button disabled={loading}
-              className="magnetic mt-2 flex w-full items-center justify-center gap-2 rounded-full bg-white py-3.5 text-sm font-black uppercase tracking-widest text-black disabled:opacity-60">
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-              {loading ? "Verificando…" : "Entrar"}
-            </button>
-          </form>
-
-          <Link href="/" className="mt-8 flex items-center gap-1.5 text-xs font-bold text-gray-700 transition-colors hover:text-gray-400">
-            <ArrowLeft size={12} /> Volver al inicio
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   const activeItem = NAV_ITEMS.find(i => i.id === section) ?? NAV_ITEMS[0];
   // Cuando la sección activa no está en el dock, la píldora se posa sobre

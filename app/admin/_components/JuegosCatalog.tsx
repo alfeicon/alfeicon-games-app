@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import { Gamepad2, HardDrive, ImagePlus, Loader2, Plus, Save, Search, Trash2, X, Zap } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import GameCard from "@/components/GameCard";
@@ -399,7 +400,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
                         className="h-3 w-3 rounded border-white/20 bg-white/10 accent-blue-500" />
                     </div>
                     <div className="min-w-0 flex-1 flex items-center gap-2 truncate text-xs font-bold text-white">
-                      <img src={game.image_url || ""} alt="" className="aspect-square w-8 shrink-0 rounded-lg object-cover" />
+                      <Image src={game.image_url || "/logo.png"} alt={game.title} width={32} height={32} className="aspect-square w-8 shrink-0 rounded-lg object-cover" />
                       <span className="truncate">{game.title}</span>
                     </div>
                     <div className="w-[100px]">

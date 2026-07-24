@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@mercadopago/sdk-react": "^1.0.7",
+    "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.107.0",
     "@types/three": "^0.184.1",
     "@vercel/analytics": "^1.6.1",
@@ -25,7 +26,8 @@
     "nintendo-switch-eshop": "^9.0.0",
     "react": "19.2.1",
     "react-dom": "19.2.1",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

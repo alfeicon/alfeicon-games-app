@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGamesAmerica } from "nintendo-switch-eshop";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const normalizeTitle = (title: string) => {
   return title
@@ -22,6 +27,27 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const queryNormalized = normalizeTitle(query);
+    const cacheKey = imgUrl ? (imgUrl.match(/\/games\/switch\/[^/]+\/([^/]+)/)?.[1] || queryNormalized) : queryNormalized;
+
+    // 1. Verificar caché
+    const { data: cached } = await supabase
+      .from('eshop_cache')
+      .select('*')
+      .eq('query_key', cacheKey)
+      .single();
+
+    if (cached) {
+      const ageHours = (new Date().getTime() - new Date(cached.created_at).getTime()) / (1000 * 60 * 60);
+      if (ageHours < 24) {
+        return NextResponse.json({
+          title: cached.title,
+          priceUSD: 0,
+          priceCLP_exact: cached.price_clp
+        });
+      }
+    }
+
     const games = await getGamesAmerica();
     
     let matches: any[] = [];
@@ -101,6 +127,16 @@ export async function GET(req: NextRequest) {
       }
     } catch (e) {
       console.error("No se pudo scrapear el precio de Chile", e);
+    }
+
+    // Guardar en caché antes de retornar
+    if (chilePrice > 0) {
+      await supabase.from('eshop_cache').upsert({
+        query_key: cacheKey,
+        title: bestMatch.title,
+        price_clp: chilePrice,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'query_key' });
     }
 
     return NextResponse.json({ 
