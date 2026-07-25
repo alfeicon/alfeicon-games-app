@@ -27,9 +27,6 @@ type Props = {
   setLoading: (v: boolean) => void;
   showNotice: (type: "success" | "error" | "info", text: string, playSound?: boolean) => void;
   onReload: () => Promise<void>;
-};
-
-};
 
 type Tab = "resumen" | "publicidad" | "historial";
 
