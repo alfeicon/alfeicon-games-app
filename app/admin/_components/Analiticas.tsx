@@ -73,7 +73,7 @@ export function Analiticas() {
   const maxDailyVisits = Math.max(...dailyVisits.map(d => d.count), 1);
 
   return (
-    <div className="space-y-6 pb-20 pt-6 px-4 md:px-8 max-w-7xl mx-auto">
+    <div className="flex-1 overflow-y-auto space-y-6 pb-20 pt-6 px-4 md:px-8 max-w-7xl mx-auto w-full">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-black uppercase tracking-widest text-pink-400 flex items-center gap-2">
           <LineChart className="text-pink-400" /> Analíticas e Insights
