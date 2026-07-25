@@ -624,7 +624,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
             </span>
             <h3 className="text-sm font-black uppercase tracking-widest">Publicidad</h3>
           </div>
-          <button type="button" onClick={() => onNavigate("ventas")}
+          <button type="button" onClick={() => onNavigate("finanzas")}
             className="text-[9px] font-black uppercase tracking-widest text-gray-600 hover:text-white">
             Registrar gasto
           </button>
@@ -913,7 +913,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
               </div>
               <h3 className="text-sm font-black uppercase tracking-widest">Últimas ventas</h3>
             </div>
-            <button onClick={() => onNavigate("ventas")}
+            <button onClick={() => onNavigate("finanzas")}
               className="text-[10px] font-black text-gray-600 hover:text-gray-400 transition-colors">
               Ver todas →
             </button>
