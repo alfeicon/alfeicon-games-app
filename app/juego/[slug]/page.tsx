@@ -24,16 +24,19 @@ export async function generateMetadata(
   const item = await findItemBySlug(slug);
   if (!item) return {};
 
-  const title = item.titulo;
+  const formatter = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' });
+  const formattedPrice = formatter.format(item.precio);
+
+  const title = `${item.titulo} | ${formattedPrice}`;
   const description = item.esPack
-    ? `Pack de ${item.juegosIncluidos.length} juegos disponible en Alfeicon Games.`
-    : 'Juego digital para Nintendo Switch disponible en Alfeicon Games.';
+    ? `Pack de ${item.juegosIncluidos.length} juegos disponible en Alfeicon Games por solo ${formattedPrice}. Entrega inmediata y soporte post-venta.`
+    : `Juego digital para Nintendo Switch por solo ${formattedPrice}. Entrega garantizada y soporte en Alfeicon Games.`;
   const images = item.img ? [{ url: item.img, alt: item.titulo }] : undefined;
 
   return {
     title,
     description,
-    openGraph: { title, description, images, type: 'website' },
+    openGraph: { title, description, images, type: 'website', siteName: 'Alfeicon Games' },
     twitter: { card: 'summary_large_image', title, description, images: item.img ? [item.img] : undefined },
   };
 }
