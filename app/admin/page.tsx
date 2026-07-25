@@ -380,9 +380,16 @@ export default function AdminPage() {
   }, [loadSales, loadAdSpend, loadOrders]);
 
   const loadAll = useCallback(async () => {
-    // 1. Cargar primero lo indispensable para la pantalla de Inicio
+    // 1. Cargar lo indispensable para que el Dashboard "Inicio" se pinte completo
     try {
-      await Promise.all([loadGames(), loadPacks(), loadSales()]);
+      await Promise.all([
+        loadGames(),
+        loadPacks(),
+        loadSales(),
+        loadViews(),
+        loadAdSpend(),
+        loadSettings(),
+      ]);
     } catch (err) {
       console.error("[loadAll] Error inesperado (posible AdBlock o fallo de red):", err);
       showNotice("error", "Error de conexión. Revisa tu internet o desactiva tu AdBlock.");
@@ -390,19 +397,14 @@ export default function AdminPage() {
       setFirstLoadDone(true);
     }
 
-    // 2. Cargar el resto en segundo plano (escalonado para no saturar la conexión / rate limits)
+    // 2. Cargar el resto en segundo plano
     setTimeout(() => {
       loadOrders().catch(console.error);
       loadNews().catch(console.error);
       loadSupport().catch(console.error);
-    }, 100);
-    setTimeout(() => {
-      loadAdSpend().catch(console.error);
-      loadViews().catch(console.error);
-      loadSettings().catch(console.error);
       loadProviders().catch(console.error);
-    }, 300);
-  }, [loadGames, loadPacks, loadSales, loadOrders, loadNews, loadSupport, loadAdSpend, loadViews, loadSettings, loadProviders]);
+    }, 100);
+  }, [loadGames, loadPacks, loadSales, loadViews, loadAdSpend, loadSettings, loadOrders, loadNews, loadSupport, loadProviders, showNotice]);
 
   useEffect(() => {
     if (!supabase) return;
