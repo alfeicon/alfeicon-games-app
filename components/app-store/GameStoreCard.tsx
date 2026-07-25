@@ -4,6 +4,7 @@
 // Reutilizable: catálogo público y admin. onClick abre el detalle (tienda) o
 // el editor (admin).
 import Image from "next/image";
+import { motion } from "motion/react";
 import { Gamepad2, Heart } from "lucide-react";
 import { getNintendoThumb } from "@/lib/catalog";
 import "./CatalogSection.css";
@@ -45,10 +46,13 @@ export default function GameStoreCard({
   const hasDiscount = Boolean(precioOriginal && precioOriginal > precio);
 
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
-      className="cat2-card w-full"
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+      className="cat2-card w-full shadow-md hover:shadow-xl hover:shadow-indigo-500/10"
       aria-label={ariaLabel ?? `Ver detalles de ${titulo}`}
     >
       <span className="cat2-img">
@@ -98,6 +102,6 @@ export default function GameStoreCard({
           <Heart size={15} strokeWidth={2.5} fill={saved ? "currentColor" : "none"} />
         </span>
       )}
-    </button>
+    </motion.button>
   );
 }

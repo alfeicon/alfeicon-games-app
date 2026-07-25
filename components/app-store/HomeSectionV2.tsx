@@ -2,8 +2,9 @@
 
 import Image from 'next/image';
 import { type MouseEvent, useState, useEffect, useRef, useMemo } from 'react';
+import { motion } from 'motion/react';
 import {
-  ArrowDown, ChevronRight, Gamepad2, Instagram, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy, Plus
+  ArrowDown, ChevronRight, Gamepad2, Instagram, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy, Plus, Mail
 } from 'lucide-react';
 import type { CatalogGame, CatalogPack } from '@/lib/catalog';
 import { getNintendoThumb } from '@/lib/catalog';
@@ -494,6 +495,32 @@ export default function HomeSectionV2({
           </span>
         </button>
       </div>
+
+      {/* NUEVO BLOQUE DE CONTACTO RÁPIDO */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-20px" }}
+        className="mb-6 rounded-[22px] bg-gradient-to-br from-indigo-500/10 to-purple-500/5 border border-indigo-500/20 p-5 backdrop-blur-xl"
+      >
+        <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
+          Contacto Directo
+        </h3>
+        <p className="text-xs text-indigo-200/70 mb-4 font-medium">¿Tienes alguna consulta rápida o quieres confirmar algo antes de comprar? Háblanos directamente por aquí:</p>
+        
+        <div className="flex flex-col sm:flex-row gap-3">
+          <a href="https://ig.me/m/alfeicon_games" target="_blank" rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 px-4 py-3 text-sm font-black text-white hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-pink-500/20">
+            <Instagram size={18} />
+            Instagram
+          </a>
+          <a href="mailto:alfeicon.games@gmail.com"
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-white/10 border border-white/5 px-4 py-3 text-sm font-black text-white hover:bg-white/15 hover:scale-[1.02] active:scale-95 transition-all">
+            <Mail size={18} />
+            Correo
+          </a>
+        </div>
+      </motion.div>
 
       {/* 10. TÉRMINOS Y CONDICIONES (footer inicio) */}
       <div className="hs2-reveal mb-6" data-delay="180">

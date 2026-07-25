@@ -4,6 +4,7 @@
 // Reutilizable: la usa el catálogo público y el admin. Al hacer clic dispara
 // onClick (en la tienda abre el detalle; en el admin abre el editor).
 import Image from "next/image";
+import { motion } from "motion/react";
 import { Heart, Package2 } from "lucide-react";
 import { getNintendoThumb } from "@/lib/catalog";
 import "./CatalogSection.css";
@@ -40,10 +41,13 @@ export default function PackStoreCard({
   const extra = juegos.length - shown.length;
 
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
-      className="pack3-card w-full"
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+      className="pack3-card w-full shadow-md hover:shadow-xl hover:shadow-indigo-500/10"
       aria-label={ariaLabel ?? `Ver detalles de ${titulo}`}
     >
       {/* Imagen 16:9 con badge de cantidad */}
@@ -93,6 +97,6 @@ export default function PackStoreCard({
           )}
         </span>
       </span>
-    </button>
+    </motion.button>
   );
 }
