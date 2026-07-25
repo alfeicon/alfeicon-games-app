@@ -370,7 +370,7 @@ export default function AdminPage() {
     });
     setSectionKey(k => k + 1);
     try { localStorage.setItem(SECTION_STORAGE_KEY, s); } catch {}
-    if (s === "ventas" || s === "finanzas") {
+    if (s === "finanzas") {
       loadSales();
       loadAdSpend();
     }
