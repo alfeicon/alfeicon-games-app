@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, ChevronLeft,
   Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X, PiggyBank,
-  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2
+  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -15,7 +15,7 @@ import { Inicio } from "./_components/Inicio";
 import { JuegosCatalog } from "./_components/JuegosCatalog";
 import { PacksCatalog } from "./_components/PacksCatalog";
 import { Noticias } from "./_components/Noticias";
-import { Ventas } from "./_components/Ventas";
+import { Analiticas } from "./_components/Analiticas";
 import { Finanzas } from "./_components/Finanzas";
 import { Entregas } from "./_components/Entregas";
 import { Ajustes } from "./_components/Ajustes";
@@ -45,9 +45,9 @@ const NAV_ITEMS: { id: AdminSection; label: string; hint: string; Icon: React.El
   { id: "juegos",   label: "Juegos",    hint: "Catálogo de juegos individuales",  Icon: Gamepad2,     accent: "text-blue-400",      rgb: "96,165,250" },
   { id: "packs",    label: "Packs",     hint: "Combos y packs de la tienda",      Icon: Gift,         accent: "text-purple-400",    rgb: "192,132,252" },
   { id: "entregas", label: "Entregas",  hint: "Órdenes activas y seguimiento",    Icon: PackageCheck, accent: "text-yellow-400",    rgb: "250,204,21" },
-  { id: "finanzas", label: "Finanzas",  hint: "Ingresos, costos y reparto",       Icon: PiggyBank,    accent: "text-emerald-400",   rgb: "52,211,153" },
+  { id: "finanzas", label: "Finanzas",  hint: "Ingresos, historial y ventas",     Icon: PiggyBank,    accent: "text-emerald-400",   rgb: "52,211,153" },
   { id: "noticias", label: "Noticias",  hint: "Novedades visibles en la tienda",  Icon: Newspaper,    accent: "text-orange-400",    rgb: "251,146,60" },
-  { id: "ventas",   label: "Historial", hint: "Todas las ventas concretadas",     Icon: Receipt,      accent: "text-green-400",     rgb: "74,222,128" },
+  { id: "analiticas", label: "Analíticas", hint: "Métricas de tráfico e interés", Icon: LineChart,    accent: "text-pink-400",      rgb: "244,114,182" },
   { id: "soporte",  label: "Soporte",   hint: "Consultas entrantes de clientes",  Icon: LifeBuoy,     accent: "text-sky-400",       rgb: "56,189,248" },
   { id: "ajustes",  label: "Ajustes",   hint: "Precios, garantías y proveedores", Icon: Settings,     accent: "text-gray-400",      rgb: "156,163,175" },
 ];
@@ -942,19 +942,15 @@ export default function AdminPage() {
             <Noticias news={news} newsTableExists={newsTableExists} loading={loading} setLoading={setLoading}
               showNotice={showNotice} onReload={reloadNewsYTienda} />
           )}
+          {section === "analiticas" && (
+            <Analiticas />
+          )}
           {section === "entregas" && (
             <Entregas orders={orders} games={games} packs={packs} providers={providers} settings={settings} loading={loading} setLoading={setLoading}
               showNotice={showNotice} onReload={loadOrders} />
           )}
-          {section === "ventas" && (
-            <Ventas sales={sales} providers={providers} settings={settings}
-              salesTableExists={salesTableExists}
-              salesError={salesError}
-              loading={loading} setLoading={setLoading}
-              showNotice={showNotice} onReload={loadAll} />
-          )}
           {section === "finanzas" && (
-            <Finanzas sales={sales} adSpend={adSpend} games={games} packs={packs} settings={settings}
+            <Finanzas sales={sales} adSpend={adSpend} games={games} packs={packs} settings={settings} providers={providers}
               salesTableExists={salesTableExists}
               salesError={salesError}
               loading={loading} setLoading={setLoading}

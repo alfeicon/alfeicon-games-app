@@ -5,8 +5,9 @@ import {
   Banknote, CalendarDays, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Plus, Receipt, RefreshCw, Trash2, TrendingDown, TrendingUp, Bot, X
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
-import type { AdSpend, AdminGame, AdminPack, Sale, SettingsState } from "../_types";
+import type { AdSpend, AdminGame, AdminPack, Provider, Sale, SettingsState } from "../_types";
 import { fmt, fmtDate, fmtTime } from "../_helpers";
+import { Ventas } from "./Ventas";
 
 const LABEL = "mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-600";
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none";
@@ -18,6 +19,7 @@ type Props = {
   adSpend: AdSpend[];
   games: AdminGame[];
   packs: AdminPack[];
+  providers: Provider[];
   settings: SettingsState;
   salesTableExists: boolean | null;
   salesError: string | null;
@@ -27,9 +29,11 @@ type Props = {
   onReload: () => Promise<void>;
 };
 
-type Tab = "resumen" | "publicidad";
+};
 
-export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExists, salesError, loading, setLoading, showNotice, onReload }: Props) {
+type Tab = "resumen" | "publicidad" | "historial";
+
+export function Finanzas({ sales, adSpend, games, packs, providers, settings, salesTableExists, salesError, loading, setLoading, showNotice, onReload }: Props) {
   const partnerName = settings.partnerName || "Socio";
   const [tab, setTab] = useState<Tab>("resumen");
   const [showAddAd, setShowAddAd] = useState(false);
@@ -231,13 +235,17 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
       <div className="shrink-0 border-b border-white/5 px-6 py-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-black uppercase tracking-widest text-emerald-400">Finanzas</h1>
-          <div className="mt-3 flex gap-1">
-            {(["resumen", "publicidad"] as Tab[]).map(t => (
-              <button key={t} onClick={() => setTab(t)}
-                className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  tab === t ? "bg-emerald-500/15 text-emerald-300" : "text-gray-600 hover:text-gray-400"
-                }`}>
-                {t === "resumen" ? "Resumen & Calendario" : "Publicidad"}
+          {/* TABS */}
+          <div className="mb-6 flex space-x-2 border-b border-white/10 pb-4">
+            {(["resumen", "publicidad", "historial"] as Tab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                  tab === t ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                {t === "resumen" ? "Resumen" : t === "publicidad" ? "Publicidad" : "Historial"}
               </button>
             ))}
           </div>
@@ -540,6 +548,13 @@ export function Finanzas({ sales, adSpend, games, packs, settings, salesTableExi
         </div>
       )}
 
+      {tab === "historial" && (
+        <Ventas sales={sales} providers={providers} settings={settings}
+          salesTableExists={salesTableExists}
+          salesError={salesError}
+          loading={loading} setLoading={setLoading}
+          showNotice={showNotice} onReload={onReload} />
+      )}
     </div>
   );
 }
