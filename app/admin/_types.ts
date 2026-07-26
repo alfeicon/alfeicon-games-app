@@ -79,13 +79,15 @@ export type Order = {
   provider?: string | null;
   partner_pct?: number | null;
   pack_ids?: string[] | null;
-  payment_method?: 'transferencia' | 'mercadopago' | null;
+  payment_method?: 'transferencia' | 'mercadopago' | 'global66' | 'prex' | 'binance' | null;
   payment_status?: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'refunded' | null;
   receipt_url?: string | null;
   mp_preference_id?: string | null;
   mp_payment_id?: string | null;
   /** Cuándo confirmó el cliente la entrega. Inicio de la garantía. */
   completed_at?: string | null;
+  user_id?: string | null;
+  scheduled_at?: string | null;
   created_at: string;
 };
 

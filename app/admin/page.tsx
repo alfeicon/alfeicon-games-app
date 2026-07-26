@@ -2,10 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, ChevronLeft,
   Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X, PiggyBank,
-  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart
+  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart, Lock
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -67,6 +68,9 @@ export default function AdminPage() {
   const [sessionReady, setSessionReady] = useState(!isSupabaseConfigured);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [pinVerified, setPinVerified] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
 
   const [section, setSection] = useState<AdminSection>("inicio");
   // Sidebar de desktop: plegado a iconos. Se abre al acercar el cursor y se
@@ -418,7 +422,12 @@ export default function AdminPage() {
     supabase.auth.getSession().then(({ data }) => {
       const ok = Boolean(data.session);
       setIsLoggedIn(ok); setSessionReady(true);
-      if (ok) runLoadOnce();
+      if (ok) {
+        if (typeof window !== "undefined" && sessionStorage.getItem("admin_pin_verified") === "true") {
+          setPinVerified(true);
+        }
+        runLoadOnce();
+      }
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
       const ok = Boolean(session);
@@ -616,6 +625,59 @@ export default function AdminPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#090b0d]">
         <Loader2 className="animate-spin text-gray-700" size={22} />
+      </div>
+    );
+  }
+
+  // ── Verificación PIN ─────────────────────────────────────────────────────
+  if (!pinVerified) {
+    const handlePinSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      const correctPin = process.env.NEXT_PUBLIC_ADMIN_PIN || "123456";
+      if (pinInput === correctPin) {
+        sessionStorage.setItem("admin_pin_verified", "true");
+        setPinVerified(true);
+      } else {
+        setPinError("PIN incorrecto");
+        setPinInput("");
+        setTimeout(() => setPinError(""), 3000);
+      }
+    };
+    
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#090b0d] p-6 text-white">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-sm rounded-[2rem] border border-white/5 bg-white/[0.02] p-8 shadow-2xl backdrop-blur-md text-center">
+          <div className="mb-6 mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+            <Lock size={24} className="text-white" />
+          </div>
+          <h2 className="mb-2 text-xl font-black uppercase tracking-widest text-white">Verificación</h2>
+          <p className="mb-8 text-xs text-gray-500">Ingresa tu PIN de seguridad para acceder al panel.</p>
+          
+          <form onSubmit={handlePinSubmit} className="flex flex-col gap-4">
+            <input 
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={pinInput}
+              onChange={e => setPinInput(e.target.value.replace(/\D/g, ''))}
+              className="w-full text-center tracking-[1em] text-2xl font-bold bg-black/30 border border-white/10 rounded-2xl py-4 outline-none focus:border-white/30 transition-colors"
+              placeholder="••••••"
+              autoFocus
+            />
+            {pinError && <p className="text-xs text-red-400 font-bold">{pinError}</p>}
+            <button 
+              type="submit"
+              disabled={pinInput.length < 4}
+              className="w-full rounded-2xl bg-white py-4 text-xs font-black uppercase tracking-widest text-black shadow-lg disabled:opacity-50 mt-4"
+            >
+              Desbloquear
+            </button>
+          </form>
+          <button onClick={signOut} className="mt-6 text-[10px] uppercase font-bold tracking-widest text-gray-500 hover:text-white transition-colors">
+            Cerrar Sesión
+          </button>
+        </motion.div>
       </div>
     );
   }

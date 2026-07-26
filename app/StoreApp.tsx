@@ -4,8 +4,9 @@
 import { startTransition, useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
 import Image from "next/image";
+import Link from "next/link";
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageCircle, Heart, ArrowRight, ShoppingCart, Plus, Landmark, Ticket } from 'lucide-react';
+import { MessageCircle, Heart, ArrowRight, ShoppingCart, Plus, Landmark, Ticket, User, Library, History, Sparkles, Clock, Crown, Globe, CreditCard, Coins } from 'lucide-react';
 import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase, findCatalogItemBySlug, slugifyTitulo, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
@@ -22,6 +23,8 @@ import GuideSection, { type GuideConsole } from '@/components/app-store/GuideSec
 import SupportSection from '@/components/app-store/SupportSection';
 import TermsModal from '@/components/app-store/TermsModal';
 import TransferDetailsPanel from '@/components/app-store/TransferDetailsPanel';
+import LoginModal from '@/components/auth/LoginModal';
+import EmbeddedLibrary from '@/components/app-store/EmbeddedLibrary';
 import { CurrencyProvider, useCurrency } from '@/components/currency/CurrencyProvider';
 import CurrencyWelcome from '@/components/currency/CurrencyWelcome';
 
@@ -109,6 +112,20 @@ export default function MobileAppStore({ initial, openSlug }: { initial: StoreIn
 }
 
 function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?: string }) {
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase?.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+    });
+    const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+    }) ?? { data: { subscription: { unsubscribe: () => {} } } };
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
+
   const { format, currency, isBase, convert, code: currencyCode } = useCurrency();
 
   // Deep-link: si la URL es /juego/<slug>, buscamos el juego/pack para abrir su
@@ -125,6 +142,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
   const [storeTab, setStoreTab] = useState<'individual' | 'packs'>(deepLinkItem?.esPack ? 'packs' : 'individual');
   // Ficha a abrir automáticamente al montar (deep-link). Se consume una vez.
   const [pendingOpenItem, setPendingOpenItem] = useState<CatalogItem | null>(deepLinkItem);
+  const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [helpSelected, setHelpSelected] = useState<GuideConsole | null>(null);
   const [pickerExiting, setPickerExiting] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -138,6 +156,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
   const [showBottomNav, setShowBottomNav] = useState(true);
   const [dockCollapsed, setDockCollapsed] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Colapsa el dock al hacer scroll hacia abajo, lo expande al subir.
   // Si el scroll se detiene 1 segundo, el dock se reabre solo.
@@ -459,6 +478,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
       discount_amount: rebaja,
       payment_method: 'mercadopago',
       payment_status: 'pending',
+      user_id: user?.id ?? null,
     }).select('id').single() ?? Promise.resolve({ data: null, error: null }));
 
     if (insertErr) {
@@ -508,7 +528,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
   // sale_price) y lleva al cliente a su portal /entrega/[code], donde ve los
   // datos, sube el comprobante y espera la aprobación. Si the insert falla
   // (p. ej. falta correr order-receipts.sql), cae al panel de datos en el modal.
-  const iniciarTransferencia = useCallback(async (data: {items: CatalogItem[], origin: {x:number, y:number}}) => {
+  const iniciarTransferencia = useCallback(async (data: {items: CatalogItem[], origin: {x:number, y:number}}, method: 'transferencia' | 'global66' | 'prex' | 'binance' = 'transferencia') => {
     if (pagoEnCursoRef.current) return; // doble toque: la orden ya se está creando
     pagoEnCursoRef.current = true;
     setPagoEnCurso(true);
@@ -528,8 +548,9 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
       sale_price: total,
       discount_code: descuento?.code ?? null,
       discount_amount: rebajaTransf,
-      payment_method: 'transferencia',
+      payment_method: method,
       payment_status: 'pending',
+      user_id: user?.id ?? null,
     }).select('id').single() ?? Promise.resolve({ data: null, error: null }));
 
     if (error) {
@@ -792,23 +813,31 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
         {/* MAIN */}
         <main className="min-h-[100dvh] overflow-x-hidden px-4 pb-32 pt-[calc(env(safe-area-inset-top)+16px)]">
 
-{/* SECCIÓN 1: INICIO */}
+          {/* SECCIÓN 1: INICIO Y SOPORTE */}
           {visibleSection === 'inicio' && (
-            <HomeSectionV2
-              sectionMotion={sectionMotion}
-              productos={productos}
-              packs={packs}
-              news={news}
-              ofertasFlash={ofertasFlash}
-              cargando={cargando}
-              nintendoOnlinePrice={appSettings.nintendoOnlinePrice}
-              navigateToSection={navigateToSection}
-              setStoreTab={changeStoreTab}
-              abrirFicha={abrirFichaDesdeInicio}
-              addToCart={addToCart}
-              comprarNintendoOnline={comprarNintendoOnline}
-              onOpenTerms={() => setShowTerms(true)}
-            />
+            <div className={`transition-all duration-300 ${sectionMotion}`}>
+              <HomeSectionV2
+                sectionMotion=""
+                productos={productos}
+                packs={packs}
+                news={news}
+                ofertasFlash={ofertasFlash}
+                cargando={cargando}
+                nintendoOnlinePrice={appSettings.nintendoOnlinePrice}
+                navigateToSection={navigateToSection}
+                setStoreTab={changeStoreTab}
+                abrirFicha={abrirFichaDesdeInicio}
+                addToCart={addToCart}
+                comprarNintendoOnline={comprarNintendoOnline}
+                onOpenTerms={() => setShowTerms(true)}
+              />
+              <div className="mt-8 pb-20">
+                <SupportSection
+                  sectionMotion=""
+                  onOpenTerms={() => setShowTerms(true)}
+                />
+              </div>
+            </div>
           )}
 
           {/* SECCIÓN 2: CATÁLOGO */}
@@ -864,14 +893,111 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
             />
           )}
 
-          {/* SECCIÓN 4: AYUDA Y CONFIANZA */}
+          {/* SECCIÓN 4: PERFIL (Cuenta) */}
           {visibleSection === 'perfil' && (
-            <SupportSection
-              sectionMotion={sectionMotion}
-              onOpenTerms={() => setShowTerms(true)}
-            />
+            <div className={`transition-all duration-300 ${sectionMotion} flex flex-col items-center justify-center pt-8 px-4 text-center pb-20`}>
+              
+              {user ? (
+                <EmbeddedLibrary 
+                  user={user} 
+                  onLogout={async () => {
+                    await supabase?.auth.signOut();
+                    window.location.reload();
+                  }}
+                  onSettingsChange={setIsProfileSettingsOpen}
+                />
+              ) : (
+                <div className="flex w-full max-w-md flex-col items-center px-2">
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-inner">
+                    <User size={24} className="text-white" />
+                  </div>
+                  <h2 className="mb-6 text-xl font-black uppercase tracking-widest text-white">Mi Perfil</h2>
+                  <div className="mb-4 flex flex-col items-center">
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">Sube de Nivel</p>
+                    <h3 className="text-center text-xl font-black text-white">Beneficios de tu Cuenta</h3>
+                  </div>
+
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
+                    className="mb-8 flex w-full flex-col items-center"
+                  >
+                    <button 
+                      onClick={() => setShowLoginModal(true)}
+                      className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white py-4 text-xs font-black uppercase tracking-widest text-black shadow-[0_0_40px_rgba(255,255,255,0.15)] transition-transform hover:scale-[1.02] active:scale-95"
+                    >
+                      <User size={16} className="transition-transform group-hover:scale-110" /> 
+                      <span className="relative z-10">Iniciar Sesión o Crear Cuenta</span>
+                      <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-black/10 to-transparent opacity-0 transition-all duration-700 ease-in-out group-hover:translate-x-full group-hover:opacity-100" />
+                    </button>
+                    <p className="mt-3 text-[10px] text-gray-500">Es rápido, fácil y totalmente gratis.</p>
+                  </motion.div>
+                  
+                  {/* Lista de Beneficios */}
+                  <div className="grid w-full gap-3 text-left">
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                      className="flex items-start gap-4 rounded-[1.25rem] border border-white/5 bg-white/5 p-4 backdrop-blur-md"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+                        <History size={18} />
+                      </div>
+                      <div>
+                        <h4 className="text-[13px] font-black text-white uppercase tracking-wide">Registro de Compras</h4>
+                        <p className="mt-1 text-[11px] leading-relaxed text-gray-400">Accede a tu historial completo y mantén tus juegos y licencias siempre a mano.</p>
+                      </div>
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+                      className="flex items-start gap-4 rounded-[1.25rem] border border-white/5 bg-white/5 p-4 backdrop-blur-md"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-400">
+                        <Sparkles size={18} />
+                      </div>
+                      <div>
+                        <h4 className="text-[13px] font-black text-white uppercase tracking-wide">Acumulación de Puntos</h4>
+                        <p className="mt-1 text-[11px] leading-relaxed text-gray-400">Gana puntos con cada compra y canjéalos por descuentos exclusivos en la tienda.</p>
+                      </div>
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+                      className="flex items-start gap-4 rounded-[1.25rem] border border-white/5 bg-white/5 p-4 backdrop-blur-md"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-400">
+                        <Clock size={18} />
+                      </div>
+                      <div>
+                        <h4 className="text-[13px] font-black text-white uppercase tracking-wide">Instala a tu Ritmo</h4>
+                        <p className="mt-1 text-[11px] leading-relaxed text-gray-400">Compra ahora y programa la instalación para el momento que más te acomode.</p>
+                      </div>
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+                      className="flex items-start gap-4 rounded-[1.25rem] border border-white/5 bg-white/5 p-4 backdrop-blur-md"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-400">
+                        <Crown size={18} />
+                      </div>
+                      <div>
+                        <h4 className="text-[13px] font-black text-white uppercase tracking-wide">Membresías Exclusivas</h4>
+                        <p className="mt-1 text-[11px] leading-relaxed text-gray-400">Accede a la compra de membresías VIP y obtén beneficios únicos en juegos.</p>
+                      </div>
+                    </motion.div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </main>
+
+        <AnimatePresence>
+          {showLoginModal && (
+            <LoginModal 
+              onClose={() => setShowLoginModal(false)} 
+              onSuccess={(u) => {
+                setUser(u);
+                setShowLoginModal(false);
+              }} 
+            />
+          )}
+        </AnimatePresence>
 
 {/* MODAL TÉRMINOS Y CONDICIONES */}
 {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -936,7 +1062,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
         <AnimatePresence>
           {purchaseModalData && (
             <motion.div
-              className="catalog-detail-backdrop"
+              className="catalog-detail-backdrop catalog-detail-backdrop--checkout"
               style={{ zIndex: 100 }}
               role="dialog"
               aria-modal="true"
@@ -947,7 +1073,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
               onClick={cerrarModalCompra}
             >
               <motion.div
-                className="catalog-detail-panel catalog-detail-panel--scroll"
+                className="catalog-detail-panel catalog-detail-panel--scroll catalog-detail-panel--checkout"
                 initial={{ y: 90, opacity: 0 }}
                 animate={{ y: 0, opacity: 1, transition: { type: 'spring', damping: 28, stiffness: 340 } }}
                 exit={{ y: 90, opacity: 0, transition: { duration: 0.26, ease: [0.4, 0, 1, 1] } }}
@@ -1063,37 +1189,73 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                         <Landmark size={18} strokeWidth={2} />
                       </div>
                       <div className="text-left">
-                        <p className="text-sm font-bold text-white">Transferencia</p>
-                        <p className="mt-0.5 text-[10px] text-gray-400">Datos y comprobante en la página</p>
+                        <p className="text-sm font-bold text-white">Transferencia Chile</p>
+                        <p className="mt-0.5 text-[10px] text-gray-400">BancoEstado, Santander, B. de Chile y más</p>
                       </div>
                     </div>
                     <ArrowRight size={16} className="text-gray-500" />
                   </button>
+                  
+                  {/* International Payments */}
+                  {!isBase && (
+                    <div className="flex flex-col gap-2 mt-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1 ml-2">Pagos Internacionales</p>
+                      <button
+                        onClick={() => iniciarTransferencia(purchaseModalData, 'global66')}
+                        disabled={pagoEnCurso}
+                        className="motion-press premium-control flex w-full items-center justify-between rounded-2xl p-3.5 text-white disabled:opacity-60"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-1.5 shadow-sm">
+                            <img src="/global66-logo.jpeg" alt="Global66" className="w-full h-full object-contain" />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-bold text-white">Global66</p>
+                          </div>
+                        </div>
+                        <ArrowRight size={14} className="text-gray-500" />
+                      </button>
+
+                      <button
+                        onClick={() => iniciarTransferencia(purchaseModalData, 'prex')}
+                        disabled={pagoEnCurso}
+                        className="motion-press premium-control flex w-full items-center justify-between rounded-2xl p-3.5 text-white disabled:opacity-60"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-1.5 shadow-sm">
+                            <img src="/prex-logo.svg" alt="Prex" className="w-full h-full object-contain" />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-bold text-white">Prex</p>
+                          </div>
+                        </div>
+                        <ArrowRight size={14} className="text-gray-500" />
+                      </button>
+
+                      <button
+                        onClick={() => iniciarTransferencia(purchaseModalData, 'binance')}
+                        disabled={pagoEnCurso}
+                        className="motion-press premium-control flex w-full items-center justify-between rounded-2xl p-3.5 text-white disabled:opacity-60"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#FCD535] p-1.5 shadow-sm">
+                            <img src="/binance-logo.svg" alt="Binance Pay" className="w-full h-full object-contain" />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-bold text-white">Binance Pay (USDT)</p>
+                          </div>
+                        </div>
+                        <ArrowRight size={14} className="text-gray-500" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {paymentLogos.length > 0 && (
-                  <div className="mt-5 flex flex-col items-center gap-2 border-t border-white/10 pt-4">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Pagas seguro con</p>
-                    <div className="flex flex-wrap items-center justify-center gap-1.5">
-                      {paymentLogos.map((l) => (
-                        <Image
-                          key={l.name}
-                          src={l.logo}
-                          alt={l.name}
-                          title={l.name}
-                          width={24}
-                          height={24}
-                          loading="lazy"
-                          className="rounded bg-white px-1 py-0.5 object-contain"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+
 
                 <button
                   onClick={cerrarModalCompra}
-                  className="mt-5 w-full py-2 text-center text-xs font-black uppercase tracking-widest text-gray-500 transition-colors active:text-white"
+                  className="mt-5 w-full py-2 pb-6 text-center text-xs font-black uppercase tracking-widest text-gray-500 transition-colors active:text-white"
                 >
                   Cancelar
                 </button>
@@ -1156,9 +1318,10 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
           </motion.div>
         ))}
 
+
         <AppDock
           activeSection={activeSection}
-          showBottomNav={showBottomNav}
+          showBottomNav={showBottomNav && !isProfileSettingsOpen}
           dockCollapsed={dockCollapsed}
           navIndex={navIndex}
           onNavigate={navigateToSection}
@@ -1171,6 +1334,8 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
           onCheckout={checkoutCart}
           formatPrice={format}
           currencyCode={currency.code}
+          isLoggedIn={!!user}
+          forceHidden={isProfileSettingsOpen}
         />
       </div>
     </div>

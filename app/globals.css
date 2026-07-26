@@ -403,6 +403,15 @@ html {
   padding: 1rem;
 }
 
+/* Modal de pago: se dibuja por encima del dock, así que quitamos el padding extra
+   para que pueda usar todo el alto de la pantalla sin cortarse arriba. */
+.catalog-detail-backdrop--checkout {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+.catalog-detail-panel--checkout {
+  max-height: min(92vh, 800px);
+}
+
 /* Regiones: header y footer fijos, contenido scrolleable en el medio */
 .cdm-header {
   flex-shrink: 0;

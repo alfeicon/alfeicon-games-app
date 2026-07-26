@@ -2,7 +2,7 @@
 
 import { cloneElement, isValidElement, memo, useEffect, type MouseEvent, type ReactElement } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Gamepad2, Home, MessageCircle, ShoppingCart, Trash2, X } from 'lucide-react';
+import { BookOpen, Gamepad2, Home, MessageCircle, ShoppingCart, Trash2, X, User } from 'lucide-react';
 import type { CatalogItem } from '@/lib/catalog';
 import './AppDock.css';
 
@@ -12,7 +12,7 @@ const SECTION_ICONS: Record<SectionId, ReactElement> = {
   inicio:        <Home size={22} />,
   catalogo:      <Gamepad2 size={22} />,
   instrucciones: <BookOpen size={22} />,
-  perfil:        <MessageCircle size={22} />,
+  perfil:        <User size={22} />,
 };
 
 const DOCK_EASE = [0.22, 1, 0.36, 1] as const;
@@ -42,6 +42,7 @@ type AppDockProps = {
   onCheckout: (event: MouseEvent<HTMLElement>) => void;
   formatPrice: (value: number) => string;
   currencyCode: string;
+  isLoggedIn?: boolean;
 };
 
 type NavButtonProps = {
@@ -110,6 +111,8 @@ function AppDock({
   onCheckout,
   formatPrice,
   currencyCode,
+  isLoggedIn,
+  forceHidden = false,
 }: AppDockProps) {
   const cartItemCount = cartItems.length;
   const cartTotal = cartItems.reduce((acc, item) => acc + item.precio, 0);
@@ -268,6 +271,16 @@ function AppDock({
                       {formatPrice(cartTotal)} <span>{currencyCode}</span>
                     </motion.strong>
                   </div>
+                  
+                  {!isLoggedIn && (
+                    <div className="mb-3 mt-1 rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-center">
+                      <p className="text-[10px] text-blue-200">
+                        💡 ¿Quieres instalar más tarde o ganar puntos? <br />
+                        <button type="button" onClick={() => { onCloseCart(); onNavigate('perfil'); }} className="font-bold text-white underline decoration-blue-500/50 underline-offset-2">Inicia sesión o crea una cuenta</button> antes de pagar.
+                      </p>
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     className="dock-cart-checkout motion-press"
@@ -286,19 +299,19 @@ function AppDock({
         className="app-dock-wrapper"
         initial={false}
         animate={{
-          y: showBottomNav || dockCollapsed ? 0 : 22,
-          opacity: showBottomNav || dockCollapsed ? 1 : 0,
+          y: (!forceHidden && (showBottomNav || dockCollapsed)) ? 0 : 40,
+          opacity: (!forceHidden && (showBottomNav || dockCollapsed)) ? 1 : 0,
         }}
         transition={{
-          y: { duration: 0.34, ease: DOCK_EASE, delay: showBottomNav ? 0.06 : 0.22 },
-          opacity: { duration: 0.18, delay: showBottomNav ? 0 : 0.28 },
+          y: { duration: 0.34, ease: DOCK_EASE, delay: showBottomNav && !forceHidden ? 0.06 : 0.22 },
+          opacity: { duration: 0.18, delay: showBottomNav && !forceHidden ? 0 : 0.28 },
         }}
       >
         {/* El dock se contrae hacia la izquierda al bajar (el wrap es el primer
             hijo del flex, así que al reducir su ancho queda anclado a la izquierda).
             Dock y botón del carrito comparten la MISMA curva y duración (EASE_MORPH /
             MORPH_DURATION): el borde derecho de ambos se mueve como una sola pieza. */}
-        <div className={`flex w-full items-center justify-start ${dockCollapsed ? 'gap-0' : 'gap-3'}`} style={{ pointerEvents: showBottomNav || dockCollapsed ? 'auto' : 'none' }}>
+        <div className={`flex w-full items-center justify-start ${dockCollapsed ? 'gap-0' : 'gap-3'}`} style={{ pointerEvents: (!forceHidden && (showBottomNav || dockCollapsed)) ? 'auto' : 'none' }}>
           <motion.div
             className="dock-morph-wrap"
             initial={false}
@@ -345,7 +358,7 @@ function AppDock({
                 <NavButton active={activeSection === 'inicio'} onClick={() => handleNavigate('inicio')} icon={<Home size={20} />} label="Inicio" />
                 <NavButton active={activeSection === 'catalogo'} onClick={() => handleNavigate('catalogo')} icon={<Gamepad2 size={20} />} label="Juegos" />
                 <NavButton active={activeSection === 'instrucciones'} onClick={() => handleNavigate('instrucciones')} icon={<BookOpen size={20} />} label="Guía" />
-                <NavButton active={activeSection === 'perfil'} onClick={() => handleNavigate('perfil')} icon={<MessageCircle size={20} />} label="Soporte" />
+                <NavButton active={activeSection === 'perfil'} onClick={() => handleNavigate('perfil')} icon={<User size={20} />} label="Perfil" />
               </nav>
             </motion.div>
           </motion.div>

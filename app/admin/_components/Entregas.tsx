@@ -1035,6 +1035,21 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                 Transferencia
               </span>
             )}
+            {item.payment_method === "global66" && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-blue-400">
+                Global66
+              </span>
+            )}
+            {item.payment_method === "prex" && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-purple-400">
+                Prex
+              </span>
+            )}
+            {item.payment_method === "binance" && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-yellow-500">
+                Binance Pay
+              </span>
+            )}
             {/* Pagó por transferencia y subió comprobante: hay que validarlo. */}
             {item.payment_status === "pending" && item.receipt_url && (
               <span className="flex shrink-0 items-center gap-1 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-yellow-500">

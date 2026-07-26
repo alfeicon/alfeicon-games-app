@@ -70,6 +70,7 @@ export function EntregaWizard() {
   // depósito que llega al banco, que viene con nombre y apellido.
   const nombreTitularOk = nombreTitular.trim().split(/\s+/).filter(Boolean).length >= 2;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
   const [state, setState] = useState<WizardState>("loading");
   const [consoleType, setConsoleType] = useState<"switch1" | "switch2" | null>(null);
   const [tutorialStep, setTutorialStep] = useState(1);
@@ -623,7 +624,7 @@ export function EntregaWizard() {
     // Vale tanto para transferencia (comprobante) como para Mercado Pago
     // (confirmación del webhook). Las órdenes viejas, sin payment_method,
     // siguen pasando derecho como siempre.
-    if ((o.payment_method === "transferencia" || o.payment_method === "mercadopago") && o.payment_status !== "approved") {
+    if (o.payment_method && o.payment_status !== "approved") {
       setState("payment");
       return;
     }
@@ -1157,23 +1158,45 @@ export function EntregaWizard() {
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowCancelModal(false)} />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative z-10 w-full max-w-sm rounded-3xl border border-white/10 bg-[#120a0a] p-6 text-center shadow-2xl">
-              <h2 className="text-lg font-black uppercase tracking-widest text-white">Cancelar Orden</h2>
-              <p className="mt-3 text-sm leading-relaxed text-gray-300">
-                Tu orden <strong className="text-yellow-500">{order?.short_code}</strong> se cancelará. ¿Estás seguro de volver a la tienda?
-              </p>
-              <div className="mt-6 flex flex-col gap-3">
-                <button onClick={async () => {
-                  if (order && supabase) {
-                    await supabase.from('orders').update({ payment_status: 'cancelled' }).eq('id', order.id);
-                  }
-                  window.location.href = "/";
-                }} className="flex w-full items-center justify-center rounded-full bg-white/10 py-3.5 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-red-500/20 hover:text-red-400">
-                  Sí, Cancelar Orden
-                </button>
-                <button onClick={() => setShowCancelModal(false)} className="flex w-full items-center justify-center gap-2 rounded-full bg-white py-3.5 text-xs font-black uppercase tracking-widest text-black transition-colors hover:bg-gray-200">
-                  No, Continuar Pago
-                </button>
-              </div>
+                {isCanceling ? (
+                  <motion.div
+                    key="canceling"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center justify-center py-6"
+                  >
+                    <div className="relative mb-6 flex h-16 w-16 items-center justify-center">
+                      <div className="absolute inset-0 animate-ping rounded-full bg-red-500/20" />
+                      <div className="absolute inset-0 animate-spin rounded-full border-4 border-white/5 border-t-red-500" />
+                      <div className="h-6 w-6 rounded-full bg-red-500/20 backdrop-blur-sm" />
+                    </div>
+                    <h2 className="text-sm font-black uppercase tracking-widest text-white">Cancelando</h2>
+                    <p className="mt-2 text-xs font-semibold text-gray-400">Volviendo a la tienda...</p>
+                  </motion.div>
+                ) : (
+                  <motion.div key="confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                    <h2 className="text-lg font-black uppercase tracking-widest text-white">Cancelar Orden</h2>
+                    <p className="mt-3 text-sm leading-relaxed text-gray-300">
+                      Tu orden <strong className="text-yellow-500">{order?.short_code}</strong> se cancelará. ¿Estás seguro de volver a la tienda?
+                    </p>
+                    <div className="mt-6 flex flex-col gap-3">
+                      <button onClick={async () => {
+                        setIsCanceling(true);
+                        if (order && supabase) {
+                          await supabase.from('orders').update({ payment_status: 'cancelled' }).eq('id', order.id);
+                        }
+                        setTimeout(() => {
+                          window.location.href = "/";
+                        }, 1600);
+                      }} className="motion-press flex w-full items-center justify-center rounded-full bg-white/10 py-3.5 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-red-500/20 hover:text-red-400">
+                        Sí, Cancelar Orden
+                      </button>
+                      <button onClick={() => setShowCancelModal(false)} className="motion-press flex w-full items-center justify-center gap-2 rounded-full bg-white py-3.5 text-xs font-black uppercase tracking-widest text-black transition-colors hover:bg-gray-200">
+                        No, Continuar Pago
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
             </motion.div>
           </div>
         )}
@@ -1272,6 +1295,7 @@ export function EntregaWizard() {
                 code={order.short_code}
                 totalLabel={`$${(order.sale_price ?? 0).toLocaleString("es-CL")} CLP`}
                 isCollapsed={(!!order.receipt_url && order.payment_status !== "rejected") || uploadingReceipt}
+                paymentMethod={order.payment_method!}
               />
             </div>
 
