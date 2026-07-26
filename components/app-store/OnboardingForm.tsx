@@ -26,6 +26,12 @@ export default function OnboardingForm({ user, onComplete }: OnboardingFormProps
     setLoading(true);
     setError(null);
 
+    if (!supabase) {
+      setError("Error de configuración de base de datos.");
+      setLoading(false);
+      return;
+    }
+
     // Ensure profile exists or update it
     const { data, error: upsertError } = await supabase
       .from("profiles")

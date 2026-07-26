@@ -34,7 +34,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
     setAuthSuccess("");
 
     if (isLogin) {
-      const { error, data } = await supabase.auth.signInWithPassword({ email, password });
+      const { error, data } = await supabase!.auth.signInWithPassword({ email, password });
       if (error) {
         setAuthError(error.message);
         setLoading(false);
@@ -48,7 +48,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
         return;
       }
       
-      const { error, data } = await supabase.auth.signUp({ 
+      const { error, data } = await supabase!.auth.signUp({ 
         email, 
         password
       });

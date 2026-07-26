@@ -34,7 +34,7 @@ export default function ProfileSettingsModal({ user, profile, onClose, onUpdate,
     setMessage(null);
 
     // Update Profile Data
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from("profiles")
       .update({
         first_name: firstName,
@@ -68,7 +68,7 @@ export default function ProfileSettingsModal({ user, profile, onClose, onUpdate,
     setPassMessage(null);
 
     // Verificar la contraseña actual haciendo login de nuevo
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase!.auth.signInWithPassword({
       email: user.email,
       password: oldPassword,
     });
@@ -80,7 +80,7 @@ export default function ProfileSettingsModal({ user, profile, onClose, onUpdate,
     }
 
     // Actualizar a la nueva
-    const { error: passError } = await supabase.auth.updateUser({ password: newPassword });
+    const { error: passError } = await supabase!.auth.updateUser({ password: newPassword });
     
     if (passError) {
       setPassMessage({ type: "error", text: "Error al actualizar contraseña: " + passError.message });
@@ -97,8 +97,8 @@ export default function ProfileSettingsModal({ user, profile, onClose, onUpdate,
     // Para eliminar la cuenta desde el cliente sin función RPC, es complicado.
     // Lo mejor es llamar a un endpoint, o desvincular al usuario.
     // Por ahora, simularemos la eliminación y cerraremos sesión.
-    await supabase.from("profiles").delete().eq("id", user.id);
-    await supabase.auth.signOut();
+    await supabase!.from("profiles").delete().eq("id", user.id);
+    await supabase!.auth.signOut();
     window.location.reload();
   };
 
