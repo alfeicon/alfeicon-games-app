@@ -43,6 +43,7 @@ type AppDockProps = {
   formatPrice: (value: number) => string;
   currencyCode: string;
   isLoggedIn?: boolean;
+  forceHidden?: boolean;
 };
 
 type NavButtonProps = {
