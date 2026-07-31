@@ -207,9 +207,19 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
             {isAdmin && (
               <Link 
                 href="/admin"
-                className="mx-auto flex items-center justify-center gap-2 w-full max-w-xs rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-95 mb-8"
+                className="group relative mx-auto mb-8 flex w-full items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-purple-600 p-5 shadow-[0_0_30px_-5px_rgba(59,130,246,0.4)] transition-all hover:scale-[1.02] active:scale-95 border border-white/10"
               >
-                <ShieldCheck size={16} /> Ir al Panel de Administración
+                <div className="absolute -left-10 top-1/2 h-24 w-24 -translate-y-1/2 rounded-full bg-white/20 blur-2xl" />
+                <div className="relative flex items-center gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 shadow-inner">
+                    <ShieldCheck size={24} className="text-white" />
+                  </div>
+                  <div className="text-left">
+                    <p className="mb-0.5 text-[9px] font-black uppercase tracking-widest text-blue-200">Acceso Exclusivo</p>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-white leading-tight">Panel de<br/>Administración</h3>
+                  </div>
+                </div>
+                <ArrowRight size={20} className="relative z-10 text-white/50 transition-transform group-hover:translate-x-1 group-hover:text-white" />
               </Link>
             )}
 

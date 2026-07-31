@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageCircle, Heart, ArrowRight, ShoppingCart, Plus, Landmark, Ticket, User, Library, History, Sparkles, Clock, Crown, Globe, CreditCard, Coins } from 'lucide-react';
+import { MessageCircle, Heart, ArrowRight, ShoppingCart, Plus, Landmark, Ticket, User, Library, History, Sparkles, Clock, Crown, Globe, CreditCard, Coins, ShieldCheck } from 'lucide-react';
 import AppDock, { type SectionId } from '@/components/app-store/AppDock';
 import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase, findCatalogItemBySlug, slugifyTitulo, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
@@ -981,6 +981,12 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                       </div>
                     </motion.div>
                   </div>
+
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="mt-8 mb-4 w-full flex justify-center">
+                    <Link href="/admin/login" className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-600 hover:text-white transition-colors">
+                      <ShieldCheck size={14} /> Acceso Admin
+                    </Link>
+                  </motion.div>
                 </div>
               )}
             </div>
