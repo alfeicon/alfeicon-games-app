@@ -28,6 +28,12 @@ export function Analiticas() {
   }, []);
 
   const handleOpenUsers = async () => {
+    if (!supabase) {
+      setUsersError("Error: Cliente de base de datos no inicializado.");
+      setShowUsersModal(true);
+      return;
+    }
+    
     setShowUsersModal(true);
     setLoadingUsers(true);
     setUsersError(null);
