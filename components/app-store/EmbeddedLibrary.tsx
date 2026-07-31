@@ -35,8 +35,7 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showRewardsSoon, setShowRewardsSoon] = useState(false);
   const [activeView, setActiveView] = useState<'profile' | 'settings' | 'entregas' | 'historial'>('profile');
-
-  const isAdmin = user?.email && user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     onSettingsChange?.(activeView !== 'profile');
@@ -46,9 +45,10 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
     async function fetchData() {
       if (!user?.id || !supabase) return;
       
-      const [ordersRes, profileRes] = await Promise.all([
+      const [ordersRes, profileRes, adminRes] = await Promise.all([
         supabase.from("orders").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-        supabase.from("profiles").select("*").eq("id", user.id).single()
+        supabase.from("profiles").select("*").eq("id", user.id).single(),
+        supabase.from("admin_users").select("user_id").eq("user_id", user.id).maybeSingle()
       ]);
 
       if (!ordersRes.error && ordersRes.data) {
@@ -57,6 +57,10 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
       
       if (!profileRes.error && profileRes.data) {
         setProfile(profileRes.data as UserProfile);
+      }
+      
+      if (adminRes.data || (user.email && user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL)) {
+        setIsAdmin(true);
       }
 
       setLoading(false);
