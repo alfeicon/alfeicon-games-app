@@ -41,13 +41,13 @@ export default function OnboardingForm({ user, onComplete }: OnboardingFormProps
         last_name: lastName,
         alias,
         birth_date: birthDate,
-      })
+      }, { onConflict: 'id' })
       .select()
       .single();
 
     if (upsertError) {
       console.error(upsertError);
-      setError("Hubo un error al guardar tu perfil.");
+      setError(`Error: ${upsertError.message || "No se pudo guardar tu perfil"}`);
       setLoading(false);
     } else {
       onComplete(data as UserProfile);
