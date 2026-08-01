@@ -136,8 +136,16 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     return findCatalogItemBySlug(all, openSlug);
   }, [openSlug, initial.productos, initial.packs]);
   // --- ESTADOS ---
-  const [activeSection, setActiveSection] = useState<SectionId>(deepLinkItem ? 'catalogo' : 'inicio');
-  const [visibleSection, setVisibleSection] = useState<SectionId>(deepLinkItem ? 'catalogo' : 'inicio');
+  const [activeSection, setActiveSection] = useState<SectionId>(() => {
+    if (deepLinkItem) return 'catalogo';
+    if (typeof window !== 'undefined' && window.location.search.includes('tab=perfil')) return 'perfil';
+    return 'inicio';
+  });
+  const [visibleSection, setVisibleSection] = useState<SectionId>(() => {
+    if (deepLinkItem) return 'catalogo';
+    if (typeof window !== 'undefined' && window.location.search.includes('tab=perfil')) return 'perfil';
+    return 'inicio';
+  });
   const [sectionMotion, setSectionMotion] = useState<SectionMotionClass>('section-idle');
   const [storeTab, setStoreTab] = useState<'individual' | 'packs'>(deepLinkItem?.esPack ? 'packs' : 'individual');
   // Ficha a abrir automáticamente al montar (deep-link). Se consume una vez.
