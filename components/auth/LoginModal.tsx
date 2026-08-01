@@ -122,7 +122,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
         </div>
 
         {/* Contenido principal del login */}
-        <div className="relative z-10 px-6 pb-10 pt-8">
+        <div className="relative z-10 px-6 pb-6 pt-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={isLogin ? "login-title" : "register-title"}
@@ -130,7 +130,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.2 }}
-              className="mb-8 flex flex-col items-center text-center"
+              className="mb-6 flex flex-col items-center text-center"
             >
               <h2 className="text-2xl font-black uppercase tracking-widest text-white">
                 {isLogin ? "Inicia Sesión" : "Crea tu Cuenta"}
@@ -138,12 +138,12 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               <p className="mt-2 text-xs text-gray-400">
                 {isLogin 
                   ? "Ingresa tus credenciales para continuar." 
-                  : "Únete para instalar más tarde y acumular puntos."}
+                  : "Únete para acumular puntos."}
               </p>
             </motion.div>
           </AnimatePresence>
 
-          <form onSubmit={handleAuth} className="flex flex-col gap-4">
+          <form onSubmit={handleAuth} className="flex flex-col gap-3">
             <label className="block">
               <div className={`relative flex items-center overflow-hidden rounded-2xl border transition-all duration-300 ${focusedInput === 'email' ? 'border-blue-500 bg-blue-500/5 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'border-white/10 bg-black/30 hover:border-white/20'}`}>
                 <div className={`pl-4 transition-colors ${focusedInput === 'email' ? 'text-blue-400' : 'text-gray-500'}`}>
@@ -226,7 +226,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
             <AnimatePresence>
               {authError && (
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                  className="mt-2 flex items-center justify-center text-center gap-2 rounded-xl bg-red-500/10 p-4 border border-red-500/20"
+                  className="mt-2 flex items-center justify-center text-center gap-2 rounded-xl bg-red-500/10 p-3 border border-red-500/20"
                 >
                   <AlertCircle size={18} className="shrink-0 text-red-400" />
                   <p className="text-xs text-red-200 leading-relaxed">{authError}</p>
@@ -234,7 +234,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               )}
               {authSuccess && (
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                  className="mt-2 flex items-center justify-center text-center gap-2 rounded-xl bg-green-500/10 p-4 border border-green-500/20"
+                  className="mt-2 flex items-center justify-center text-center gap-2 rounded-xl bg-green-500/10 p-3 border border-green-500/20"
                 >
                   <CheckCircle2 size={18} className="shrink-0 text-green-400" />
                   <p className="text-xs text-green-200 leading-relaxed">{authSuccess}</p>
@@ -251,7 +251,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
             )}
 
             <button type="submit" disabled={loading}
-              className="group relative mt-2 flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white py-4 transition-transform hover:scale-[1.02] active:scale-95 disabled:pointer-events-none disabled:opacity-70 h-[52px]"
+              className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white py-4 transition-transform hover:scale-[1.02] active:scale-95 disabled:pointer-events-none disabled:opacity-70 h-[52px]"
             >
               {loading ? (
                 <Loader2 size={18} className="animate-spin text-black" />
@@ -276,7 +276,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               )}
             </button>
 
-            <div className="mt-6 flex items-center justify-between gap-4">
+            <div className="mt-4 flex items-center justify-between gap-4">
               <div className="h-px flex-1 bg-white/10" />
               <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">O ingresa con</span>
               <div className="h-px flex-1 bg-white/10" />
@@ -292,7 +292,7 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
                   }
                 });
               }}
-              className="mt-4 flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/5 py-4 transition-all hover:bg-white/10 hover:border-white/20 active:scale-95 h-[52px]"
+              className="mt-2 flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/5 py-4 transition-all hover:bg-white/10 hover:border-white/20 active:scale-95 h-[52px]"
             >
               <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -304,8 +304,8 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
             </button>
           </form>
 
-          <div className="mt-8 flex flex-col items-center border-t border-white/5 pt-6">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+          <div className="mt-6 flex flex-col items-center border-t border-white/5 pt-4">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
               {isLogin ? "¿Aún no eres miembro?" : "¿Ya eres miembro?"}
             </p>
             <button 
