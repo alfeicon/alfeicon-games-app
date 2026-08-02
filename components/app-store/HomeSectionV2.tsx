@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { type MouseEvent, useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
-  ArrowDown, ChevronRight, Gamepad2, Instagram, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy, Plus, Mail
+  ArrowDown, ChevronRight, Gamepad2, Instagram, Package2, Route, Star, Heart, Newspaper, BookOpen, ShieldCheck, LifeBuoy, Plus, Mail, Check, Facebook, Youtube
 } from 'lucide-react';
 import type { CatalogGame, CatalogPack } from '@/lib/catalog';
 import { getNintendoThumb } from '@/lib/catalog';
@@ -431,105 +431,7 @@ export default function HomeSectionV2({
         </div>
       </section>
 
-      {/* 8. DUDAS: cómo comprar, cómo instalar y soporte, todo junto */}
-      <div className="hs2-sec-head mb-3" ref={dudasRef} style={{ scrollMarginTop: '1rem' }}>
-        <h2 className="hs2-sec-title">¿Tienes dudas?</h2>
-      </div>
-
-      <div className="hs2-reveal mt-2" data-delay="0">
-        <div className="hs2-steps-card mb-4">
-          <div className="hs2-steps-head">
-            <span className="hs2-steps-ico"><Route size={19} strokeWidth={1.7} /></span>
-            <div className="min-w-0 flex-1">
-              <p className="hs2-steps-title">Compra guiada en 4 pasos</p>
-              <p className="hs2-steps-sub">Rápido, seguro y con acompañamiento.</p>
-            </div>
-            <ChevronRight size={15} className="hs2-stat-arrow flex-shrink-0" />
-          </div>
-          <div className="hs2-steps-track">
-            {(['Elige', 'Confirma', 'Paga', 'Recibe y juega'] as const).map((lbl, i) => (
-              <div key={lbl} className="hs2-step" style={{ transition: 'all 0.3s ease' }}>
-                <span className={`hs2-step-num ${activeStep === i ? 'hs2-step-active' : ''}`} style={{ transition: 'all 0.3s ease', transform: activeStep === i ? 'scale(1.1)' : 'scale(1)' }}>{i + 1}</span>
-                <span className="hs2-step-lbl" style={{ opacity: activeStep === i ? 1 : 0.6, fontWeight: activeStep === i ? 800 : 600 }}>{lbl}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="hs2-reveal mb-6" data-delay="150">
-        <button
-          type="button"
-          onClick={() => navigateToSection('instrucciones')}
-          className="hs2-guide-card mb-2"
-          aria-label="Ver instrucciones de instalación"
-        >
-          <span className="hs2-guide-ico"><BookOpen size={20} strokeWidth={1.8} /></span>
-          <span className="hs2-guide-text">
-            <span className="hs2-guide-title">¿No sabes cómo instalar tu juego?</span>
-            <span className="hs2-guide-sub">Te enseñamos paso a paso — elige tu consola.</span>
-          </span>
-          <span className="hs2-guide-cta">
-            Ver instrucciones <ChevronRight size={13} strokeWidth={2.5} />
-          </span>
-        </button>
-
-        {/* Abre el formulario de consulta acá mismo: deja un ticket guardado
-            que podemos revisar, en vez de una conversación suelta que se
-            pierde si no la vemos a tiempo. */}
-        <button
-          type="button"
-          onClick={() => setShowTicketForm(true)}
-          className="support-ticket-banner"
-          aria-label="Abrir un ticket de soporte"
-        >
-          <span className="support-ticket-banner__ico">
-            <LifeBuoy size={22} strokeWidth={1.9} />
-          </span>
-          <span className="support-ticket-banner__text">
-            <span className="support-ticket-banner__title">¿Tienes problemas o dudas?</span>
-            <span className="support-ticket-banner__sub">Cuéntanos y te generamos un ticket. Te respondemos al contacto que nos dejes.</span>
-          </span>
-          <span className="support-ticket-banner__cta">
-            Abrir ticket <ChevronRight size={14} strokeWidth={2.6} />
-          </span>
-        </button>
-      </div>
-
-      {/* NUEVO BLOQUE DE CONTACTO RÁPIDO */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-20px" }}
-        className="mb-6 rounded-[22px] bg-gradient-to-br from-indigo-500/10 to-purple-500/5 border border-indigo-500/20 p-5 backdrop-blur-xl"
-      >
-        <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
-          Contacto Directo
-        </h3>
-        <p className="text-xs text-indigo-200/70 mb-4 font-medium">¿Tienes alguna consulta rápida o quieres confirmar algo antes de comprar? Háblanos directamente por aquí:</p>
-        
-        <div className="flex flex-col sm:flex-row gap-3">
-          <a href="https://ig.me/m/alfeicon_games" target="_blank" rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 px-4 py-3 text-sm font-black text-white hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-pink-500/20">
-            <Instagram size={18} />
-            Instagram
-          </a>
-          <a href="mailto:alfeicon.games@gmail.com"
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-white/10 border border-white/5 px-4 py-3 text-sm font-black text-white hover:bg-white/15 hover:scale-[1.02] active:scale-95 transition-all">
-            <Mail size={18} />
-            Correo
-          </a>
-        </div>
-      </motion.div>
-
-      {/* 10. TÉRMINOS Y CONDICIONES (footer inicio) */}
-      <div className="hs2-reveal mb-6" data-delay="180">
-        <button type="button" onClick={onOpenTerms} className="support-terms-btn">
-          <ShieldCheck size={16} />
-          <span>Términos y condiciones</span>
-          <ChevronRight size={15} className="ml-auto" />
-        </button>
-      </div>
+      <div ref={dudasRef} style={{ scrollMarginTop: '1rem' }} />
 
       <SupportTicketModal open={showTicketForm} onClose={() => setShowTicketForm(false)} />
     </div>

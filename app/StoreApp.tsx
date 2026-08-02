@@ -990,11 +990,6 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                     </motion.div>
                   </div>
 
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="mt-8 mb-4 w-full flex justify-center">
-                    <Link href="/admin/login" className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-600 hover:text-white transition-colors">
-                      <ShieldCheck size={14} /> Acceso Admin
-                    </Link>
-                  </motion.div>
                 </div>
               )}
             </div>

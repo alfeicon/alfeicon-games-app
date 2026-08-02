@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Check, ChevronRight, Facebook, Instagram, LifeBuoy, ShieldCheck, Youtube } from 'lucide-react';
+import { Check, ChevronRight, Facebook, Instagram, LifeBuoy, ShieldCheck, Youtube, Mail } from 'lucide-react';
 import SupportTicketModal from './SupportTicketModal';
 
 // Toques sobre el logo necesarios para abrir el modo admin (atajo oculto).
@@ -72,10 +72,16 @@ export default function SupportSection({ sectionMotion, onOpenTerms }: SupportSe
           <p className="support-hero__sub">
             Abre un ticket aquí abajo y te respondemos, o escríbenos por Instagram si te acomoda más.
           </p>
-          <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="support-ig-btn" aria-label="Escribirnos por Instagram">
-            <Instagram size={20} />
-            <span>Escríbenos por Instagram</span>
-          </a>
+          <div className="flex flex-col gap-3 mt-4 w-full">
+            <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="support-ig-btn" aria-label="Escribirnos por Instagram">
+              <Instagram size={20} />
+              <span>Escríbenos por Instagram</span>
+            </a>
+            <a href="mailto:alfeicon.games@gmail.com" className="support-email-btn" aria-label="Escribirnos por Correo">
+              <Mail size={20} />
+              <span>Escríbenos por Correo</span>
+            </a>
+          </div>
         </div>
       </div>
 
@@ -137,16 +143,6 @@ export default function SupportSection({ sectionMotion, onOpenTerms }: SupportSe
           <ShieldCheck size={16} />
           <span>Términos y condiciones</span>
           <ChevronRight size={15} className="ml-auto" />
-        </button>
-
-        {/* ── LOGO (marca + acceso admin oculto: 5 toques) ── */}
-        <button
-          type="button"
-          onClick={handleLogoTap}
-          className="support-footer-logo"
-          aria-label="Alfeicon Games"
-        >
-          <Image src="/logo.png" alt="Alfeicon Games" width={44} height={44} />
         </button>
 
       </div>

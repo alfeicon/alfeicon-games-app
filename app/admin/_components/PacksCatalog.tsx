@@ -40,9 +40,11 @@ type Props = {
   setLoading: (v: boolean) => void;
   showNotice: (type: "success" | "error" | "info", text: string, playSound?: boolean) => void;
   onReload: () => Promise<void>;
+  activeTab?: "unitarios" | "packs";
+  onTabChange?: (tab: "unitarios" | "packs") => void;
 };
 
-export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload }: Props) {
+export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload, activeTab, onTabChange }: Props) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "inactive" | "new">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -215,10 +217,26 @@ export function PacksCatalog({ packs, loading, setLoading, showNotice, onReload 
   return (
     <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center gap-4 border-b border-white/[0.06] px-6 py-4">
-        <div className="flex-1">
-          <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Packs</h1>
-          <p className="mt-0.5 text-[10px] text-gray-600">{packs.length} en catálogo · {counts.active} activos</p>
+      <div className="shrink-0 border-b border-white/5 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-4">
+            <h1 className="text-lg font-black uppercase tracking-widest text-purple-400">Juegos</h1>
+            {onTabChange && (
+              <div className="flex rounded-lg bg-white/5 p-1">
+                <button 
+                  onClick={() => onTabChange("unitarios")}
+                  className={`rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === "unitarios" ? "bg-white/10 text-white" : "text-gray-500 hover:text-white"}`}>
+                  Unitarios
+                </button>
+                <button 
+                  onClick={() => onTabChange("packs")}
+                  className={`rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === "packs" ? "bg-white/10 text-white" : "text-gray-500 hover:text-white"}`}>
+                  Packs
+                </button>
+              </div>
+            )}
+          </div>
+          <p className="mt-0.5 text-xs font-bold text-gray-500">{packs.length} en catálogo · {counts.active} activos</p>
         </div>
         {missingImage.length > 0 && (
           <button onClick={fillMissingImages} disabled={loading}

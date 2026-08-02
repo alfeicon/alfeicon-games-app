@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake, Send, MessageCircle, Receipt, ArrowLeft, CheckCheck, ShoppingCart, ShieldCheck, User, Mail
+  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake, Send, MessageCircle, Receipt, ArrowLeft, CheckCheck, ShoppingCart, ShieldCheck, User, Mail, Key
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { urlImagen } from "@/lib/chat-image";
@@ -444,6 +444,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   // Pestaña activa del modal de una orden. Antes todo (datos, comprobante,
   // finanzas y chat) vivía apilado en la misma vista.
   const [modalTab, setModalTab] = useState<ModalTab>("orden");
+  const [navExpanded, setNavExpanded] = useState(false);
   // En ancho de escritorio no se usan pestañas: cada bloque es una ventana
   // flotante que se mueve, se redimensiona y se puede minimizar.
   const isWide = useIsWide();
@@ -581,8 +582,15 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
   
-  // Tabs: Nuevas (drafts), Activas, Historial
-  const [activeTab, setActiveTab] = useState<'validacion' | 'active' | 'problemas' | 'completadas'>('active');
+  // Tabs/Menu: 'menu' es sólo para móvil.
+  const [activeTab, setActiveTab] = useState<'menu' | 'validacion' | 'active' | 'problemas' | 'completadas'>('menu');
+
+  useEffect(() => {
+    // Si carga en desktop, forzar a salir del menú
+    if (window.innerWidth >= 768 && activeTab === 'menu') {
+      setActiveTab('active');
+    }
+  }, [activeTab]);
 
   // Búsqueda dentro del Historial
   const [historySearch, setHistorySearch] = useState("");
@@ -1007,82 +1015,59 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       item.status === "draft" && item.payment_status === "approved" ? "pending_console_code" : item.status;
     const esBorrador = displayStatus === "draft";
     return (
-    <div className="group relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]">
-
-      <button onClick={() => select(item)} className="flex items-center gap-4 flex-1 min-w-0 text-left">
-        <div className={`flex shrink-0 items-center justify-center rounded-xl border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[displayStatus]}`}>
-          {displayStatus === 'ready' || displayStatus === 'completed' ? <CheckCircle2 size={11} className="mr-1" /> :
-           displayStatus === 'issue' ? <AlertCircle size={11} className="mr-1" /> :
-           displayStatus === 'draft' ? <HelpCircle size={11} className="mr-1" /> :
-           <Clock size={11} className="mr-1" />}
-          {STATUS_LABELS[displayStatus]}
+    <div className="group relative flex w-full items-center gap-3 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04] border-b border-white/[0.02]">
+      <button onClick={() => select(item)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+        {/* Status Icon */}
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${STATUS_COLORS[displayStatus]} ${displayStatus === 'ready' || displayStatus === 'completed' ? 'border-green-500/20 bg-green-500/10 text-green-400' : ''}`}>
+          {displayStatus === 'ready' || displayStatus === 'completed' ? <CheckCircle2 size={18} /> :
+           displayStatus === 'issue' ? <AlertCircle size={18} /> :
+           displayStatus === 'draft' ? <HelpCircle size={18} /> :
+           <Clock size={18} />}
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 truncate text-[13px] font-bold leading-tight text-white">
-            <span className="truncate">
-              {item.order_number ? `Orden #${item.order_number}` : item.short_code} · {item.game_name}
+          {/* Top Row: Game Name & Date */}
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[13px] font-bold text-white leading-tight">
+              {item.game_name}
+            </p>
+            <span className="shrink-0 text-[10px] text-gray-600 whitespace-nowrap mt-0.5">{fmtDate(item.created_at)}</span>
+          </div>
+          
+          {/* Middle Row: Order # and simple badges */}
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-[11px] font-black text-gray-400">
+              {item.order_number ? `#${item.order_number}` : item.short_code}
             </span>
-            {/* Método de pago: en "esperando pago" es la única forma de saber si
-                falta el comprobante (transferencia) o la confirmación (MP). */}
             {item.payment_method === "mercadopago" && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-sky-400">
-                Mercado Pago
-              </span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-sky-400">MP</span>
             )}
             {item.payment_method === "transferencia" && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/5 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-gray-300">
-                Transferencia
-              </span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Transf</span>
             )}
-            {item.payment_method === "global66" && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-blue-400">
-                Global66
-              </span>
-            )}
-            {item.payment_method === "prex" && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-purple-400">
-                Prex
-              </span>
-            )}
-            {item.payment_method === "binance" && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-yellow-500">
-                Binance Pay
-              </span>
-            )}
-            {/* Pagó por transferencia y subió comprobante: hay que validarlo. */}
             {item.payment_status === "pending" && item.receipt_url && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-yellow-500">
+              <span className="flex items-center gap-0.5 text-[9px] font-black uppercase tracking-widest text-yellow-500">
                 <Receipt size={9} /> Comprobante
               </span>
             )}
-            {/* Le rechazaste el comprobante: está pendiente de que suba otro. */}
             {rechazado && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-red-400">
+              <span className="flex items-center gap-0.5 text-[9px] font-black uppercase tracking-widest text-red-400">
                 <AlertCircle size={9} /> Rechazado
               </span>
             )}
-          </p>
-          <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-gray-600">
-            {/* El nombre va primero y más claro: es lo que sirve para cruzar la
-                orden con un mensaje o una transferencia cuando algo falla. */}
-            {nombreCliente(item) && (
-              <>
-                <User size={9} className="shrink-0 text-gray-500" />
-                <span className="truncate font-bold text-gray-300">{nombreCliente(item)}</span>
-                <span className="text-gray-700">·</span>
-              </>
-            )}
-            <span className="truncate">
-              {item.short_code} · {fmtTime(item.created_at)} · {fmtDate(item.created_at)}
-              {item.console_code ? ` · Código Cliente: ${item.console_code}` : ''}
-            </span>
-          </p>
-          {/* En "esperando pago", cuánto lleva sin avanzar. Pasado el umbral se
-              marca como probable abandono para que sepas que puedes borrarla. */}
+          </div>
+          
+          {/* Bottom Row: Client Name */}
+          {nombreCliente(item) && (
+            <p className="mt-1 truncate text-[11px] text-gray-500">
+              <User size={10} className="inline mr-1 -mt-0.5" />
+              <span className="font-bold text-gray-300">{nombreCliente(item)}</span>
+            </p>
+          )}
+
           {esperandoPago && (
-            <p className={`mt-0.5 text-[10px] font-bold ${abandonada ? "text-orange-400" : rechazado ? "text-red-400/80" : "text-gray-600"}`}>
-              {rechazado ? "Esperando que suba otro comprobante · " : abandonada ? "⚠ Probablemente abandonada · " : "Esperando · "}
+            <p className={`mt-1 text-[10px] font-bold ${abandonada ? "text-orange-400" : rechazado ? "text-red-400/80" : "text-gray-600"}`}>
+              {rechazado ? "Rechazado · " : abandonada ? "⚠ Abandonada · " : "Esperando · "}
               {haceCuanto(item.created_at)}
             </p>
           )}
@@ -1190,172 +1175,167 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   // para la creación de una nueva.
   const orderPanel = (
     <>
-            <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.04] to-transparent px-5 py-3">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                {selectedOrder ? (
-                  <button onClick={closeIfConfirmed} type="button" title="Volver a la lista"
-                    className="flex h-10 shrink-0 items-center gap-2 rounded-2xl border border-white/8 px-3 text-gray-400 transition-all hover:bg-white/5 hover:text-white active:scale-95">
-                    <ArrowLeft size={15} />
-                    <span className="hidden text-[10px] font-black uppercase tracking-widest sm:inline">Volver</span>
-                  </button>
-                ) : (
-                  <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-yellow-500/20 bg-yellow-500/10 sm:flex">
-                    <PackageCheck size={18} className="text-yellow-500" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-yellow-500 truncate">
-                      {selectedOrder
-                        ? `Orden ${selectedOrder.order_number ? `#${selectedOrder.order_number} · ${selectedOrder.short_code}` : selectedOrder.short_code}`
-                        : "Nueva Orden"}
-                    </p>
-                    {selectedOrder && (
-                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${STATUS_COLORS[form.status]}`}>
-                        {STATUS_LABELS[form.status]}
-                      </span>
-                    )}
-                  </div>
-                  {/* Cliente en la cabecera: se ve desde cualquier pestaña del
-                      modal, no solo desde "Orden". */}
-                  {selectedOrder && nombreCliente(selectedOrder) && (
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-gray-200">
-                        <User size={11} className="text-gray-500" />
-                        {nombreCliente(selectedOrder)}
-                      </span>
-                      {selectedOrder.client_email && (
-                        <button type="button"
-                          onClick={() => { navigator.clipboard.writeText(selectedOrder.client_email!); showNotice("success", "Correo copiado."); }}
-                          title="Copiar correo"
-                          className="flex items-center gap-1 text-[10.5px] text-gray-500 transition-colors hover:text-white">
-                          <Mail size={10} />
-                          <span className="max-w-[220px] truncate">{selectedOrder.client_email}</span>
-                          <Copy size={9} className="opacity-60" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  <button 
-                    onClick={() => { setQuery(""); setShowSuggestions(true); }}
-                    className="mt-1 flex items-center gap-2 rounded-lg py-1 px-2 -ml-2 text-sm font-black text-white hover:bg-white/5 transition-colors max-w-full"
-                  >
-                    <span className="truncate">{form.game_name || "Seleccionar Juego / Pack..."}</span>
-                    <Search size={14} className="shrink-0 opacity-50" />
-                  </button>
-                  {/* Suggestions Modal */}
-                {showSuggestions && createPortal(
-                  <div className="fixed inset-0 z-[1000] flex flex-col bg-black/80 backdrop-blur-sm p-4 sm:p-10">
-                    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 mt-10">
-                      <div className="flex items-center gap-4 rounded-2xl bg-[rgb(9,9,11)] p-2 border border-white/10 shadow-2xl">
-                        <Search className="ml-3 text-gray-500 shrink-0" size={20} />
-                        <input 
-                          autoFocus
-                          value={query}
-                          onChange={e => setQuery(e.target.value)}
-                          placeholder="Escribe el juego, pack o búscalo aquí..."
-                          className="flex-1 bg-transparent px-2 py-3 text-lg font-bold text-white outline-none"
-                        />
-                        <button onClick={() => setShowSuggestions(false)} className="rounded-xl p-3 text-gray-500 hover:bg-white/10 hover:text-white transition-colors shrink-0">
-                          <X size={20} />
-                        </button>
-                      </div>
-
-                      <div className="flex-1 overflow-y-auto rounded-2xl bg-[rgb(9,9,11)] p-4 border border-white/10 shadow-2xl max-h-[60vh]">
-                        <p className="mb-4 text-xs font-black uppercase tracking-widest text-gray-500 px-2">Resultados del Catálogo</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {suggestions.map(item => (
-                            <button key={`${item.type}-${item.id}`} type="button" onClick={() => addSuggestion(item)}
-                              className="flex items-center gap-3 rounded-xl p-3 text-left hover:bg-white/5 transition-colors border border-transparent hover:border-white/10">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/30">
-                                {item.type === "pack" ? <Gift size={18} className="text-purple-400" /> : <Gamepad2 size={18} className="text-blue-400" />}
-                              </div>
-                              <div>
-                                <span className="block text-sm font-bold text-white">{item.title}</span>
-                                <span className="block text-[10px] uppercase tracking-widest text-gray-500">{item.type}</span>
-                              </div>
-                            </button>
-                          ))}
-                          {suggestions.length === 0 && (
-                            <p className="py-10 text-center text-sm font-bold text-gray-600 col-span-full">No se encontraron resultados en el catálogo</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>,
-                  document.body
-                )}
-                </div>
-              </div>
-
-              {selectedOrder && isWide && (
-                <div className="flex flex-[1.5] items-center justify-center gap-4 border-x border-white/5 px-4">
-                  <div className="flex flex-1 items-start rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-1.5 max-w-[340px]">
-                    {STEPS.map((step, i) => {
-                      const isCompleted = form.status === "completed";
-                      const done = currentStepIndex > i || (isCompleted && i === 4);
-                      const current = currentStepIndex === i && !isCompleted;
-                      return (
-                        <div key={step.key} className="flex flex-1 items-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <div className={`flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-black transition-all duration-300 ${
-                              current ? "border-yellow-500 bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.4)]"
-                              : done ? "border-green-500/40 bg-green-500/20 text-green-400"
-                              : "border-white/10 bg-white/5 text-gray-600"
-                            }`}>
-                              {done ? <Check size={11} strokeWidth={3} /> : i + 1}
-                            </div>
-                            <span className={`text-[7px] font-black uppercase tracking-wider ${
-                              current ? "text-white" : done ? "text-green-400/70" : "text-gray-600"
-                            }`}>{step.label}</span>
-                          </div>
-                          {i < STEPS.length - 1 && (
-                            <div className={`mx-0.5 mt-3 h-[2px] flex-1 self-start rounded-full transition-colors duration-300 ${done ? "bg-green-500/40" : "bg-white/10"}`} />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <select value={form.status} onChange={e => handleStatusChange(e.target.value as Order["status"])}
-                    className={"shrink-0 w-[180px] rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold text-white outline-none transition-colors focus:border-yellow-500/50 appearance-none cursor-pointer"}>
-                    <option value="draft">0 · Borrador</option>
-                    <option value="pending_console_code">1 · Esperando código</option>
-                    <option value="pending_setup">2 · Código recibido</option>
-                    <option value="preparing">3 · Avisado (prep, 85%)</option>
-                    <option value="ready">4 · Credenciales listas</option>
-                    <option value="completed">5 · Completa</option>
-                    <option value="issue">⚠ Problema instalación</option>
-                  </select>
+          {/* HEADER PRINCIPAL */}
+          <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#0c0f12]/95 px-4 py-3 backdrop-blur-md pt-[calc(1rem+env(safe-area-inset-top))]">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              {selectedOrder ? (
+                <button onClick={closeIfConfirmed} type="button" title="Volver a la lista"
+                  className="flex h-9 shrink-0 items-center justify-center rounded-xl bg-white/5 w-9 text-gray-400 transition-all hover:bg-white/10 hover:text-white active:scale-95 md:h-10 md:w-auto md:px-3 md:gap-2">
+                  <ArrowLeft size={16} />
+                  <span className="hidden text-[10px] font-black uppercase tracking-widest md:inline">Volver</span>
+                </button>
+              ) : (
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-yellow-500/10 md:h-10 md:w-10">
+                  <PackageCheck size={16} className="text-yellow-500" />
                 </div>
               )}
-
-              <div className="flex flex-1 shrink-0 gap-1.5 items-center justify-end min-w-0">
-                {selectedOrder && isWide && (
-                  <div className="relative flex h-10 items-center gap-1 rounded-2xl border border-white/8 bg-white/5 px-1.5 mr-2">
-                    <div 
-                      className="absolute left-[6px] h-7 w-7 rounded-xl bg-white/15 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                      style={{ transform: `translateX(${(activeLayout - 1) * 32}px)` }}
-                    />
-                    <button onClick={() => applyLayout(1)} title="Layout 1: Orden Izquierda, Chat Derecha" className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-xl text-[11px] font-black transition-colors ${activeLayout === 1 ? 'text-white' : 'text-gray-400 hover:text-white'}`}>1</button>
-                    <button onClick={() => applyLayout(2)} title="Layout 2: Orden Izquierda, Chat y Finanzas Derecha" className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-xl text-[11px] font-black transition-colors ${activeLayout === 2 ? 'text-white' : 'text-gray-400 hover:text-white'}`}>2</button>
-                    <button onClick={() => applyLayout(3)} title="Layout 3: Pago Izquierda, Chat y Finanzas Derecha" className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-xl text-[11px] font-black transition-colors ${activeLayout === 3 ? 'text-white' : 'text-gray-400 hover:text-white'}`}>3</button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] font-black uppercase tracking-[0.1em] text-white truncate md:text-[14px]">
+                  {selectedOrder
+                    ? `Orden ${selectedOrder.order_number ? `#${selectedOrder.order_number}` : selectedOrder.short_code}`
+                    : "Nueva Orden"}
+                </p>
+                {selectedOrder && nombreCliente(selectedOrder) && (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-gray-400 truncate">
+                      <User size={10} />
+                      {nombreCliente(selectedOrder)}
+                    </span>
+                    {selectedOrder.client_email && (
+                      <button type="button" onClick={() => { navigator.clipboard.writeText(selectedOrder.client_email!); showNotice("success", "Correo copiado."); }}
+                        className="flex shrink-0 items-center gap-1 text-[10px] text-gray-500 hover:text-white transition-colors">
+                        <span className="max-w-[120px] sm:max-w-[200px] truncate">{selectedOrder.client_email}</span>
+                        <Copy size={9} />
+                      </button>
+                    )}
                   </div>
-                )}
-                {selectedOrder && (
-                  <button onClick={() => del(selectedOrder)} type="button"
-                    className="rounded-xl border border-red-500/15 p-2 text-red-500/50 transition-all hover:border-red-500/30 hover:bg-red-500/8 hover:text-red-400 active:scale-95">
-                    <Trash2 size={13} />
-                  </button>
-                )}
-                {/* En pantalla completa el cierre es el botón "Volver". */}
-                {!selectedOrder && (
-                  <button onClick={closeIfConfirmed} type="button"
-                    className="rounded-xl border border-white/8 p-2 text-gray-600 transition-all hover:border-white/14 hover:bg-white/5 hover:text-white active:scale-95">
-                    <X size={13} />
-                  </button>
                 )}
               </div>
             </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              <button type="button" onClick={save} disabled={loading} className="flex items-center gap-1.5 rounded-full bg-yellow-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black shadow-[0_0_15px_rgba(234,179,8,0.2)] transition-all hover:bg-yellow-400 active:scale-95 disabled:opacity-50">
+                {loading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} strokeWidth={2.5} />}
+                <span className="hidden sm:inline">Guardar</span>
+              </button>
+              {selectedOrder && (
+                <>
+                  <button type="button" onClick={restartOrder} title="Reiniciar Proceso" className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 transition-all hover:bg-white/10 hover:text-white active:scale-95">
+                    <RefreshCw size={16} />
+                  </button>
+                  <button type="button" onClick={() => del(selectedOrder)} title="Eliminar Orden" className="flex h-9 w-9 items-center justify-center rounded-xl text-red-500/60 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-95">
+                    <Trash2 size={16} />
+                  </button>
+                </>
+              )}
+              {/* En escritorio el cierre con la X */}
+              {!selectedOrder && isWide && (
+                <button onClick={closeIfConfirmed} type="button" className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 hover:bg-white/10 hover:text-white transition-all active:scale-95">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* PROGRESS & STATUS BAR (Debajo del Header) */}
+          {selectedOrder ? (
+            <div className="shrink-0 flex items-center justify-between gap-4 border-b border-white/[0.04] bg-[#0c0f12] px-4 py-2 overflow-x-auto hide-scrollbar">
+               <div className="flex items-center gap-1.5 flex-nowrap">
+                 {[
+                   { val: "draft", label: "Borrador", icon: HelpCircle },
+                   { val: "pending_console_code", label: "Esperando", icon: Clock },
+                   { val: "pending_setup", label: "Recibido", icon: CheckCircle2 },
+                   { val: "preparing", label: "Avisado", icon: PackageCheck },
+                   { val: "ready", label: "Credenciales", icon: Key },
+                   { val: "completed", label: "Completa", icon: CheckCircle2 },
+                   { val: "issue", label: "Problema", icon: AlertCircle },
+                 ].map(s => {
+                    const active = form.status === s.val;
+                    return (
+                      <button type="button" key={s.val} onClick={() => handleStatusChange(s.val as Order["status"])}
+                        className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
+                          active ? "bg-white/10 text-white border border-white/10" : "text-gray-600 hover:bg-white/5 border border-transparent"
+                        } ${s.val === 'issue' && active ? '!bg-red-500/20 !text-red-400 !border-red-500/30' : ''} ${s.val === 'completed' && active ? '!bg-green-500/20 !text-green-400 !border-green-500/30' : ''}`}>
+                        <s.icon size={11} strokeWidth={active ? 3 : 2} /> {s.label}
+                      </button>
+                    );
+                 })}
+               </div>
+               
+               {isWide && (
+                 <div className="flex shrink-0 items-center gap-1 rounded-2xl bg-white/5 px-1.5 py-1">
+                   <button onClick={() => applyLayout(1)} title="Layout 1" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 1 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>1</button>
+                   <button onClick={() => applyLayout(2)} title="Layout 2" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 2 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>2</button>
+                   <button onClick={() => applyLayout(3)} title="Layout 3" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 3 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>3</button>
+                 </div>
+               )}
+            </div>
+          ) : (
+            <div className="shrink-0 border-b border-white/[0.04] bg-[#0c0f12] px-4 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Completando nueva orden manualmente...</p>
+            </div>
+          )}
+
+          {/* Selector de Juego Integrado (Oculto en móvil si es una orden existente) */}
+          {(!selectedOrder || isWide) && (
+            <div className="px-5 py-3 border-b border-white/[0.03] bg-[rgb(12,12,14)] flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-500">
+                  <Gamepad2 size={18} />
+                </div>
+                <div className="min-w-0">
+                   <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Juego Adquirido</p>
+                   <p className="truncate text-[13px] font-bold text-white mt-0.5">{form.game_name || "Seleccionar Juego o Pack..."}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => { setQuery(""); setShowSuggestions(true); }} className="flex shrink-0 h-9 items-center gap-2 rounded-full bg-white/5 px-3 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:bg-white/10 hover:text-white active:scale-95 transition-all">
+                 <Search size={12} /> <span className="hidden sm:inline">Buscar</span>
+              </button>
+            </div>
+          )}
+
+          {/* Suggestions Modal */}
+          {showSuggestions && createPortal(
+            <div className="fixed inset-0 z-[1000] flex flex-col bg-black/80 backdrop-blur-sm p-4 sm:p-10">
+              <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 mt-10">
+                <div className="flex items-center gap-4 rounded-2xl bg-[rgb(9,9,11)] p-2 border border-white/10 shadow-2xl">
+                  <Search className="ml-3 text-gray-500 shrink-0" size={20} />
+                  <input 
+                    autoFocus
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder="Escribe el juego, pack o búscalo aquí..."
+                    className="flex-1 bg-transparent px-2 py-3 text-lg font-bold text-white outline-none"
+                  />
+                  <button onClick={() => setShowSuggestions(false)} className="rounded-xl p-3 text-gray-500 hover:bg-white/10 hover:text-white transition-colors shrink-0">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto rounded-2xl bg-[rgb(9,9,11)] p-4 border border-white/10 shadow-2xl max-h-[60vh]">
+                  <p className="mb-4 text-xs font-black uppercase tracking-widest text-gray-500 px-2">Resultados del Catálogo</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {suggestions.map(item => (
+                      <button key={`${item.type}-${item.id}`} type="button" onClick={() => addSuggestion(item)}
+                        className="flex items-center gap-3 rounded-xl p-3 text-left hover:bg-white/5 transition-colors border border-transparent hover:border-white/10">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/30">
+                          {item.type === "pack" ? <Gift size={18} className="text-purple-400" /> : <Gamepad2 size={18} className="text-blue-400" />}
+                        </div>
+                        <div>
+                          <span className="block text-sm font-bold text-white">{item.title}</span>
+                          <span className="block text-[10px] uppercase tracking-widest text-gray-500">{item.type}</span>
+                        </div>
+                      </button>
+                    ))}
+                    {suggestions.length === 0 && (
+                      <p className="py-10 text-center text-sm font-bold text-gray-600 col-span-full">No se encontraron resultados en el catálogo</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
 
             <div className="flex flex-1 flex-col overflow-hidden">
               {createdCode ? (
@@ -1394,26 +1374,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                 </div>
               ) : (
                 <form onSubmit={save} className="flex flex-1 flex-col overflow-hidden">
-                  {/* Pestañas: solo en móvil y sobre una orden existente. En
-                      escritorio se ve todo junto y no hacen falta. */}
-                  {selectedOrder && !showAll && (
-                    <div className="flex shrink-0 gap-1 border-b border-white/[0.06] px-3 pt-1">
-                      {MODAL_TABS.map(({ id, label, Icon }) => {
-                        const active = modalTab === id;
-                        const alerta = id === "pago" && selectedOrder.payment_status === "pending" && !!selectedOrder.receipt_url;
-                        return (
-                          <button key={id} type="button" onClick={() => setModalTab(id)}
-                            className={`relative flex items-center gap-1.5 rounded-t-xl px-3.5 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors ${
-                              active ? "bg-white/[0.06] text-white" : "text-gray-600 hover:text-gray-300"
-                            }`}>
-                            <Icon size={12} /> {label}
-                            {alerta && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-yellow-500" />}
-                            {active && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-yellow-500" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <button type="submit" className="hidden">Guardar</button>
 
                   {/* En escritorio es el "escritorio" donde flotan las ventanas
                       (posicionadas en absoluto); en móvil, una lista normal. */}
@@ -1710,7 +1671,10 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                           <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-yellow-500">
                             {selectedOrder ? `Orden #${selectedOrder.order_number}` : "Nueva Orden"}
                           </span>
-                          <h2 className="text-xl font-black text-white">{form.game_name || "Sin Juego"}</h2>
+                          <button type="button" onClick={() => { setQuery(""); setShowSuggestions(true); }} className="text-left group flex items-start gap-2 active:scale-[0.98] transition-transform">
+                            <h2 className="text-xl font-black text-white">{form.game_name || "Sin Juego"}</h2>
+                            <Search size={16} className="mt-1.5 shrink-0 text-gray-500 group-hover:text-white transition-colors" />
+                          </button>
                         </div>
                         {selectedOrder?.client_name && (
                           <p className="mb-1 text-[11px] font-bold text-gray-400 truncate">
@@ -1720,80 +1684,35 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                       </div>
                     </div>
 
-                    {/* TOP ROW: Progreso y Estado (Oculto en escritorio porque está en la barra superior) */}
-                    {selectedOrder && !isWide && (
-                      <div className="flex flex-col gap-3.5">
-                        {/* Stepper visual del progreso */}
-                        <div>
-                          <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Progreso de la entrega</span>
-                          <div className="flex items-start rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
-                            {STEPS.map((step, i) => {
-                              const isCompleted = form.status === "completed";
-                              const done = currentStepIndex > i || (isCompleted && i === 4);
-                              const current = currentStepIndex === i && !isCompleted;
-                              return (
-                                <div key={step.key} className="flex flex-1 items-center">
-                                  <div className="flex flex-col items-center gap-1.5">
-                                    <div className={`flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-black transition-all duration-300 ${
-                                      current ? "border-yellow-500 bg-yellow-500 text-black shadow-[0_0_12px_rgba(234,179,8,0.4)]"
-                                      : done ? "border-green-500/40 bg-green-500/20 text-green-400"
-                                      : "border-white/10 bg-white/5 text-gray-600"
-                                    }`}>
-                                      {done ? <Check size={13} strokeWidth={3} /> : i + 1}
-                                    </div>
-                                    <span className={`text-[8px] font-black uppercase tracking-wider ${
-                                      current ? "text-white" : done ? "text-green-400/70" : "text-gray-600"
-                                    }`}>{step.label}</span>
-                                  </div>
-                                  {i < STEPS.length - 1 && (
-                                    <div className={`mx-1 mt-3.5 h-0.5 flex-1 self-start rounded-full transition-colors duration-300 ${done ? "bg-green-500/40" : "bg-white/10"}`} />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
 
-                        <label className="block">
-                          <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Cambiar estado manualmente</span>
-                          <select value={form.status} onChange={e => handleStatusChange(e.target.value as Order["status"])}
-                            className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50 appearance-none cursor-pointer"}>
-                            <option value="draft">0 · Borrador (Nueva Consulta)</option>
-                            <option value="pending_console_code">1 · Esperando código del cliente</option>
-                            <option value="pending_setup">2 · Código recibido</option>
-                            <option value="preparing">3 · Avisado (prepárate, 85%)</option>
-                            <option value="ready">4 · Credenciales entregadas</option>
-                            <option value="completed">5 · Entrega completa</option>
-                            <option value="issue">⚠ Problema en instalación (soporte)</option>
-                          </select>
-                        </label>
-                      </div>
-                    )}
 
                     {/* MIDDLE: Cuentas de la entrega & Datos antiguos */}
                     {selectedOrder && itemsCount === 0 && (
-                      <div className="rounded-xl border border-yellow-500/15 bg-yellow-500/[0.03] p-4 mt-2">
-                        <div className="mb-3 flex items-center gap-2">
-                          <KeyRound size={13} className="text-yellow-500" />
-                          <p className="text-[10px] font-black uppercase tracking-widest text-white">Datos que recibirá el cliente</p>
+                      <div className="mt-2">
+                        <div className="mb-3 flex items-center gap-2 px-2">
+                          <KeyRound size={14} className="text-gray-400" />
+                          <p className="text-[11px] font-black uppercase tracking-widest text-gray-300">Datos para el cliente</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <label>
-                            <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Código (5 dígitos)</span>
-                            <input inputMode="numeric" value={form.account_email}
-                              onChange={e => setForm({ ...form, account_email: e.target.value.replace(/\D/g, "").slice(0, 5) })}
-                              className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50 text-center font-mono text-lg font-black tracking-[0.4em]"} placeholder="12345" maxLength={5} />
+                        <div className="grid grid-cols-2 gap-3 px-2">
+                          <label className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Código (5 dígitos)</span>
+                            <div className="relative flex items-center">
+                              <input inputMode="numeric" value={form.account_email}
+                                onChange={e => setForm({ ...form, account_email: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+                                className="w-full rounded-2xl bg-white/[0.03] px-4 py-3 text-center font-mono text-xl font-black tracking-[0.3em] text-white outline-none transition-all focus:bg-white/[0.06] focus:ring-1 focus:ring-yellow-500/50" placeholder="12345" maxLength={5} />
+                            </div>
                           </label>
 
-                          <label>
-                            <span className={"mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500"}>Contraseña</span>
-                            <input type="text" value={form.account_password} onChange={e => setForm({ ...form, account_password: e.target.value })}
-                              className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-yellow-500/50"} placeholder="Contraseña123" />
+                          <label className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Contraseña</span>
+                            <div className="relative flex items-center">
+                              <input type="text" value={form.account_password} onChange={e => setForm({ ...form, account_password: e.target.value })}
+                                className="w-full rounded-2xl bg-white/[0.03] px-4 py-3 text-center text-sm font-bold text-white outline-none transition-all focus:bg-white/[0.06] focus:ring-1 focus:ring-yellow-500/50" placeholder="Contraseña123" />
+                            </div>
                           </label>
                         </div>
-                        <p className="mt-2.5 text-[10px] text-gray-600">
-                          Orden del modelo antiguo: una sola cuenta. En cuanto le agregues
-                          cuentas abajo, este bloque desaparece y mandan los ítems.
+                        <p className="mt-3 px-3 text-[10px] text-gray-600 italic">
+                          Modelo antiguo: en cuanto agregues cuentas abajo, este bloque desaparece.
                         </p>
                       </div>
                     )}
@@ -1894,16 +1813,10 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                   )}
                   </div>
   
-                  {/* Barra inferior: acciones compactas + ventanas minimizadas,
-                      para poder traerlas de vuelta. */}
-                  {(!selectedOrder || showAll || modalTab === "orden" || modalTab === "finanzas") && (
-                  <div className={`shrink-0 border-t border-white/[0.06] bg-[rgb(9,9,11)] px-4 py-2.5 ${
-                    showAll ? "flex items-center gap-2" : "space-y-2.5"
-                  }`}>
-                    {showAll && (
+                  {/* Barra inferior de estado (Desktop Minimized) */}
+                  {showAll && (Object.keys(wins) as WinId[]).some(slot => wins[slot].minimized) && (
+                    <div className="shrink-0 border-t border-white/[0.06] bg-[rgb(9,9,11)] px-4 py-2.5 flex items-center gap-2">
                       <div className="flex flex-1 flex-wrap items-center gap-1.5">
-                        {/* Se listan los slots minimizados, etiquetados por la
-                            sección que tengan asignada en ese momento. */}
                         {(Object.keys(wins) as WinId[]).filter(slot => wins[slot].minimized).map(slot => {
                           const tab = MODAL_TABS.find(t => t.id === wins[slot].section)!;
                           return (
@@ -1914,31 +1827,43 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                             </button>
                           );
                         })}
-                        {(Object.keys(wins) as WinId[]).every(slot => !wins[slot].minimized) && (
-                          <span className="text-[9px] font-bold uppercase tracking-widest text-gray-700">
-                            Arrastra por el título · cambia la sección en su menú · 🔒 fija la ventana
-                          </span>
-                        )}
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    <button disabled={loading}
-                      className={`flex items-center justify-center gap-2 rounded-full bg-yellow-500 text-[10px] font-black uppercase tracking-widest text-black transition-all duration-200 hover:bg-yellow-400 disabled:opacity-50 active:scale-[0.98] ${
-                        showAll ? "px-4 py-2" : "w-full py-2.5 text-xs"
-                      }`}>
-                      {loading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                      {loading ? (selectedOrder ? "Guardando…" : "Creando…") : (selectedOrder ? "Guardar" : "Crear Orden")}
-                    </button>
-
-                    {selectedOrder && (
-                      <button type="button" onClick={restartOrder} disabled={loading}
-                        className={`flex items-center justify-center gap-2 rounded-full border border-white/10 text-[10px] font-black uppercase tracking-widest text-gray-400 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white disabled:opacity-50 active:scale-[0.98] ${
-                          showAll ? "px-4 py-2" : "w-full py-2.5"
-                        }`}>
-                        <RefreshCw size={12} /> {showAll ? "Reiniciar" : "Editar Orden (reiniciar proceso)"}
-                      </button>
-                    )}
-                  </div>
+                  {/* BOTTOM NAV BAR (Mobile) -> FAB */}
+                  {selectedOrder && !showAll && (
+                    <>
+                      {navExpanded && (
+                        <div className="fixed bottom-24 right-4 flex flex-col gap-2 p-2 bg-black/80 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl z-[100]">
+                          {MODAL_TABS.map(({ id, label, Icon }) => {
+                            const active = modalTab === id;
+                            const alerta = id === "pago" && selectedOrder.payment_status === "pending" && !!selectedOrder.receipt_url;
+                            return (
+                              <button key={id} type="button" onClick={() => { setModalTab(id); setNavExpanded(false); }}
+                                className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                                  active ? "bg-yellow-500/10 text-yellow-500" : "text-gray-300 hover:bg-white/5"
+                                }`}>
+                                <Icon size={18} strokeWidth={active ? 2.5 : 2} />
+                                <span className="text-[11px] font-black uppercase tracking-widest">{label}</span>
+                                {alerta && <span className="absolute right-3 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-[#0c0f12] bg-yellow-500" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      
+                      {navExpanded && <div className="fixed inset-0 z-[90]" onClick={() => setNavExpanded(false)} />}
+                      
+                      <div className="fixed bottom-6 right-6 z-[110]">
+                        <button type="button" onClick={() => setNavExpanded(!navExpanded)}
+                          className={`flex h-11 w-11 items-center justify-center rounded-full shadow-2xl transition-all active:scale-95 border ${
+                            navExpanded ? "bg-gray-800 border-white/20 text-white" : "bg-yellow-500 border-yellow-400 text-black shadow-[0_0_20px_rgba(234,179,8,0.3)]"
+                          }`}>
+                          {navExpanded ? <X size={20} /> : <div className="flex flex-col gap-[3px] items-end"><div className="h-[2px] w-4 bg-black rounded-full" /><div className="h-[2px] w-4 bg-black rounded-full" /><div className="h-[2px] w-2.5 bg-black rounded-full" /></div>}
+                        </button>
+                      </div>
+                    </>
                   )}
                 </form>
               )}
@@ -1948,14 +1873,14 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden pt-14 md:pt-0">
-      {/* Header */}
-      <div className="flex shrink-0 flex-col border-b border-white/[0.06]">
+      {/* Header - Sólo Desktop */}
+      <div className="hidden shrink-0 flex-col border-b border-white/[0.06] md:flex">
         <div className="flex items-center gap-4 px-6 py-4">
           <div className="flex-1">
             <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Entregas</h1>
             <p className="mt-0.5 text-[10px] text-gray-600">
               {orders.length} órdenes totales
-              {cancelledOrders.length > 0 && ` · ${cancelledOrders.length} canceladas por el cliente`}
+              {cancelledOrders.length > 0 && ` · ${cancelledOrders.length} canceladas`}
             </p>
           </div>
           <button onClick={onReload} disabled={loading} className="rounded-full bg-white/5 p-2 text-white hover:bg-white/10 active:scale-95 disabled:opacity-50">
@@ -1966,208 +1891,320 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
             <Plus size={12} strokeWidth={3} /> Nueva
           </button>
         </div>
+      </div>
 
-        {/* Tabs */}
-        <div className="flex px-4 gap-2 pb-2">
-          <button onClick={() => setActiveTab('validacion')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'validacion' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+      {/* Info extra móvil (Resumen) - Oculto si estamos dentro de una vista detallada */}
+      {activeTab === 'menu' && (
+        <div className="flex shrink-0 items-center justify-between bg-[#0c0f12] px-4 py-3 md:hidden">
+          <p className="text-[11px] text-gray-500 font-medium">
+            {orders.length} órdenes en total
+            {cancelledOrders.length > 0 && ` · ${cancelledOrders.length} canceladas`}
+          </p>
+          <button onClick={onReload} disabled={loading} className="rounded-full bg-white/5 p-2 text-white hover:bg-white/10 active:scale-95 disabled:opacity-50">
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          </button>
+        </div>
+      )}
+
+      {/* Tabs - Desktop */}
+      <div className="hidden shrink-0 border-b border-white/[0.06] md:block">
+        <div className="flex overflow-x-auto px-4 pb-3 pt-1 md:gap-2 md:pt-0">
+          <button onClick={() => setActiveTab('validacion')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mr-2 md:mr-0 ${activeTab === 'validacion' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
             <span className="flex items-center gap-1.5">Validación {counts.drafts > 0 && <span className="bg-purple-500 text-black px-1.5 py-0.5 rounded-full text-[8px]">{counts.drafts}</span>}</span>
           </button>
-          <button onClick={() => setActiveTab('active')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'active' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+          <button onClick={() => setActiveTab('active')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mr-2 md:mr-0 ${activeTab === 'active' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
             <span className="flex items-center gap-1.5">Activas {counts.active > 0 && <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-full text-[8px]">{counts.active}</span>}</span>
           </button>
-          <button onClick={() => setActiveTab('problemas')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'problemas' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+          <button onClick={() => setActiveTab('problemas')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mr-2 md:mr-0 ${activeTab === 'problemas' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
             <span className="flex items-center gap-1.5">Problemas {counts.issues > 0 && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[8px]">{counts.issues}</span>}</span>
           </button>
-          <button onClick={() => setActiveTab('completadas')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'completadas' ? 'bg-slate-400/10 text-slate-300 border border-slate-400/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
-            <span className="flex items-center gap-1.5">Completadas {counts.history > 0 && <span className="bg-slate-400 text-black px-1.5 py-0.5 rounded-full text-[8px]">{counts.history}</span>}</span>
+          <button onClick={() => setActiveTab('completadas')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'completadas' ? 'bg-slate-400/10 text-slate-300 border border-slate-400/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+            <span className="flex items-center gap-1.5">Historial {counts.history > 0 && <span className="bg-slate-400 text-black px-1.5 py-0.5 rounded-full text-[8px]">{counts.history}</span>}</span>
           </button>
         </div>
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
-        
-        {/* Vista: Nuevas Consultas (Borradores) */}
-        {activeTab === 'validacion' && (
-          <div>
-            {draftOrders.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-center">
-                <HelpCircle size={24} className="text-gray-800" />
-                <p className="text-xs text-gray-700">Nada por validar</p>
-                <p className="text-[10px] text-gray-600 max-w-[240px]">
-                  Aquí aparecen solo las transferencias con comprobante subido, esperando que lo revises.
-                </p>
-              </div>
-            ) : (
-              <div className="p-4 mb-2 bg-purple-500/5 border-b border-purple-500/10">
-                 <p className="text-[10px] text-purple-400 font-bold">
-                   Cada una subió su comprobante y espera que lo apruebes o lo rechaces.
-                 </p>
-              </div>
-            )}
-            {draftOrders.map(item => <OrderItem key={item.id} item={item} />)}
+      {/* MENÚ MÓVIL (Grid Dashboard) */}
+      <div className={`md:hidden ${activeTab !== 'menu' ? 'hidden' : 'flex-1 overflow-y-auto px-4 py-6 pb-32'}`}>
+        <div className="grid grid-cols-2 gap-4">
+          <button onClick={() => setActiveTab('validacion')} className="flex flex-col items-center justify-center p-6 bg-purple-500/10 border border-purple-500/20 rounded-2xl active:scale-95 transition-all gap-3 relative">
+            {counts.drafts > 0 && <span className="absolute top-3 right-3 bg-purple-500 text-black px-2 py-0.5 rounded-full text-[10px] font-black">{counts.drafts}</span>}
+            <div className="p-3 bg-purple-500/20 rounded-full text-purple-400">
+              <CheckCircle2 size={24} />
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-widest text-purple-400">Validación</span>
+          </button>
+          
+          <button onClick={() => setActiveTab('active')} className="flex flex-col items-center justify-center p-6 bg-blue-500/10 border border-blue-500/20 rounded-2xl active:scale-95 transition-all gap-3 relative">
+            {counts.active > 0 && <span className="absolute top-3 right-3 bg-blue-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black">{counts.active}</span>}
+            <div className="p-3 bg-blue-500/20 rounded-full text-blue-400">
+              <RefreshCw size={24} />
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-widest text-blue-400">Activas</span>
+          </button>
 
-            {/* Compras a medio camino: eligieron pagar y no completaron. Van
-                plegadas porque no hay nada que hacer con ellas todavía. */}
-            {awaitingPayment.length > 0 && (
-              <div className="mt-4">
-                <div className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
-                  <button type="button" onClick={() => setShowAwaiting(v => !v)} className="flex flex-1 items-center gap-2 text-left">
-                    <Clock size={12} className="text-gray-600" />
-                    <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                      Esperando pago ({awaitingPayment.length})
-                    </h2>
-                  </button>
-                  {showAwaiting ? botonSeleccion("await") : (
-                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">Ver</span>
-                  )}
-                </div>
+          <button onClick={() => setActiveTab('problemas')} className="flex flex-col items-center justify-center p-6 bg-red-500/10 border border-red-500/20 rounded-2xl active:scale-95 transition-all gap-3 relative">
+            {counts.issues > 0 && <span className="absolute top-3 right-3 bg-red-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black">{counts.issues}</span>}
+            <div className="p-3 bg-red-500/20 rounded-full text-red-400">
+              <AlertCircle size={24} />
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-widest text-red-400">Problemas</span>
+          </button>
 
-                {showAwaiting && (
-                  <>
-                    {barraSeleccion("await", awaitingPayment)}
-                    <p className="px-6 py-2 text-[10px] leading-relaxed text-gray-600">
-                      Eligieron un método de pago y no completaron. Las de Mercado Pago se aprueban solas
-                      cuando llega la confirmación; las de transferencia, cuando suban su comprobante.
-                      Las marcadas <span className="font-black text-red-400">Rechazado</span> ya subieron uno
-                      que no aprobaste: vuelven a Validación en cuanto suban otro.
-                    </p>
-                    {awaitingPayment.map(item => filaSeleccionable(item, "await"))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Vista: Activas (Agrupadas por secciones) */}
-        {activeTab === 'active' && (
-          <div>
-            {activeOrders.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-center">
-                <PackageCheck size={24} className="text-gray-800" />
-                <p className="text-xs text-gray-700">No hay entregas activas</p>
-              </div>
-            ) : (
-              activeSections.map((section, i) => (
-                section.items.length > 0 && (
-                  <div key={section.status} className="mb-6">
-                    {/* Cabecera de estado: numerada para que se lea como las
-                        etapas por las que va pasando la entrega. */}
-                    <div className="sticky top-0 z-10 flex items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
-                       <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-[8px] font-black text-gray-300">{i + 1}</span>
-                       <section.icon size={13} className={section.color || "text-gray-500"} />
-                       <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-400">{section.label} ({section.items.length})</h2>
-                    </div>
-                    {section.items.map(item => <OrderItem key={item.id} item={item} />)}
-                  </div>
-                )
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Vista: Problemas (tickets abiertos) */}
-        {activeTab === 'problemas' && (
-          <div>
-            {issueOrders.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-center">
-                <CheckCircle2 size={24} className="text-gray-800" />
-                <p className="text-xs text-gray-700">Sin problemas abiertos</p>
-                <p className="max-w-[220px] text-[10px] text-gray-600">Aquí aparecen las entregas donde el cliente reportó un problema durante la instalación.</p>
-              </div>
-            ) : (
-              <>
-                <div className="mb-2 border-b border-red-500/10 bg-red-500/5 p-4">
-                  <p className="text-[10px] font-bold text-red-400">
-                    Cada uno es un ticket abierto. Ábrelo para hablar con el cliente por el chat y, cuando esté solucionado, márcalo como resuelto: la orden vuelve a Activas donde quedó.
-                  </p>
-                </div>
-                {issueOrders.map(item => (
-                  <div key={item.id} className="flex items-center gap-2 border-b border-white/[0.04] pr-4">
-                    <div className="min-w-0 flex-1">
-                      <OrderItem item={item} />
-                    </div>
-                    <button type="button" onClick={() => resolverProblema(item)} disabled={loading}
-                      className="flex shrink-0 items-center gap-1.5 rounded-full border border-green-500/25 bg-green-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-green-400 transition-colors hover:bg-green-500/20 disabled:opacity-50">
-                      <Check size={12} strokeWidth={3} /> Resuelto
-                    </button>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Vista: Historial */}
-        {activeTab === 'completadas' && (
-          <div>
-            {historyOrders.length > 0 && (
-              <div className="sticky top-0 z-10 border-b border-white/5 bg-[rgb(9,9,11)] px-4 py-3">
-                <div className="relative">
-                  <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
-                  <input
-                    value={historySearch}
-                    onChange={e => setHistorySearch(e.target.value)}
-                    placeholder="Buscar por cliente, correo, juego, orden o código..."
-                    className="w-full rounded-xl border border-white/8 bg-white/5 py-2 pl-9 pr-3 text-[12px] text-white outline-none placeholder:text-gray-700 focus:border-yellow-500/40"
-                  />
-                </div>
-              </div>
-            )}
-
-            {filteredHistoryOrders.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-center">
-                <CheckCircle2 size={24} className="text-gray-800" />
-                <p className="text-xs text-gray-700">
-                  {historySearch ? "Sin resultados para tu búsqueda" : "No hay historial"}
-                </p>
-              </div>
-            ) : (
-              historyGroups.map(([month, items]) => (
-                <div key={month}>
-                  <div className="flex items-center gap-2 px-6 py-2 bg-[rgb(12,12,14)] border-y border-white/5">
-                    <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-400 capitalize">{month} ({items.length})</h2>
-                  </div>
-                  <div className="md:hidden">
-                    {items.map(item => <OrderItem key={item.id} item={item} />)}
-                  </div>
-                  <HistoryTable items={items} onSelect={select} />
-                </div>
-              ))
-            )}
-
-            {/* Canceladas: quedan como registro, no como pendientes. Se pueden
-                borrar una por una cuando ya no sirvan de referencia. */}
-            {cancelledOrders.length > 0 && (
-              <div className="mt-4">
-                <div className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
-                  <button type="button" onClick={() => setShowCancelled(v => !v)} className="flex flex-1 items-center gap-2 text-left">
-                    <X size={12} className="text-gray-600" />
-                    <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                      Canceladas por el cliente ({cancelledOrders.length})
-                    </h2>
-                  </button>
-                  {showCancelled ? botonSeleccion("cancel") : (
-                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">Ver</span>
-                  )}
-                </div>
-
-                {showCancelled && barraSeleccion("cancel", cancelledOrders)}
-                {showCancelled && cancelledOrders.map(item => filaSeleccionable(item, "cancel", "opacity-60"))}
-              </div>
-            )}
-          </div>
-        )}
+          <button onClick={() => setActiveTab('completadas')} className="flex flex-col items-center justify-center p-6 bg-slate-400/10 border border-slate-400/20 rounded-2xl active:scale-95 transition-all gap-3 relative">
+            {counts.history > 0 && <span className="absolute top-3 right-3 bg-slate-400 text-black px-2 py-0.5 rounded-full text-[10px] font-black">{counts.history}</span>}
+            <div className="p-3 bg-slate-400/20 rounded-full text-slate-300">
+              <PackageCheck size={24} />
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-widest text-slate-300">Historial</span>
+          </button>
+        </div>
       </div>
 
-      {/* Panel de la orden. Una orden existente ocupa toda la pantalla del
-          admin: hay demasiado (datos, pago, chat, finanzas) para un modal.
-          Crear una orden nueva es un formulario corto, así que sigue en modal. */}
+      {/* LISTAS (Overlay en móvil con portal para evitar z-index issues, bloque estándar en desktop) */}
+      {(() => {
+        const isMobileOverlay = !isWide && activeTab !== 'menu';
+        const innerContent = (
+          <>
+            {/* Overlay Header (Móvil) */}
+            <div className="md:hidden shrink-0 flex flex-col border-b border-white/[0.06] bg-[#0c0f12]/95 backdrop-blur-md pt-[calc(1rem+env(safe-area-inset-top))]">
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setActiveTab('menu')} className="p-2 -ml-2 rounded-xl bg-white/5 text-gray-400 hover:text-white active:scale-95 transition-all">
+                    <ArrowLeft size={18} />
+                  </button>
+                  <h2 className="text-[13px] font-black uppercase tracking-[0.15em] text-white">
+                    {activeTab === 'validacion' ? 'Validación' :
+                     activeTab === 'active' ? 'Órdenes Activas' :
+                     activeTab === 'problemas' ? 'Problemas' : 'Historial'}
+                  </h2>
+                </div>
+                <button onClick={newOrder} className="flex shrink-0 items-center gap-1 rounded-full bg-yellow-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-black active:scale-95 transition-transform">
+                  <Plus size={12} strokeWidth={3} /> Nueva
+                </button>
+              </div>
+
+              {/* Search Bar in Mobile Header */}
+              {activeTab === 'completadas' && historyOrders.length > 0 && (
+                <div className="px-4 pb-3">
+                  <div className="relative">
+                    <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                    <input
+                      value={historySearch}
+                      onChange={e => setHistorySearch(e.target.value)}
+                      placeholder="Buscar por cliente, correo, juego, orden o código..."
+                      className="w-full rounded-xl border border-white/8 bg-white/5 py-2 pl-9 pr-3 text-[12px] text-white outline-none placeholder:text-gray-700 focus:border-yellow-500/40"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Contenedor escroleable de la lista */}
+            <div className="flex-1 overflow-y-auto pb-6 md:pb-0 relative">
+              {/* Vista: Nuevas Consultas (Borradores) */}
+              {activeTab === 'validacion' && (
+                <div>
+                  {draftOrders.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 py-16 text-center">
+                      <HelpCircle size={24} className="text-gray-800" />
+                      <p className="text-xs text-gray-700">Nada por validar</p>
+                      <p className="text-[10px] text-gray-600 max-w-[240px]">
+                        Aquí aparecen solo las transferencias con comprobante subido, esperando que lo revises.
+                      </p>
+                    </div>
+                  ) : (
+                    draftOrders.map(item => <OrderItem key={item.id} item={item} />)
+                  )}
+                  {/* Canceladas o esperando sin comprobante se ocultan tras un botón para no hacer ruido */}
+                  <div className="mt-4 flex flex-col gap-2 border-t border-white/5 pt-4">
+                    <div className="flex w-full items-center gap-2 px-6">
+                      <button type="button" onClick={() => setShowAwaiting(v => !v)} className="flex flex-1 items-center gap-2 text-left">
+                        <X size={12} className="text-gray-600" />
+                        <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                          Esperando confirmación o pago ({awaitingPayment.length})
+                        </h2>
+                      </button>
+                      {showAwaiting ? botonSeleccion("await") : (
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">Ver</span>
+                      )}
+                    </div>
+
+                    {showAwaiting && (
+                      <>
+                        {barraSeleccion("await", awaitingPayment)}
+                        <p className="px-6 py-2 text-[10px] leading-relaxed text-gray-600">
+                          Eligieron un método de pago y no completaron. Las de Mercado Pago se aprueban solas
+                          cuando llega la confirmación; las de transferencia, cuando suban su comprobante.
+                          Las marcadas <span className="font-black text-red-400">Rechazado</span> ya subieron uno
+                          que no aprobaste: vuelven a Validación en cuanto suban otro.
+                        </p>
+                        {awaitingPayment.map(item => filaSeleccionable(item, "await"))}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Vista: Activas (Agrupadas por secciones) */}
+              {activeTab === 'active' && (
+                <div>
+                  {activeOrders.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 py-16 text-center">
+                      <PackageCheck size={24} className="text-gray-800" />
+                      <p className="text-xs text-gray-700">No hay entregas activas</p>
+                    </div>
+                  ) : (
+                    activeSections.map((section, i) => (
+                      section.items.length > 0 && (
+                        <div key={section.status} className="mb-6">
+                          {/* Cabecera de estado: numerada para que se lea como las
+                              etapas por las que va pasando la entrega. */}
+                          <div className="sticky top-0 z-10 flex items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-[8px] font-black text-gray-300">{i + 1}</span>
+                            <section.icon size={13} className={section.color || "text-gray-500"} />
+                            <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-400">{section.label} ({section.items.length})</h2>
+                          </div>
+                          {section.items.map(item => <OrderItem key={item.id} item={item} />)}
+                        </div>
+                      )
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Vista: Problemas (tickets abiertos) */}
+              {activeTab === 'problemas' && (
+                <div>
+                  {issueOrders.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 py-16 text-center">
+                      <CheckCircle2 size={24} className="text-gray-800" />
+                      <p className="text-xs text-gray-700">Sin problemas abiertos</p>
+                      <p className="max-w-[220px] text-[10px] text-gray-600">Aquí aparecen las entregas donde el cliente reportó un problema durante la instalación.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-2 border-b border-red-500/10 bg-red-500/5 p-4">
+                        <p className="text-[10px] font-bold text-red-400">
+                          Cada uno es un ticket abierto. Ábrelo para hablar con el cliente por el chat y, cuando esté solucionado, márcalo como resuelto: la orden vuelve a Activas donde quedó.
+                        </p>
+                      </div>
+                      {issueOrders.map(item => (
+                        <div key={item.id} className="flex items-center gap-2 border-b border-white/[0.04] pr-4">
+                          <div className="min-w-0 flex-1">
+                            <OrderItem item={item} />
+                          </div>
+                          <button type="button" onClick={() => resolverProblema(item)} disabled={loading}
+                            className="flex shrink-0 items-center gap-1.5 rounded-full border border-green-500/25 bg-green-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-green-400 transition-colors hover:bg-green-500/20 disabled:opacity-50">
+                            <Check size={12} strokeWidth={3} /> Resuelto
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Vista: Historial */}
+              {activeTab === 'completadas' && (
+                <div>
+                  {historyOrders.length > 0 && (
+                    <div className="hidden md:block sticky top-0 z-10 border-b border-white/5 bg-[rgb(9,9,11)] px-4 py-3">
+                      <div className="relative">
+                        <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                        <input
+                          value={historySearch}
+                          onChange={e => setHistorySearch(e.target.value)}
+                          placeholder="Buscar por cliente, correo, juego, orden o código..."
+                          className="w-full rounded-xl border border-white/8 bg-white/5 py-2 pl-9 pr-3 text-[12px] text-white outline-none placeholder:text-gray-700 focus:border-yellow-500/40"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {filteredHistoryOrders.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 py-16 text-center">
+                      <CheckCircle2 size={24} className="text-gray-800" />
+                      <p className="text-xs text-gray-700">
+                        {historySearch ? "Sin resultados para tu búsqueda" : "No hay historial"}
+                      </p>
+                    </div>
+                  ) : (
+                    historyGroups.map(([month, items]) => (
+                      <div key={month}>
+                        <div className="flex items-center gap-2 px-6 py-2 bg-[rgb(12,12,14)] border-y border-white/5">
+                          <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-400 capitalize">{month} ({items.length})</h2>
+                        </div>
+                        <div className="md:hidden">
+                          {items.map(item => <OrderItem key={item.id} item={item} />)}
+                        </div>
+                        <HistoryTable items={items} onSelect={select} />
+                      </div>
+                    ))
+                  )}
+
+                  {/* Canceladas */}
+                  {cancelledOrders.length > 0 && (
+                    <div className="mt-4">
+                      <div className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
+                        <button type="button" onClick={() => setShowCancelled(v => !v)} className="flex flex-1 items-center gap-2 text-left">
+                          <X size={12} className="text-gray-600" />
+                          <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                            Canceladas por el cliente ({cancelledOrders.length})
+                          </h2>
+                        </button>
+                        {showCancelled ? botonSeleccion("cancel") : (
+                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">Ver</span>
+                        )}
+                      </div>
+
+                      {showCancelled && barraSeleccion("cancel", cancelledOrders)}
+                      {showCancelled && cancelledOrders.map(item => filaSeleccionable(item, "cancel", "opacity-60"))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        );
+
+        if (isMobileOverlay) {
+          // Si es móvil, se renderiza con createPortal para ignorar los contextos de apilamiento (z-index y overflow-hidden) de AdminPage.
+          return createPortal(
+            <div className="fixed inset-0 z-[999] flex flex-col bg-[#0c0f12]">
+              {innerContent}
+            </div>,
+            document.body
+          );
+        }
+
+        return (
+          <div className={`hidden md:flex flex-1 overflow-hidden`}>
+            {innerContent}
+          </div>
+        );
+      })()}
+
+      {/* FAB para nueva orden (Sólo móvil - Solo en Menú) */}
+      {activeTab === 'menu' && (
+        <button onClick={newOrder} aria-label="Nueva Entrega"
+          className="fixed bottom-6 right-4 z-[110] flex h-14 w-14 items-center justify-center rounded-full bg-yellow-500 text-black shadow-lg shadow-yellow-500/20 transition-transform active:scale-95 md:hidden">
+          <Plus size={24} strokeWidth={2.5} />
+        </button>
+      )}
+
+      {/* Modales */}
       {modalOpen && (selectedOrder ? (
-        <div className="absolute inset-0 z-30 flex flex-col overflow-hidden" style={{ background: "rgb(9,9,11)" }}>
-          {orderPanel}
-        </div>
+        !isWide ? createPortal(
+          <div className="fixed inset-0 z-[1000] flex flex-col overflow-hidden" style={{ background: "rgb(9,9,11)" }}>
+            {orderPanel}
+          </div>,
+          document.body
+        ) : (
+          <div className="absolute inset-0 z-30 flex flex-col overflow-hidden" style={{ background: "rgb(9,9,11)" }}>
+            {orderPanel}
+          </div>
+        )
       ) : createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-6">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={closeIfConfirmed} />

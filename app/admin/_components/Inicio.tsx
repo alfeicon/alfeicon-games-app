@@ -54,12 +54,22 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
   const totalProfit = totalRevenue - totalCost;
   const margin = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
 
-  const partnerProfit = thisMonth.reduce((a, s) => {
-    const gain = s.price_sold - (s.cost_price ?? 0);
-    const pct = s.partner_pct ?? 0;
-    return a + gain * pct / 100;
-  }, 0);
-  const myShare = totalProfit - partnerProfit;
+  const CUTOFF_DATE = new Date("2026-08-01T00:00:00-04:00");
+  const { globalAdDebt, globalRealProfit, partnerNet, myShare } = useMemo(() => {
+    const newSales = sales.filter(s => new Date(s.created_at) >= CUTOFF_DATE);
+    const newAdSpends = adSpend.filter(a => new Date(a.date) >= CUTOFF_DATE);
+    
+    const globalAdSpend = newAdSpends.reduce((a, b) => a + b.amount, 0);
+    const globalGrossProfit = newSales.reduce((a, s) => a + (s.price_sold - (s.cost_price ?? 0)), 0);
+    
+    const balance = globalGrossProfit - globalAdSpend;
+    
+    if (balance <= 0) {
+      return { globalAdDebt: Math.abs(balance), globalRealProfit: 0, partnerNet: 0, myShare: 0 };
+    } else {
+      return { globalAdDebt: 0, globalRealProfit: balance, partnerNet: balance * 0.15, myShare: balance * 0.85 };
+    }
+  }, [sales, adSpend]);
 
   const totalAdSpend = useMemo(() => {
     const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -67,8 +77,8 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
     return adSpend.filter(a => a.date.startsWith(`${y}-${m}`)).reduce((a, s) => a + s.amount, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adSpend]);
-  // La publicidad la paga el socio, se descuenta de su parte del reparto.
-  const partnerNet = partnerProfit - totalAdSpend;
+  // En la nueva lógica global, el adShareOfProfit lo calcularemos distinto, o lo dejamos para la deuda total.
+  // ...
 
   // ── Rendimiento de la publicidad (este mes) ────────────────────────────────
   // ROAS: cuántos pesos de venta trae cada peso invertido en anuncios. Bajo 1
@@ -286,7 +296,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
   const quickActions = [
     { label: "Registrar venta", Icon: Plus, onClick: onRegisterSale, border: "border-green-500/20", bg: "hover:bg-green-500/10", iconBg: "bg-green-500/15", iconColor: "text-green-400" },
     { label: "Agregar juego", Icon: Gamepad2, onClick: () => onNavigate("juegos"), border: "border-blue-500/20", bg: "hover:bg-blue-500/10", iconBg: "bg-blue-500/15", iconColor: "text-blue-400" },
-    { label: "Agregar pack", Icon: Gift, onClick: () => onNavigate("packs"), border: "border-purple-500/20", bg: "hover:bg-purple-500/10", iconBg: "bg-purple-500/15", iconColor: "text-purple-400" },
+    { label: "Agregar pack", Icon: Gift, onClick: () => onNavigate("juegos"), border: "border-purple-500/20", bg: "hover:bg-purple-500/10", iconBg: "bg-purple-500/15", iconColor: "text-purple-400" },
   ];
 
   // ── Geometría del gráfico de barras ────────────────────────────────────────
@@ -425,14 +435,14 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-green-500/15">
               <Wallet size={20} className="text-green-400" />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">este mes</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Global (15/85)</span>
           </div>
           {firstLoadDone ? (
-            <p key={totalProfit} className="dash-value-in text-4xl font-black leading-none tracking-tight text-green-400">{noSales ? "—" : `$${fmt(totalProfit)}`}</p>
+            <p key={globalRealProfit} className="dash-value-in text-4xl font-black leading-none tracking-tight text-green-400">{noSales ? "—" : `$${fmt(globalRealProfit)}`}</p>
           ) : (
             <div className="h-9 w-32 animate-pulse rounded-lg bg-white/10" />
           )}
-          <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500">Ganancia total</p>
+          <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500">Ganancia libre (post-publicidad)</p>
 
           {!noSales && firstLoadDone && (
             <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
@@ -448,6 +458,13 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
                   ${fmt(Math.round(partnerNet))}
                 </p>
               </div>
+            </div>
+          )}
+          
+          {globalAdDebt > 0 && (
+            <div className="mt-3 rounded-xl bg-red-500/10 p-3 border border-red-500/20">
+               <p className="text-[9px] font-black uppercase tracking-widest text-red-400">Deuda Publicidad Pendiente</p>
+               <p className="text-sm font-black text-red-300">-${fmt(Math.round(globalAdDebt))}</p>
             </div>
           )}
         </div>

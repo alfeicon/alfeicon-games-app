@@ -41,6 +41,7 @@ export type AdSpend = {
   amount: number;
   description: string | null;
   date: string;
+  duration_days?: number | null;
   created_at: string;
 };
 

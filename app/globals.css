@@ -3852,6 +3852,7 @@ html {
 .support-ig-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   /* Degradado de Instagram, el mismo lenguaje del canal de más abajo. */
   background: linear-gradient(115deg, #f9ce34 4%, #ee2a7b 48%, #6228d7 96%);
@@ -3864,8 +3865,29 @@ html {
   border-radius: 99px;
   box-shadow: 0 4px 20px rgba(238,42,123,0.32);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
 }
 .support-ig-btn:active { transform: scale(0.97); }
+
+.support-email-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  /* Degradado vibrante en tonos azules/cyan para el email */
+  background: linear-gradient(115deg, #06b6d4 4%, #3b82f6 48%, #4f46e5 96%);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.85rem 1.5rem;
+  border-radius: 99px;
+  box-shadow: 0 4px 20px rgba(59,130,246,0.32);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+}
+.support-email-btn:active { transform: scale(0.97); }
 
 /* Body */
 .support-body {

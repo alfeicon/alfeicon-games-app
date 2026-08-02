@@ -35,9 +35,10 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
   const partnerName = settings.partnerName || "Socio";
   const [tab, setTab] = useState<Tab>("resumen");
   const [showAddAd, setShowAddAd] = useState(false);
-  const [adForm, setAdForm] = useState({ platform: AD_PLATFORMS[0], amount: "", description: "", date: new Date().toISOString().slice(0, 10) });
+  const [adForm, setAdForm] = useState({ platform: AD_PLATFORMS[0], amount: "", description: "", date: new Date().toISOString().slice(0, 10), duration_days: "7" });
 
   const now = new Date();
+  const CUTOFF_DATE = new Date("2026-08-01T00:00:00-04:00");
   
   // -- CALCULOS GENERALES --
   const thisMonth = useMemo(
@@ -52,12 +53,11 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
   const totalCost = thisMonth.reduce((a, s) => a + (s.cost_price ?? 0), 0);
   const grossProfit = totalRevenue - totalCost;
 
-  const partnerProfit = thisMonth.reduce((a, s) => {
+  const partnerProfitOldLogic = thisMonth.reduce((a, s) => {
     const gain = s.price_sold - (s.cost_price ?? 0);
     const pct = s.partner_pct ?? 0;
     return a + gain * pct / 100;
   }, 0);
-  const myProfit = grossProfit - partnerProfit;
 
   const thisMonthAdSpend = useMemo(() => {
     const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -66,7 +66,23 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
   }, [adSpend, now]);
 
   const totalAdSpend = thisMonthAdSpend.reduce((a, s) => a + s.amount, 0);
-  const partnerNet = partnerProfit - totalAdSpend; // La publicidad la paga el socio
+
+  // -- NUEVA LOGICA DE DEUDA GLOBAL (Desde Agosto 2026) --
+  const { globalAdDebt, globalRealProfit, partnerNet, myProfit } = useMemo(() => {
+    const newSales = sales.filter(s => new Date(s.created_at) >= CUTOFF_DATE);
+    const newAdSpends = adSpend.filter(a => new Date(a.date) >= CUTOFF_DATE);
+    
+    const globalAdSpend = newAdSpends.reduce((a, b) => a + b.amount, 0);
+    const globalGrossProfit = newSales.reduce((a, s) => a + (s.price_sold - (s.cost_price ?? 0)), 0);
+    
+    const balance = globalGrossProfit - globalAdSpend;
+    
+    if (balance <= 0) {
+      return { globalAdDebt: Math.abs(balance), globalRealProfit: 0, partnerNet: 0, myProfit: 0 };
+    } else {
+      return { globalAdDebt: 0, globalRealProfit: balance, partnerNet: balance * 0.15, myProfit: balance * 0.85 };
+    }
+  }, [sales, adSpend]);
 
   // -- AGRUPAR POR DÍAS (Calendario / Historial Diario) --
   const dailyStats = useMemo(() => {
@@ -112,15 +128,16 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
   const saveAd = async (e: FormEvent) => {
     e.preventDefault(); if (!supabase) return;
     const amount = Number(adForm.amount.replace(/[^0-9]/g, "")) || 0;
+    const duration = Number(adForm.duration_days) || 1;
     if (!adForm.platform || amount <= 0) { showNotice("error", "Falta plataforma o monto."); return; }
     setLoading(true);
     const { error } = await supabase.from("ad_spend").insert({
-      platform: adForm.platform, amount, description: adForm.description.trim() || null, date: adForm.date,
+      platform: adForm.platform, amount, description: adForm.description.trim() || null, date: adForm.date, duration_days: duration,
     });
     setLoading(false);
     if (error) { showNotice("error", "No se pudo guardar."); return; }
     showNotice("success", "Gasto de publicidad registrado.");
-    setAdForm({ platform: AD_PLATFORMS[0], amount: "", description: "", date: new Date().toISOString().slice(0, 10) });
+    setAdForm({ platform: AD_PLATFORMS[0], amount: "", description: "", date: new Date().toISOString().slice(0, 10), duration_days: "7" });
     setShowAddAd(false); await onReload();
   };
 
@@ -230,52 +247,94 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
   return (
     <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
       {/* Header */}
-      <div className="shrink-0 border-b border-white/5 px-6 py-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div>
+      <div className="shrink-0 border-b border-white/5 px-4 pt-4 pb-3 flex flex-col gap-4">
+        {/* En móvil ocultamos este H1 porque ya está en la barra superior */}
+        <div className="hidden md:flex justify-between items-center">
           <h1 className="text-lg font-black uppercase tracking-widest text-emerald-400">Finanzas</h1>
-          {/* TABS */}
-          <div className="mb-6 flex space-x-2 border-b border-white/10 pb-4">
-            {(["resumen", "publicidad", "historial"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`rounded-xl px-4 py-2 text-sm font-medium transition-all ${
-                  tab === t ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"
-                }`}
-              >
-                {t === "resumen" ? "Resumen" : t === "publicidad" ? "Publicidad" : "Historial"}
-              </button>
-            ))}
-          </div>
+          <button 
+            onClick={generateAIReport}
+            className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500/20"
+          >
+            <Bot size={14} /> Reporte IA Avanzado
+          </button>
         </div>
-        <button 
-          onClick={generateAIReport}
-          className="magnetic flex shrink-0 items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500/20"
-        >
-          <Bot size={14} />
-          Reporte IA Avanzado
-        </button>
+
+        {/* TABS (Segmented Control style) */}
+        <div className="flex rounded-xl bg-white/[0.04] p-1 mx-2 md:mx-0">
+          {(["resumen", "publicidad", "historial"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 rounded-lg py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${
+                tab === t ? "bg-white/10 text-white shadow-sm" : "text-gray-500 hover:text-white"
+              }`}
+            >
+              {t === "resumen" ? "Resumen" : t === "publicidad" ? "Publicidad" : "Historial"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "resumen" && (
         <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
-          {/* Mini metrics */}
-          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            {[
-              { label: "Ventas este mes", value: thisMonth.length, icon: <Receipt size={14} className="text-blue-400" />, color: "" },
-              { label: "Ingresos", value: `$${fmt(totalRevenue)}`, icon: <TrendingUp size={14} className="text-green-400" />, color: "text-green-400" },
-              { label: "Costo total", value: `$${fmt(totalCost)}`, icon: <Banknote size={14} className="text-orange-400" />, color: "text-orange-400" },
-              { label: "Ganancia bruta", value: `$${fmt(grossProfit)}`, icon: <TrendingDown size={14} className={grossProfit >= 0 ? "text-emerald-400" : "text-red-400"} />, color: grossProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-              { label: "Tu ganancia", value: `$${fmt(Math.round(myProfit))}`, icon: <DollarSign size={14} className="text-emerald-400" />, color: "text-emerald-400" },
-              { label: `Ganancia ${partnerName}`, value: `$${fmt(Math.round(partnerProfit))}`, icon: <Handshake size={14} className="text-pink-400" />, color: "text-pink-400" },
-              { label: `Pago a ${partnerName}`, value: `$${fmt(Math.round(partnerNet))}`, icon: <Megaphone size={14} className={partnerNet >= 0 ? "text-pink-400" : "text-red-400"} />, color: partnerNet >= 0 ? "text-pink-400" : "text-red-400" },
-            ].map(({ label, value, icon, color }) => (
-              <div key={label} className="brand-glass rounded-2xl p-4">
-                <div className="mb-2">{icon}</div>
-                <p className={`text-xl font-black leading-none ${color}`}>{value}</p>
-                <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-gray-600">{label}</p>
+          {/* Dashboard Balance Card */}
+          <div className="mx-4 mt-6 flex flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-6 border border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.05)] relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full" />
+            <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full" />
+            
+            <span className="relative z-10 mb-2 flex items-center gap-2 rounded-full bg-emerald-500/20 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-400">
+              <DollarSign size={12} /> Tu Ganancia Mensual (15/85)
+            </span>
+            <h2 className="relative z-10 text-5xl md:text-6xl font-black text-white tracking-tight">${fmt(Math.round(myProfit))}</h2>
+            
+            <div className="relative z-10 mt-6 flex w-full justify-between border-t border-emerald-500/20 pt-4 px-2">
+              <div className="flex flex-col">
+                 <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500/70 mb-1">Pago a {partnerName}</span>
+                 <span className="text-xl font-black text-emerald-100">${fmt(Math.round(partnerNet))}</span>
               </div>
-            ))}
+              <div className="flex flex-col text-right">
+                 <span className="text-[9px] font-bold uppercase tracking-widest text-red-500/70 mb-1">Deuda Publicidad</span>
+                 <span className="text-xl font-black text-red-400">${fmt(Math.round(globalAdDebt))}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Secondary Grid */}
+          <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
+             <div className="flex flex-col rounded-2xl bg-white/[0.02] border border-white/[0.05] p-4 relative overflow-hidden group hover:bg-white/[0.04] transition-colors">
+               <Receipt size={16} className="mb-2 text-blue-400" />
+               <span className="text-2xl font-black text-white">{thisMonth.length}</span>
+               <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Ventas este mes</span>
+               <div className="absolute top-0 right-0 p-4 opacity-10"><Receipt size={40} /></div>
+             </div>
+             <div className="flex flex-col rounded-2xl bg-white/[0.02] border border-white/[0.05] p-4 relative overflow-hidden group hover:bg-white/[0.04] transition-colors">
+               <TrendingUp size={16} className="mb-2 text-green-400" />
+               <span className="text-2xl font-black text-green-400">${fmt(totalRevenue)}</span>
+               <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Ingresos</span>
+               <div className="absolute top-0 right-0 p-4 opacity-10"><TrendingUp size={40} /></div>
+             </div>
+             <div className="flex flex-col rounded-2xl bg-white/[0.02] border border-white/[0.05] p-4 relative overflow-hidden group hover:bg-white/[0.04] transition-colors">
+               <Banknote size={16} className="mb-2 text-orange-400" />
+               <span className="text-2xl font-black text-orange-400">${fmt(totalCost)}</span>
+               <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Costo Total</span>
+               <div className="absolute top-0 right-0 p-4 opacity-10"><Banknote size={40} /></div>
+             </div>
+             <div className="flex flex-col rounded-2xl bg-white/[0.02] border border-white/[0.05] p-4 relative overflow-hidden group hover:bg-white/[0.04] transition-colors">
+               <TrendingDown size={16} className={`mb-2 ${grossProfit >= 0 ? "text-emerald-400" : "text-red-400"}`} />
+               <span className={`text-2xl font-black ${grossProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>${fmt(grossProfit)}</span>
+               <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-500">Ganancia Bruta</span>
+               <div className="absolute top-0 right-0 p-4 opacity-10"><TrendingDown size={40} /></div>
+             </div>
+          </div>
+
+          <div className="px-4 pb-2 md:hidden">
+            <button 
+              onClick={generateAIReport}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 px-4 py-4 text-xs font-black uppercase tracking-widest text-emerald-400 transition-all hover:bg-emerald-500/20 active:scale-95"
+            >
+              <Bot size={18} />
+              Generar Reporte IA Avanzado
+            </button>
           </div>
 
           <div className="px-4 pb-2 mt-4">
@@ -378,8 +437,12 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
                   <input value={adForm.amount} onChange={e => setAdForm({ ...adForm, amount: e.target.value })} inputMode="numeric" className={INPUT + " focus:border-orange-500"} />
                 </div>
                 <div>
-                  <label className={LABEL}>Fecha</label>
+                  <label className={LABEL}>Fecha de inicio</label>
                   <input type="date" value={adForm.date} onChange={e => setAdForm({ ...adForm, date: e.target.value })} className={INPUT + " focus:border-orange-500"} />
+                </div>
+                <div>
+                  <label className={LABEL}>Duración (días)</label>
+                  <input type="number" min="1" value={adForm.duration_days} onChange={e => setAdForm({ ...adForm, duration_days: e.target.value })} className={INPUT + " focus:border-orange-500"} placeholder="Ej: 7" />
                 </div>
               </div>
               <div>
@@ -410,20 +473,47 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
               <>
                 {/* Mobile: stacked cards */}
                 <div className="space-y-2 sm:hidden">
-                  {adSpend.map(spend => (
-                    <div key={spend.id} className="brand-shell flex items-center justify-between gap-3 rounded-2xl p-3.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold">{spend.platform}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-gray-500">{spend.description || "—"}</p>
-                        <p className="mt-0.5 text-[10px] text-gray-600">{fmtDate(spend.date)}</p>
+                  {adSpend.map(spend => {
+                    const startDate = new Date(spend.date);
+                    const endDate = new Date(startDate);
+                    endDate.setDate(endDate.getDate() + (spend.duration_days || 1));
+                    
+                    const campaignSales = sales.filter(s => {
+                      const sDate = new Date(s.created_at);
+                      return sDate >= startDate && sDate <= endDate;
+                    });
+                    const campaignProfit = campaignSales.reduce((a, s) => a + (s.price_sold - (s.cost_price ?? 0)), 0);
+                    const progress = Math.min(100, Math.round((campaignProfit / spend.amount) * 100));
+                    const remaining = spend.amount - campaignProfit;
+                    const isNegative = remaining > 0;
+
+                    return (
+                      <div key={spend.id} className="brand-shell flex flex-col gap-2 rounded-2xl p-3.5">
+                        <div className="flex items-center justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold">{spend.platform} <span className="text-xs text-gray-500 font-normal">({spend.duration_days || 1} días)</span></p>
+                            <p className="mt-0.5 text-[10px] text-gray-600">{fmtDate(spend.date)}</p>
+                          </div>
+                          <p className="shrink-0 text-sm font-black text-orange-400">${fmt(spend.amount)}</p>
+                          <button onClick={() => deleteAdSpend(spend.id)} disabled={loading}
+                            className="shrink-0 rounded p-1 ml-2 text-gray-700 hover:text-red-400 transition-colors disabled:opacity-40">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                        <div className="pt-2 border-t border-white/5">
+                          <div className="w-full bg-white/10 rounded-full h-1.5 flex overflow-hidden">
+                            <div className="bg-emerald-400 h-full" style={{ width: `${progress}%` }} />
+                          </div>
+                          <div className="flex justify-between items-center mt-1">
+                            <p className="text-[10px] text-gray-500">Recuperado: ${fmt(campaignProfit)}</p>
+                            <p className={`text-[10px] font-bold ${isNegative ? "text-red-400" : "text-emerald-400"}`}>
+                              {progress}% {isNegative ? `(-$${fmt(remaining)})` : "(Superada)"}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <p className="shrink-0 text-sm font-black text-orange-400">${fmt(spend.amount)}</p>
-                      <button onClick={() => deleteAdSpend(spend.id)} disabled={loading}
-                        className="shrink-0 rounded p-1 text-gray-700 hover:text-red-400 transition-colors disabled:opacity-40">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Desktop: table */}
@@ -434,18 +524,45 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
                     ))}
                   </div>
                   <div className="divide-y divide-white/5">
-                    {adSpend.map(spend => (
-                      <div key={spend.id} className="grid grid-cols-[1fr_1fr_1fr_2fr_auto] items-center gap-x-4 px-4 py-3 hover:bg-white/[0.02] transition-colors">
-                        <p className="text-sm font-bold">{spend.platform}</p>
-                        <p className="text-sm font-black text-orange-400">${fmt(spend.amount)}</p>
-                        <p className="text-[11px] text-gray-400">{fmtDate(spend.date)}</p>
-                        <p className="truncate text-[11px] text-gray-500">{spend.description || "—"}</p>
-                        <button onClick={() => deleteAdSpend(spend.id)} disabled={loading}
-                          className="rounded p-1 text-gray-700 hover:text-red-400 transition-colors disabled:opacity-40">
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
+                    {adSpend.map(spend => {
+                      const startDate = new Date(spend.date);
+                      const endDate = new Date(startDate);
+                      endDate.setDate(endDate.getDate() + (spend.duration_days || 1));
+                      
+                      // Calculate specific campaign recovery
+                      const campaignSales = sales.filter(s => {
+                        const sDate = new Date(s.created_at);
+                        return sDate >= startDate && sDate <= endDate;
+                      });
+                      const campaignProfit = campaignSales.reduce((a, s) => a + (s.price_sold - (s.cost_price ?? 0)), 0);
+                      const progress = Math.min(100, Math.round((campaignProfit / spend.amount) * 100));
+                      const remaining = spend.amount - campaignProfit;
+                      const isNegative = remaining > 0;
+
+                      return (
+                        <div key={spend.id} className="grid grid-cols-[1fr_1fr_1fr_2fr_auto] items-center gap-x-4 px-4 py-3 hover:bg-white/[0.02] transition-colors">
+                          <div className="flex flex-col">
+                            <p className="text-sm font-bold">{spend.platform}</p>
+                            <p className="text-[10px] text-gray-500">{spend.duration_days || 1} días</p>
+                          </div>
+                          <div className="flex flex-col">
+                            <p className="text-sm font-black text-orange-400">${fmt(spend.amount)}</p>
+                            <div className="mt-1 w-full bg-white/10 rounded-full h-1.5 flex overflow-hidden">
+                              <div className="bg-emerald-400 h-full" style={{ width: `${progress}%` }} />
+                            </div>
+                            <p className={`text-[10px] mt-0.5 font-bold ${isNegative ? "text-red-400" : "text-emerald-400"}`}>
+                              {progress}% {isNegative ? `(-$${fmt(remaining)})` : "(Superada)"}
+                            </p>
+                          </div>
+                          <p className="text-[11px] text-gray-400">{fmtDate(spend.date)}</p>
+                          <p className="truncate text-[11px] text-gray-500">{spend.description || "—"}</p>
+                          <button onClick={() => deleteAdSpend(spend.id)} disabled={loading}
+                            className="rounded p-1 text-gray-700 hover:text-red-400 transition-colors disabled:opacity-40">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </>

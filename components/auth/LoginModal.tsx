@@ -27,6 +27,17 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
 
   const emailRef = useRef<HTMLInputElement>(null);
 
+  const translateAuthError = (errorMsg: string) => {
+    const msg = errorMsg.toLowerCase();
+    if (msg.includes("invalid login credentials")) return "Correo o contraseña incorrectos.";
+    if (msg.includes("user already registered")) return "Este correo ya está registrado.";
+    if (msg.includes("password should be at least")) return "La contraseña debe tener al menos 6 caracteres.";
+    if (msg.includes("email not confirmed")) return "Debes confirmar tu correo electrónico.";
+    if (msg.includes("rate limit")) return "Demasiados intentos. Intenta de nuevo más tarde.";
+    if (msg.includes("network")) return "Error de conexión. Verifica tu internet.";
+    return "Ha ocurrido un error. Por favor, revisa los datos e intenta de nuevo.";
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -36,7 +47,20 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
     if (isLogin) {
       const { error, data } = await supabase!.auth.signInWithPassword({ email, password });
       if (error) {
-        setAuthError(error.message);
+        if (error.message.toLowerCase().includes("invalid login credentials")) {
+          // Intentamos verificar si el correo existe mediante la RPC (para diferenciar correo de contraseña)
+          const { data: exists, error: rpcError } = await supabase!.rpc('check_email_exists', { p_email: email });
+          if (!rpcError && exists === false) {
+            setAuthError("El correo no está registrado.");
+          } else if (!rpcError && exists === true) {
+            setAuthError("La contraseña es incorrecta.");
+          } else {
+            // Si la RPC falla (ej. aún no se ha creado en la DB), usamos el genérico
+            setAuthError(translateAuthError(error.message));
+          }
+        } else {
+          setAuthError(translateAuthError(error.message));
+        }
         setLoading(false);
       } else if (data?.user) {
         onSuccess(data.user);
@@ -48,16 +72,22 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
         return;
       }
       
+      if (password.length < 6 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+        setAuthError("La contraseña no cumple con los requisitos mínimos.");
+        setLoading(false);
+        return;
+      }
+      
       const { error, data } = await supabase!.auth.signUp({ 
         email, 
         password
       });
       if (error) {
-        setAuthError(error.message);
+        setAuthError(translateAuthError(error.message));
         setLoading(false);
       } else {
         if (data.user?.identities?.length === 0) {
-          setAuthError("El usuario ya existe. Por favor, inicia sesión.");
+          setAuthError("Este correo ya está registrado. Por favor, inicia sesión.");
         } else {
           setAuthSuccess("¡Cuenta creada! Se ha iniciado sesión automáticamente.");
           setTimeout(() => {
@@ -193,6 +223,35 @@ export default function LoginModal({ onClose, onSuccess }: LoginModalProps) {
                 </motion.p>
               )}
             </label>
+
+            <AnimatePresence mode="popLayout">
+              {!isLogin && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, height: "auto", scale: 1 }}
+                  exit={{ opacity: 0, height: 0, scale: 0.95 }}
+                  transition={{ duration: 0.3 }}
+                  className="mt-1 mb-2 flex flex-col gap-1.5 px-3"
+                >
+                  <div className="flex items-center gap-2">
+                    {password.length >= 6 ? <CheckCircle2 size={12} className="text-green-500 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-gray-600 shrink-0" />}
+                    <span className={`text-[11px] ${password.length >= 6 ? 'text-green-500 font-medium' : 'text-gray-500'}`}>Mínimo 6 caracteres</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/[A-Z]/.test(password) ? <CheckCircle2 size={12} className="text-green-500 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-gray-600 shrink-0" />}
+                    <span className={`text-[11px] ${/[A-Z]/.test(password) ? 'text-green-500 font-medium' : 'text-gray-500'}`}>Al menos una mayúscula</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/[a-z]/.test(password) ? <CheckCircle2 size={12} className="text-green-500 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-gray-600 shrink-0" />}
+                    <span className={`text-[11px] ${/[a-z]/.test(password) ? 'text-green-500 font-medium' : 'text-gray-500'}`}>Al menos una minúscula</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/\d/.test(password) ? <CheckCircle2 size={12} className="text-green-500 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-gray-600 shrink-0" />}
+                    <span className={`text-[11px] ${/\d/.test(password) ? 'text-green-500 font-medium' : 'text-gray-500'}`}>Al menos un número</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <AnimatePresence mode="popLayout">
               {!isLogin && (

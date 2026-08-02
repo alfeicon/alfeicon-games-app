@@ -1,14 +1,19 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { LineChart, Users, MousePointerClick, Gamepad2, Gift, Search, TrendingUp, UserPlus, X, Loader2, AlertCircle } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { Eye, UserPlus, Users, X, Loader2, AlertCircle, LineChart, Package, Gamepad2 } from "lucide-react";
 import { useAdminStore } from "../_store/adminStore";
 import { supabase } from "@/lib/supabase/client";
-import Image from "next/image";
+import { motion, AnimatePresence } from "motion/react";
+
+function getLocalYMD(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 export function Analiticas() {
-  const { views, games, packs } = useAdminStore();
+  const { views, games, packs, sales } = useAdminStore();
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
   
   const [showUsersModal, setShowUsersModal] = useState(false);
@@ -17,180 +22,289 @@ export function Analiticas() {
   const [usersError, setUsersError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchUsersCount() {
+    async function fetchUsers() {
       if (!supabase) return;
-      const { count } = await supabase
-        .from("profiles")
-        .select("*", { count: 'exact', head: true });
-      if (count !== null) setTotalUsers(count);
+      setLoadingUsers(true);
+      const { data, error } = await supabase.rpc('get_admin_user_emails');
+      if (error) {
+        setUsersError("No se pudo cargar la lista de cuentas.");
+      } else if (data) {
+        const uniqueUsers: typeof data = [];
+        const seen = new Set();
+        for (const u of data) {
+          const emailClean = (u.email || "").trim().toLowerCase();
+          if (!seen.has(emailClean)) {
+            seen.add(emailClean);
+            uniqueUsers.push(u);
+          }
+        }
+        setUsersList(uniqueUsers);
+        setTotalUsers(uniqueUsers.length);
+      }
+      setLoadingUsers(false);
     }
-    fetchUsersCount();
+    fetchUsers();
   }, []);
 
-  const handleOpenUsers = async () => {
-    if (!supabase) {
-      setUsersError("Error: Cliente de base de datos no inicializado.");
-      setShowUsersModal(true);
-      return;
-    }
-    
+  const handleOpenUsers = () => {
     setShowUsersModal(true);
-    setLoadingUsers(true);
-    setUsersError(null);
-    const { data, error } = await supabase.rpc('get_admin_user_emails');
-    setLoadingUsers(false);
-    
-    if (error) {
-      setUsersError("No se pudo cargar. Asegúrate de haber ejecutado el script get-user-emails.sql en Supabase.");
-    } else {
-      setUsersList(data || []);
-    }
   };
 
-  // Mapeamos los items (juegos y packs) para encontrarlos rápido
-  const itemsMap = useMemo(() => {
-    const map = new Map<string, { title: string; type: "game" | "pack"; img: string | null }>();
-    games.forEach(g => map.set(g.id, { title: g.title, type: "game", img: g.image_url }));
-    packs.forEach(p => map.set(p.id, { title: p.title, type: "pack", img: p.image_url }));
-    return map;
-  }, [games, packs]);
-
-  // Top Juegos Más Vistos
-  const topItems = useMemo(() => {
-    const counts = new Map<string, number>();
-    views.forEach(v => {
-      if (v.item_id) {
-        counts.set(v.item_id, (counts.get(v.item_id) || 0) + 1);
-      }
-    });
-
-    return Array.from(counts.entries())
-      .map(([id, viewsCount]) => ({
-        id,
-        viewsCount,
-        info: itemsMap.get(id) || { title: "Juego Eliminado/Desconocido", type: "game", img: null }
-      }))
-      .sort((a, b) => b.viewsCount - a.viewsCount)
-      .slice(0, 10);
-  }, [views, itemsMap]);
-
-  // Fuentes de Tráfico
-  const trafficSources = useMemo(() => {
-    const sources = new Map<string, number>();
-    views.forEach(v => {
-      const src = v.source || "directo";
-      sources.set(src, (sources.get(src) || 0) + 1);
-    });
-
-    return Array.from(sources.entries())
-      .map(([source, count]) => ({ source, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [views]);
-
-  // Visitas por día (últimos 14 días)
-  const dailyVisits = useMemo(() => {
-    const counts = new Map<string, number>();
+  const {
+    todayVisits, last7DaysVisits, last7DaysSales, conversionRate,
+    thisMonthVisits, lastMonthVisits, monthChange,
+    days30, maxDaily,
+    topGames, topPacks, maxGameCount, maxPackCount,
+    topSources, total30d
+  } = useMemo(() => {
     const now = new Date();
     
-    // Inicializar últimos 14 días en 0 con formato YYYY-MM-DD local
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      counts.set(`${y}-${m}-${day}`, 0);
+    // Array for 30 days chart
+    const days30 = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      days30.push({ 
+        date: getLocalYMD(d), 
+        count: 0, 
+        label: `${d.getDate()} ${MONTHS[d.getMonth()]}` 
+      });
     }
+
+    const d30 = new Date(now); d30.setDate(d30.getDate() - 29); d30.setHours(0,0,0,0);
+    const d7 = new Date(now); d7.setDate(d7.getDate() - 6); d7.setHours(0,0,0,0);
+    
+    const startThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    let thisMonthVisits = 0;
+    let lastMonthVisits = 0;
+    
+    const itemCounts = new Map<string, number>();
+    const sourceCounts = new Map<string, number>();
+    let total30dVisits = 0;
 
     views.forEach(v => {
       const d = new Date(v.created_at);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${day}`;
-      
-      if (counts.has(dateStr)) {
-        counts.set(dateStr, counts.get(dateStr)! + 1);
+      const ymd = getLocalYMD(d);
+      const dayObj = days30.find(x => x.date === ymd);
+      if (dayObj) dayObj.count++;
+
+      if (d >= startThisMonth) thisMonthVisits++;
+      else if (d >= startLastMonth && d <= endLastMonth) lastMonthVisits++;
+
+      if (d >= d30) {
+        total30dVisits++;
+        if (v.item_id) itemCounts.set(v.item_id, (itemCounts.get(v.item_id) || 0) + 1);
+        const src = v.source || "Directo";
+        // Normalize common sources
+        const normSrc = src.toLowerCase().includes('ig') || src.toLowerCase().includes('instagram') ? 'Ig' : 
+                        src.toLowerCase().includes('fb') || src.toLowerCase().includes('facebook') ? 'Fb' : 
+                        src;
+        sourceCounts.set(normSrc, (sourceCounts.get(normSrc) || 0) + 1);
       }
     });
 
-    return Array.from(counts.entries()).map(([date, count]) => ({ date, count }));
-  }, [views]);
+    const todayVisits = days30[29].count;
+    const last7DaysVisits = days30.slice(23).reduce((a, b) => a + b.count, 0);
 
-  const maxDailyVisits = Math.max(...dailyVisits.map(d => d.count), 1);
+    let last7DaysSales = 0;
+    sales.forEach(s => {
+      if (new Date(s.created_at) >= d7) last7DaysSales++;
+    });
+
+    const conversionRate = last7DaysVisits > 0 ? ((last7DaysSales / last7DaysVisits) * 100).toFixed(1) : "0.0";
+    
+    let monthChange = 0;
+    if (lastMonthVisits > 0) {
+      monthChange = Math.round(((thisMonthVisits - lastMonthVisits) / lastMonthVisits) * 100);
+    } else if (thisMonthVisits > 0) {
+      monthChange = 100;
+    }
+
+    const maxDaily = Math.max(...days30.map(d => d.count), 1);
+
+    const itemsMap = new Map<string, {title: string, type: 'game' | 'pack'}>();
+    games.forEach(g => itemsMap.set(g.id, {title: g.title, type: 'game'}));
+    packs.forEach(p => itemsMap.set(p.id, {title: p.title, type: 'pack'}));
+
+    const allItems = Array.from(itemCounts.entries())
+      .map(([id, count]) => {
+         const info = itemsMap.get(id);
+         return { title: info ? info.title : "Desconocido", count, type: info?.type || 'game' };
+      });
+
+    const topGames = allItems.filter(i => i.type === 'game').sort((a,b) => b.count - a.count).slice(0, 5);
+    const topPacks = allItems.filter(i => i.type === 'pack').sort((a,b) => b.count - a.count).slice(0, 5);
+
+    const maxGameCount = topGames[0]?.count || 1;
+    const maxPackCount = topPacks[0]?.count || 1;
+
+    const topSources = Array.from(sourceCounts.entries())
+      .map(([source, count]) => ({ 
+        source: source.charAt(0).toUpperCase() + source.slice(1), 
+        count,
+        pct: total30dVisits > 0 ? Math.round((count / total30dVisits) * 100) : 0
+      }))
+      .sort((a,b) => b.count - a.count)
+      .slice(0, 5);
+
+    return {
+      todayVisits, last7DaysVisits, last7DaysSales, conversionRate,
+      thisMonthVisits, lastMonthVisits, monthChange,
+      days30, maxDaily,
+      topGames, topPacks, maxGameCount, maxPackCount,
+      topSources, total30d: total30dVisits
+    };
+  }, [views, sales, games, packs]);
 
   return (
-    <div className="flex-1 overflow-y-auto space-y-6 pb-20 pt-6 px-4 md:px-8 max-w-7xl mx-auto w-full">
+    <div className="flex-1 overflow-y-auto pb-24 pt-6 px-4 md:px-8 w-full max-w-[1400px] mx-auto custom-scrollbar">
+      
+      {/* HEADER WITH USERS BUTTON */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-2xl font-black uppercase tracking-widest text-pink-400 flex items-center gap-2">
-          <LineChart className="text-pink-400" /> Analíticas e Insights
+        <h1 className="text-2xl font-black uppercase tracking-widest text-[#0ea5e9] flex items-center gap-2">
+          <LineChart className="text-[#0ea5e9]" /> Analíticas e Insights
         </h1>
         {totalUsers !== null && (
           <button 
             onClick={handleOpenUsers}
-            className="flex items-center gap-3 bg-pink-500/10 border border-pink-500/20 px-5 py-2.5 rounded-2xl shadow-inner hover:bg-pink-500/20 transition-colors text-left"
+            className="flex items-center gap-3 bg-[#0b0e11] border border-white/5 px-5 py-2.5 rounded-2xl shadow-lg hover:bg-white/5 transition-colors text-left"
           >
-            <div className="bg-pink-500/20 p-1.5 rounded-xl shrink-0">
-              <UserPlus size={18} className="text-pink-400" />
+            <div className="bg-[#0ea5e9]/10 p-1.5 rounded-xl shrink-0">
+              <UserPlus size={18} className="text-[#0ea5e9]" />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-pink-500">Cuentas Creadas</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Cuentas Registradas</p>
               <p className="text-xl font-black text-white leading-none">{totalUsers}</p>
             </div>
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* DASHBOARD CARD (matches third photo) */}
+      <div className="bg-[#0b0e11] border border-white/5 rounded-3xl p-6 shadow-2xl flex flex-col lg:flex-row gap-8 lg:gap-12 mb-8">
         
-        {/* GRAFICO DE TRÁFICO */}
-        <div className="md:col-span-2 premium-control rounded-2xl p-6">
-          <h2 className="text-sm font-black uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
-            <Users size={16} /> Visitas Últimos 14 Días
-          </h2>
+        {/* LEFT COLUMN */}
+        <div className="w-full lg:w-1/3 flex flex-col gap-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#0f1923] p-2.5 rounded-2xl">
+              <Eye className="text-[#0ea5e9]" size={20} />
+            </div>
+            <h2 className="text-base font-black uppercase tracking-widest text-white">Visitas</h2>
+          </div>
           
-          <div className="h-48 flex items-end justify-between gap-1 sm:gap-2 mt-4">
-            {dailyVisits.map((day, i) => {
-              const heightPct = (day.count / maxDailyVisits) * 100;
+          <div className="mt-2">
+            <h3 className="text-5xl font-black text-white leading-none tracking-tight">{todayVisits}</h3>
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mt-2">Visitas Hoy</p>
+          </div>
+          
+          <div className="border-t border-white/[0.04] pt-6 flex justify-between gap-4 mt-2">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Últimos 7 días</p>
+              <p className="text-xl font-black text-white mt-1">{last7DaysVisits}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Conversión</p>
+              <p className="text-xl font-black text-[#0ea5e9] mt-1">{conversionRate}%</p>
+            </div>
+          </div>
+          <p className="text-[10px] text-gray-600 font-bold">{last7DaysSales} venta{last7DaysSales !== 1 ? 's' : ''} sobre {last7DaysVisits} visitas en la semana.</p>
+          
+          <div className="border-t border-white/[0.04] pt-6 flex flex-col gap-1 mt-2">
+            <div className="flex items-center gap-3">
+              <p className="text-2xl font-black text-white leading-none tracking-tight">{thisMonthVisits}</p>
+              {monthChange !== 0 && (
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${monthChange > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                  {monthChange > 0 ? '+' : ''}{monthChange}%
+                </span>
+              )}
+            </div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mt-1">Este mes · {lastMonthVisits} el anterior</p>
+          </div>
+        </div>
+        
+        {/* RIGHT COLUMN */}
+        <div className="w-full lg:w-2/3 flex flex-col pt-1 lg:pt-0">
+          
+          {/* Chart */}
+          <div className="flex justify-between items-end mb-4">
+            <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Visitas por día · Últimos 30 días</p>
+          </div>
+          
+          <div className="h-32 flex items-end justify-between gap-1 mt-auto border-b border-white/[0.08] pb-1">
+            {days30.map((d, i) => {
+              const heightPct = Math.max((d.count / maxDaily) * 100, 2);
+              const isToday = i === 29;
               return (
-                <div key={day.date} className="w-full flex flex-col items-center group relative">
-                  {/* Tooltip on hover */}
+                <div key={d.date} className="w-full h-full flex flex-col justify-end items-center group relative">
                   <div className="absolute -top-8 bg-black border border-white/10 text-white text-[10px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                    {day.date}: {day.count} visitas
+                    {d.label}: {d.count}
                   </div>
                   <div 
-                    className="w-full bg-pink-500/20 rounded-t-sm hover:bg-pink-400 transition-colors"
+                    className={`w-full rounded-sm transition-colors ${isToday ? 'bg-[#fbbf24] hover:bg-[#f59e0b]' : 'bg-[#0369a1] hover:bg-[#0284c7]'}`}
                     style={{ height: `${heightPct}%`, minHeight: '4px' }}
                   />
-                  <span className="text-[8px] sm:text-[10px] text-gray-500 mt-2 block w-full text-center truncate">
-                    {day.date.split('-')[2]}/{day.date.split('-')[1]}
-                  </span>
                 </div>
               );
             })}
           </div>
+          
+          <div className="flex justify-between mt-2 mb-10">
+            <p className="text-[9px] font-bold text-gray-600 uppercase">{days30[0].label}</p>
+            <p className="text-[9px] font-bold text-gray-600">MÁX {maxDaily}/DÍA</p>
+            <p className="text-[9px] font-bold text-gray-600 uppercase">HOY</p>
+          </div>
+          
+          {/* Bottom sections of Main Card */}
+          <div className="mt-auto">
+            {/* Traffic Sources */}
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-4">De dónde llegan</p>
+              <div className="space-y-4 max-w-lg">
+                {topSources.length === 0 ? (
+                  <p className="text-[10px] text-gray-600">Sin datos suficientes.</p>
+                ) : (
+                  topSources.map((src, i) => {
+                    return (
+                      <div key={i} className="flex items-center gap-3">
+                        <p className="text-[11px] font-bold text-white w-24 truncate shrink-0">{src.source}</p>
+                        <div className="flex-1 bg-white/[0.03] h-2 rounded-full overflow-hidden">
+                          <div className="h-full bg-[#8b5cf6] rounded-full" style={{ width: `${src.pct}%` }} />
+                        </div>
+                        <p className="text-[10px] font-black text-white w-8 text-right">{src.pct}%</p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+          
         </div>
+      </div>
 
-        {/* FUENTES DE TRÁFICO */}
-        <div className="premium-control rounded-2xl p-6">
-          <h2 className="text-sm font-black uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
-            <TrendingUp size={16} /> Fuentes de Tráfico
-          </h2>
+      {/* LO MÁS VISTO CARD */}
+      <div className="bg-[#0b0e11] border border-white/5 rounded-3xl p-6 shadow-2xl grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
+        {/* Top Packs */}
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-4 flex items-center gap-2">
+            <Package size={14} className="text-[#0ea5e9]" /> Packs más vistos · Últimos 30 días
+          </p>
           <div className="space-y-4">
-            {trafficSources.length === 0 ? (
-              <p className="text-sm text-gray-500">Sin datos de tráfico aún.</p>
+            {topPacks.length === 0 ? (
+              <p className="text-[10px] text-gray-600">Sin datos suficientes.</p>
             ) : (
-              trafficSources.map((ts, i) => {
-                const total = views.length || 1;
-                const pct = Math.round((ts.count / total) * 100);
+              topPacks.map((item, i) => {
+                const pct = (item.count / maxPackCount) * 100;
                 return (
-                  <div key={ts.source}>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-bold text-gray-300 capitalize">{ts.source}</span>
-                      <span className="text-[10px] font-black text-gray-500">{pct}% ({ts.count})</span>
+                  <div key={i} className="flex items-center gap-3 group">
+                    <p className="text-[12px] font-bold text-white w-32 truncate shrink-0 group-hover:text-[#0ea5e9] transition-colors">{item.title}</p>
+                    <div className="flex-1 bg-white/[0.03] h-2.5 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#0ea5e9] rounded-full" style={{ width: `${pct}%` }} />
                     </div>
-                    <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-pink-400 rounded-full" style={{ width: `${pct}%` }} />
-                    </div>
+                    <p className="text-[11px] font-black text-gray-300 w-8 text-right">{item.count}</p>
                   </div>
                 );
               })
@@ -198,42 +312,33 @@ export function Analiticas() {
           </div>
         </div>
 
-      </div>
-
-      {/* TOP JUEGOS MÁS VISTOS */}
-      <div className="premium-control rounded-2xl p-6">
-        <h2 className="text-sm font-black uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
-          <MousePointerClick size={16} /> Productos Más Vistos (Interés)
-        </h2>
-        
-        {topItems.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-8">No hay datos de visitas suficientes.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {topItems.map((item, index) => (
-              <div key={item.id} className="flex items-center gap-4 bg-white/[0.02] border border-white/5 p-3 rounded-xl hover:bg-white/[0.05] transition-colors relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-pink-500/10 text-pink-400 text-[10px] font-black px-2 py-1 rounded-bl-lg">
-                  #{index + 1}
-                </div>
-                {item.info.img ? (
-                  <div className="w-12 h-12 relative rounded-md overflow-hidden shrink-0">
-                    <Image src={item.info.img} alt={item.info.title} fill className="object-cover" />
+        {/* Top Games */}
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-4 flex items-center gap-2">
+            <Gamepad2 size={14} className="text-[#0ea5e9]" /> Juegos más vistos · Últimos 30 días
+          </p>
+          <div className="space-y-4">
+            {topGames.length === 0 ? (
+              <p className="text-[10px] text-gray-600">Sin datos suficientes.</p>
+            ) : (
+              topGames.map((item, i) => {
+                const pct = (item.count / maxGameCount) * 100;
+                return (
+                  <div key={i} className="flex items-center gap-3 group">
+                    <p className="text-[12px] font-bold text-white w-32 truncate shrink-0 group-hover:text-[#0ea5e9] transition-colors">{item.title}</p>
+                    <div className="flex-1 bg-white/[0.03] h-2.5 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#0ea5e9] rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-[11px] font-black text-gray-300 w-8 text-right">{item.count}</p>
                   </div>
-                ) : (
-                  <div className="w-12 h-12 bg-white/10 rounded-md flex items-center justify-center shrink-0">
-                    <Gamepad2 size={20} className="text-gray-500" />
-                  </div>
-                )}
-                <div>
-                  <p className="text-sm font-bold text-white line-clamp-1 pr-6">{item.info.title}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{item.viewsCount} vistas</p>
-                </div>
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
-        )}
+        </div>
       </div>
 
+      {/* MODAL CUENTAS */}
       <AnimatePresence>
         {showUsersModal && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">

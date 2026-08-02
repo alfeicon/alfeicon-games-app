@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -43,8 +43,7 @@ const defaultSettings: SettingsState = {
  */
 const NAV_ITEMS: { id: AdminSection; label: string; hint: string; Icon: React.ElementType; accent: string; rgb: string }[] = [
   { id: "inicio",   label: "Inicio",    hint: "Resumen y métricas del negocio",   Icon: Home,         accent: "text-white",         rgb: "255,255,255" },
-  { id: "juegos",   label: "Juegos",    hint: "Catálogo de juegos individuales",  Icon: Gamepad2,     accent: "text-blue-400",      rgb: "96,165,250" },
-  { id: "packs",    label: "Packs",     hint: "Combos y packs de la tienda",      Icon: Gift,         accent: "text-purple-400",    rgb: "192,132,252" },
+  { id: "juegos",   label: "Juegos",    hint: "Catálogo de unitarios y packs",  Icon: Gamepad2,     accent: "text-blue-400",      rgb: "96,165,250" },
   { id: "entregas", label: "Entregas",  hint: "Órdenes activas y seguimiento",    Icon: PackageCheck, accent: "text-yellow-400",    rgb: "250,204,21" },
   { id: "finanzas", label: "Finanzas",  hint: "Ingresos, historial y ventas",     Icon: PiggyBank,    accent: "text-emerald-400",   rgb: "52,211,153" },
   { id: "noticias", label: "Noticias",  hint: "Novedades visibles en la tienda",  Icon: Newspaper,    accent: "text-orange-400",    rgb: "251,146,60" },
@@ -73,6 +72,7 @@ export default function AdminPage() {
   const [pinError, setPinError] = useState("");
 
   const [section, setSection] = useState<AdminSection>("inicio");
+  const [catalogTab, setCatalogTab] = useState<"unitarios" | "packs">("unitarios");
   // Sidebar de desktop: plegado a iconos. Se abre al acercar el cursor y se
   // puede fijar abierto (se recuerda entre sesiones).
   const [sidebarPinned, setSidebarPinned] = useState(false);
@@ -97,6 +97,31 @@ export default function AdminPage() {
   const [sheetDrag, setSheetDrag] = useState(0);
   const [sheetPhase, setSheetPhase] = useState<"in" | "drag" | "settle">("in");
   const sheetStartY = useRef(0);
+
+  const [isDockVisible, setIsDockVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      // Sólo escuchar si es un elemento con scroll vertical
+      if (target.scrollHeight <= target.clientHeight) return;
+      
+      const currentScrollY = target.scrollTop;
+      
+      // Umbral para evitar parpadeos sutiles
+      if (currentScrollY > lastScrollY.current + 10) {
+        setIsDockVisible(false); // bajando -> ocultar
+      } else if (currentScrollY < lastScrollY.current - 10 || currentScrollY <= 0) {
+        setIsDockVisible(true); // subiendo o en el top -> mostrar
+      }
+      
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, []);
 
   const {
     games, setGames,
@@ -364,15 +389,17 @@ export default function AdminPage() {
   }, []);
 
   const navigate = useCallback((s: AdminSection) => {
-    setSection(prev => {
-      if (prev !== s) {
-        const from = NAV_ITEMS.findIndex(i => i.id === prev);
-        const to = NAV_ITEMS.findIndex(i => i.id === s);
-        setNavDir(to >= from ? 1 : -1);
-      }
-      return s;
+    startTransition(() => {
+      setSection(prev => {
+        if (prev !== s) {
+          const from = NAV_ITEMS.findIndex(i => i.id === prev);
+          const to = NAV_ITEMS.findIndex(i => i.id === s);
+          setNavDir(to >= from ? 1 : -1);
+        }
+        return s;
+      });
+      setSectionKey(k => k + 1);
     });
-    setSectionKey(k => k + 1);
     try { localStorage.setItem(SECTION_STORAGE_KEY, s); } catch {}
     if (s === "finanzas") {
       loadSales();
@@ -719,26 +746,47 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
+          <button onClick={() => setNoticesOpen(true)} aria-label="Notificaciones"
+            className="admin-press relative rounded-xl p-2 text-gray-500 hover:text-white">
+            <Bell size={15} />
+            {notices.length > 0 && (
+              <span className="absolute right-1.5 top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-[#0c0f12] bg-blue-500 px-1 text-[8px] font-black text-white">
+                {notices.length}
+              </span>
+            )}
+          </button>
           <button onClick={refreshAll} disabled={refreshing} aria-label="Recargar datos"
             className="admin-press rounded-xl p-2 text-gray-500 disabled:opacity-40">
             <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
           </button>
-          <button onClick={() => setPaletteOpen(true)} aria-label="Buscar"
-            className="admin-press rounded-xl p-2 text-gray-500">
-            <Search size={15} />
-          </button>
           <Link href="/" aria-label="Ver tienda" className="admin-press rounded-xl p-2 text-gray-500">
-            <ArrowLeft size={15} />
+            <Store size={15} />
           </Link>
         </div>
       </div>
 
-      {/* Mobile bottom dock */}
-      <div className="app-dock-wrapper md:hidden">
-        <nav aria-label="Navegación admin" className="app-glass-dock relative flex h-[66px] w-full items-center justify-around overflow-hidden rounded-[2rem] px-1.5">
-          {/* Píldora deslizante: se mueve al item activo en vez de reaparecer */}
+      {/* Backdrop para el menú expandido (separa el contenido del fondo) */}
+      <div 
+        className={`fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm md:hidden transition-opacity duration-[400ms] ${showMobileMenu ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={closeMobileMenu}
+      />
+
+      {/* Morphing Dock & Menu (Mobile) */}
+      <div 
+        className={`fixed left-4 right-4 z-[100] md:hidden transition-all duration-[500ms] ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden bg-[#0c0f12]/90 backdrop-blur-3xl shadow-[0_20px_40px_rgba(0,0,0,0.8)] border border-white/10 flex flex-col ${
+           showMobileMenu 
+             ? 'translate-y-0 opacity-100 scale-100 rounded-[40px] max-h-[80vh]' 
+             : `rounded-[34px] max-h-[68px] ${isDockVisible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-16 opacity-0 scale-90 pointer-events-none'}`
+        }`}
+        style={{ 
+           bottom: 'calc(1rem + env(safe-area-inset-bottom))',
+        }}
+      >
+        {/* VISTA DOCK CONTRAIDO */}
+        <div className={`w-full h-[68px] shrink-0 flex items-center justify-around transition-all duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${showMobileMenu ? 'absolute opacity-0 -translate-y-4 pointer-events-none' : 'relative opacity-100 translate-y-0'}`}>
+          {/* Píldora deslizante corrigiendo el padding de los costados */}
           <span
-            className="admin-dock-pill"
+            className="absolute top-2.5 bottom-2.5 rounded-3xl bg-white/[0.1] transition-all duration-[300ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]"
             style={{
               left: `calc(${(dockIndex / dockSlots) * 100}% + 6px)`,
               width: `calc(${100 / dockSlots}% - 12px)`,
@@ -751,113 +799,91 @@ export default function AdminPage() {
             const badge = badgeFor(id);
             return (
               <button key={id} onClick={() => navigate(id)} aria-current={active ? "page" : undefined}
-                className="admin-dock-item relative z-10 flex h-full flex-1 flex-col items-center justify-center gap-0.5">
-                <div className="admin-dock-icon relative">
-                  <Icon size={18} className={active ? accent : "text-white/60"} strokeWidth={active ? 2.6 : 2.1} />
+                className="relative z-10 flex h-full flex-1 flex-col items-center justify-center gap-[2px] active:scale-95 transition-transform duration-200">
+                <div className={`relative transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] ${active ? 'scale-110 -translate-y-0.5' : 'scale-100 translate-y-0'}`}>
+                  <Icon size={20} className={`transition-colors duration-300 ${active ? accent : "text-gray-500"}`} strokeWidth={active ? 2.5 : 2} />
                   {badge > 0 && (
-                    <span className="admin-badge absolute -right-2 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-black text-white">
+                    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white shadow-lg shadow-red-500/20">
                       {badge}
                     </span>
                   )}
                 </div>
-                <span className={`text-[8.5px] font-black uppercase tracking-wider ${active ? "text-white" : "text-white/55"}`}>{label}</span>
+                <span className={`text-[8.5px] font-black uppercase tracking-widest transition-all duration-[400ms] ${active ? "text-white scale-105" : "text-gray-600 scale-100"}`}>{label}</span>
               </button>
             );
           })}
 
-          {/* Menú completo */}
+          {/* Menú toggle */}
           <button onClick={openMobileMenu} aria-label="Abrir menú"
-            className="admin-dock-item relative z-10 flex h-full flex-1 flex-col items-center justify-center gap-0.5">
-            <div className="admin-dock-icon relative">
-              <LayoutGrid size={18} className={dockIndex === DOCK_IDS.length ? activeItem.accent : "text-white/60"} strokeWidth={dockIndex === DOCK_IDS.length ? 2.6 : 2.1} />
+            className="relative z-10 flex h-full flex-1 flex-col items-center justify-center gap-[2px] active:scale-95 transition-transform duration-200">
+            <div className={`relative transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] ${dockIndex === DOCK_IDS.length ? 'scale-110 -translate-y-0.5' : 'scale-100 translate-y-0'}`}>
+              <LayoutGrid size={20} className={`transition-colors duration-300 ${dockIndex === DOCK_IDS.length ? activeItem.accent : "text-gray-500"}`} strokeWidth={dockIndex === DOCK_IDS.length ? 2.5 : 2} />
               {newSupportCount > 0 && !DOCK_IDS.includes("soporte") && (
-                <span className="admin-badge absolute -right-2 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-black text-white">
+                <span className="absolute -right-2 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white shadow-lg shadow-red-500/20">
                   {newSupportCount}
                 </span>
               )}
             </div>
-            <span className={`text-[8.5px] font-black uppercase tracking-wider ${dockIndex === DOCK_IDS.length ? "text-white" : "text-white/55"}`}>Menú</span>
+            <span className={`text-[8.5px] font-black uppercase tracking-widest transition-all duration-[400ms] ${dockIndex === DOCK_IDS.length ? "text-white scale-105" : "text-gray-600 scale-100"}`}>Menú</span>
           </button>
-        </nav>
-      </div>
+        </div>
 
-      {/* Mobile bottom sheet */}
-      {showMobileMenu && (
-        <div className="fixed inset-0 z-50 flex items-end md:hidden">
-          <div className={`absolute inset-0 bg-black/65 backdrop-blur-sm ${menuClosing ? "admin-backdrop-out" : "admin-backdrop"}`}
-            onClick={closeMobileMenu} />
+        {/* VISTA MENU EXPANDIDO */}
+        <div className={`w-full flex-1 flex flex-col p-6 transition-all duration-[500ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${showMobileMenu ? 'opacity-100 translate-y-0 delay-75' : 'opacity-0 translate-y-12 pointer-events-none absolute inset-x-0 bottom-0'}`}>
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-sm font-black uppercase tracking-widest text-white ml-2">Navegación</h2>
+            <button onClick={closeMobileMenu} aria-label="Cerrar"
+              className="admin-press rounded-full bg-white/[0.06] p-2 text-gray-400">
+              <X size={15} />
+            </button>
+          </div>
 
-          <div
-            onTouchStart={onSheetTouchStart}
-            onTouchMove={onSheetTouchMove}
-            onTouchEnd={onSheetTouchEnd}
-            style={{
-              transform: sheetDrag ? `translateY(${sheetDrag}px)` : undefined,
-              paddingBottom: "calc(2.5rem + env(safe-area-inset-bottom))",
-            }}
-            className={`relative w-full touch-pan-y rounded-t-3xl border-t border-white/[0.08] bg-[#0c0f12]/96 p-6 backdrop-blur-xl ${
-              menuClosing ? "admin-sheet-out"
-                : sheetPhase === "drag" ? "admin-sheet-dragging"
-                : sheetPhase === "settle" ? "admin-sheet-settle"
-                : "admin-sheet"
-            }`}
-          >
-            {/* Tirador: además de decorar, indica que la hoja se puede arrastrar */}
-            <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-white/25" />
+          <div className="grid grid-cols-4 gap-3 mb-2">
+            {NAV_ITEMS.map(({ id, label, Icon, accent, rgb }, i) => {
+              const active = section === id;
+              const badge = badgeFor(id);
+              return (
+                <button key={id} onClick={() => { navigate(id); closeMobileMenu(); }}
+                  style={{ ["--i" as string]: i }}
+                  aria-current={active ? "page" : undefined}
+                  className="flex flex-col items-center gap-2 active:scale-90 transition-transform">
+                  <div
+                    className="relative flex h-14 w-full items-center justify-center rounded-2xl border"
+                    style={{
+                      background: active ? `rgba(${rgb},0.12)` : "rgba(255,255,255,0.025)",
+                      borderColor: active ? `rgba(${rgb},0.32)` : "rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <Icon size={21} className={active ? accent : "text-gray-400"} />
+                    {badge > 0 && (
+                      <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white">
+                        {badge}
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-[9px] font-black uppercase tracking-widest ${active ? "text-white" : "text-gray-500"}`}>{label}</span>
+                </button>
+              );
+            })}
+          </div>
 
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-base font-black uppercase tracking-widest text-white">Navegación</h2>
-              <button onClick={closeMobileMenu} aria-label="Cerrar"
-                className="admin-press rounded-full bg-white/[0.06] p-2 text-gray-400">
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-4 gap-3">
-              {NAV_ITEMS.map(({ id, label, Icon, accent, rgb }, i) => {
-                const active = section === id;
-                const badge = badgeFor(id);
-                return (
-                  <button key={id} onClick={() => { navigate(id); closeMobileMenu(); }}
-                    style={{ ["--i" as string]: i }}
-                    aria-current={active ? "page" : undefined}
-                    className="admin-tile-in flex flex-col items-center gap-2">
-                    <div
-                      className="admin-tile-box relative flex h-14 w-full items-center justify-center rounded-2xl border"
-                      style={{
-                        background: active ? `rgba(${rgb},0.12)` : "rgba(255,255,255,0.025)",
-                        borderColor: active ? `rgba(${rgb},0.32)` : "rgba(255,255,255,0.05)",
-                      }}
-                    >
-                      <Icon size={21} className={active ? accent : "text-gray-400"} />
-                      {badge > 0 && (
-                        <span className="admin-badge absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white">
-                          {badge}
-                        </span>
-                      )}
-                    </div>
-                    <span className={`text-[9px] font-black uppercase tracking-widest ${active ? "text-white" : "text-gray-500"}`}>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-2.5 border-t border-white/[0.05] pt-5">
-              <button onClick={() => { setShowSaleModal(true); closeMobileMenu(); }}
-                className="admin-press col-span-2 flex items-center justify-center gap-2 rounded-2xl bg-white py-3.5 text-[10px] font-black uppercase tracking-widest text-black">
-                <Plus size={14} /> Registrar venta
-              </button>
-              <Link href="/" className="admin-press flex items-center justify-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] py-3 text-[10px] font-black uppercase tracking-widest text-gray-400">
-                <Store size={14} /> Tienda
+          <div className="mt-8 flex flex-col gap-3 border-t border-white/[0.05] pt-6">
+            <button onClick={() => { setShowSaleModal(true); closeMobileMenu(); }}
+              className="admin-press w-full flex items-center justify-center gap-2 rounded-2xl bg-white py-4 text-[11px] font-black uppercase tracking-widest text-black">
+              <Plus size={16} /> Registrar venta
+            </button>
+            <div className="flex gap-3">
+              <Link href="/" className="admin-press flex-1 flex items-center justify-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] py-3.5 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                <Store size={15} /> Tienda
               </Link>
               <button onClick={() => { signOut(); closeMobileMenu(); }}
-                className="admin-press flex items-center justify-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 py-3 text-[10px] font-black uppercase tracking-widest text-red-400">
-                <LogOut size={14} /> Salir
+                className="admin-press flex-1 flex items-center justify-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 py-3.5 text-[10px] font-black uppercase tracking-widest text-red-400">
+                <LogOut size={15} /> Salir
               </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Sidebar (desktop) — plegado a iconos, se abre al acercar el cursor o
           fijado con el pin. El hueco de 64px queda fijo y el menú crece por
@@ -994,13 +1020,15 @@ export default function AdminPage() {
               onNavigate={navigate}
               onRegisterSale={() => setShowSaleModal(true)} />
           )}
-          {section === "juegos" && (
+          {section === "juegos" && catalogTab === "unitarios" && (
             <JuegosCatalog games={games} loading={loading} setLoading={setLoading}
-              showNotice={showNotice} onReload={reloadGamesYTienda} />
+              showNotice={showNotice} onReload={reloadGamesYTienda} 
+              activeTab={catalogTab} onTabChange={setCatalogTab} />
           )}
-          {section === "packs" && (
+          {section === "juegos" && catalogTab === "packs" && (
             <PacksCatalog packs={packs} loading={loading} setLoading={setLoading}
-              showNotice={showNotice} onReload={reloadPacksYTienda} />
+              showNotice={showNotice} onReload={reloadPacksYTienda} 
+              activeTab={catalogTab} onTabChange={setCatalogTab} />
           )}
           {section === "noticias" && (
             <Noticias news={news} newsTableExists={newsTableExists} loading={loading} setLoading={setLoading}
@@ -1056,18 +1084,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Botón tradicional de campana (Sólo visible en móviles) */}
-        <div className="fixed bottom-4 right-4 z-[90] sm:hidden">
-          <button onClick={() => setNoticesOpen(true)} aria-label="Notificaciones"
-            className="admin-press relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-[#0c0f12]/90 text-gray-400 shadow-2xl backdrop-blur-md">
-            <Bell size={20} />
-            {notices.length > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-[#0c0f12] bg-blue-500 px-1 text-[10px] font-black text-white">
-                {notices.length}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* Botón de campana oculto en móviles (movido a top bar) */}
 
         {/* Stacked Toasts (Esquina superior derecha) */}
         <div className="pointer-events-none fixed right-4 top-16 z-[100] flex flex-col items-end gap-2 sm:right-6 sm:top-20">
