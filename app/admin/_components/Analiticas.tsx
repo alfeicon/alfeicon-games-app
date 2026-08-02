@@ -60,7 +60,7 @@ export function Analiticas() {
     const now = new Date();
     
     // Array for 30 days chart
-    const days30 = [];
+    const days30: { date: string; count: number; label: string }[] = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
