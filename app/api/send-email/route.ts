@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       to,
       subject,
       html,
-      reply_to: replyTo || 'alfeicon.games@gmail.com',
+      replyTo: replyTo || 'alfeicon.games@gmail.com',
     });
 
     if (error) {
