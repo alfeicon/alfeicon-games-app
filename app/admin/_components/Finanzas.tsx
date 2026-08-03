@@ -29,6 +29,59 @@ type Props = {
   onReload: () => Promise<void>;
 };
 
+/* ── Frasco animado que se llena según la ganancia ── */
+const MoneyJar = ({ amount }: { amount: number }) => {
+  const [fill, setFill] = useState(0);
+  const MAX_GOAL = 1000000;
+  const targetFill = Math.min(100, Math.max(0, (amount / MAX_GOAL) * 100));
+
+  useEffect(() => {
+    const timer = setTimeout(() => setFill(targetFill), 400);
+    return () => clearTimeout(timer);
+  }, [targetFill]);
+
+  return (
+    <div className="relative mb-4 flex items-center justify-center drop-shadow-[0_0_20px_rgba(52,211,153,0.3)] z-10">
+      <svg viewBox="0 0 100 120" className="w-20 h-24">
+        <defs>
+          <clipPath id="jarClip">
+            <path d="M 30 15 L 30 25 C 15 30 15 45 15 60 L 15 105 C 15 115 25 115 50 115 C 75 115 85 115 85 105 L 85 60 C 85 45 85 30 70 25 L 70 15 Z" />
+          </clipPath>
+          <linearGradient id="moneyGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#34d399" />
+            <stop offset="100%" stopColor="#059669" />
+          </linearGradient>
+        </defs>
+        {/* Fondo */}
+        <path d="M 30 15 L 30 25 C 15 30 15 45 15 60 L 15 105 C 15 115 25 115 50 115 C 75 115 85 115 85 105 L 85 60 C 85 45 85 30 70 25 L 70 15 Z" fill="rgba(255,255,255,0.02)" />
+        {/* Llenado */}
+        <rect x="0" y={115 - (100 * (fill / 100))} width="100" height="100" fill="url(#moneyGrad)" clipPath="url(#jarClip)" className="transition-all duration-[2000ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]" />
+        {/* Borde */}
+        <path d="M 30 15 L 30 25 C 15 30 15 45 15 60 L 15 105 C 15 115 25 115 50 115 C 75 115 85 115 85 105 L 85 60 C 85 45 85 30 70 25 L 70 15 Z" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="3" />
+        {/* Tapa */}
+        <rect x="25" y="5" width="50" height="12" rx="4" fill="rgba(255,255,255,0.9)" />
+        <rect x="22" y="10" width="56" height="4" rx="2" fill="rgba(0,0,0,0.1)" />
+        {/* Reflejo */}
+        <path d="M 25 45 C 25 70 25 90 30 100" stroke="rgba(255,255,255,0.25)" strokeWidth="4" strokeLinecap="round" fill="none" />
+      </svg>
+      {fill > 0 && (
+        <div className="absolute top-0 pointer-events-none animate-[fadeIn_1s_ease-in_2s_both]">
+          <div className="absolute -left-6 top-8 animate-[bounce_2s_infinite]">
+            <div className="h-4 w-4 rounded-full bg-emerald-400 border-2 border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.8)] flex items-center justify-center text-[#0c0f12]">
+              <span className="text-[9px] font-black leading-none">$</span>
+            </div>
+          </div>
+          <div className="absolute left-6 -top-2 animate-[bounce_2.5s_infinite]">
+            <div className="h-5 w-5 rounded-full bg-emerald-300 border-2 border-emerald-200 shadow-[0_0_12px_rgba(52,211,153,1)] flex items-center justify-center text-[#0c0f12]">
+              <span className="text-[10px] font-black leading-none">$</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 type Tab = "resumen" | "publicidad" | "historial";
 
 export function Finanzas({ sales, adSpend, games, packs, providers, settings, salesTableExists, salesError, loading, setLoading, showNotice, onReload }: Props) {
