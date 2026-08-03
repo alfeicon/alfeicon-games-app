@@ -41,8 +41,8 @@ const MoneyJar = ({ amount }: { amount: number }) => {
   }, [targetFill]);
 
   return (
-    <div className="relative mb-4 flex items-center justify-center drop-shadow-[0_0_20px_rgba(52,211,153,0.3)] z-10">
-      <svg viewBox="0 0 100 120" className="w-20 h-24">
+    <div className="relative mb-2 flex items-center justify-center drop-shadow-[0_0_20px_rgba(52,211,153,0.3)] z-10">
+      <svg viewBox="0 0 100 120" className="w-28 h-32 md:w-32 md:h-36">
         <defs>
           <clipPath id="jarClip">
             <path d="M 30 15 L 30 25 C 15 30 15 45 15 60 L 15 105 C 15 115 25 115 50 115 C 75 115 85 115 85 105 L 85 60 C 85 45 85 30 70 25 L 70 15 Z" />
@@ -345,7 +345,7 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
       {tab === "resumen" && (
         <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
           {/* Dashboard Balance Card */}
-          <div className="mx-4 mt-6 flex flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-6 border border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.05)] relative overflow-hidden">
+          <div className="mx-4 mt-6 flex flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-6 border border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.05)] relative overflow-visible">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full" />
             <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full" />
             
