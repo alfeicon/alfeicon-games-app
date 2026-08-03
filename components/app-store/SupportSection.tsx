@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Check, ChevronRight, Facebook, Instagram, LifeBuoy, ShieldCheck, Youtube, Mail } from 'lucide-react';
+import { Check, ChevronRight, Facebook, Instagram, LifeBuoy, ShieldCheck, ShieldAlert, Youtube, Mail } from 'lucide-react';
 import SupportTicketModal from './SupportTicketModal';
 
 // Toques sobre el logo necesarios para abrir el modo admin (atajo oculto).
@@ -13,6 +13,7 @@ const ADMIN_TAP_WINDOW_MS = 1200;
 type SupportSectionProps = {
   sectionMotion: string;
   onOpenTerms: () => void;
+  onOpenPrivacy: () => void;
 };
 
 const STATS = [
@@ -30,13 +31,16 @@ const CHANNELS = [
 ];
 
 const FAQ = [
+  { q: '¿Cómo funciona?', a: 'Te entregamos las credenciales del juego 🎮 a través de una cuenta que vinculamos a tu consola. Luego, podrás descargar el juego y disfrutarlo desde tu usuario personal 🕹️, con o sin conexión a Internet 🌐✨' },
+  { q: '¿Qué tipo son estas cuentas?', a: 'Trabajamos principalmente con cuentas primarias / principales. En caso de comprar un juego siempre será una cuenta primaria (puedes jugar directamente con tu usuario personal).' },
+  { q: '¿Venden cuentas secundarias?', a: 'Sí vendemos a pedido, tienen un menor valor. (Usas el usuario entregado para jugar y debes jugar en modo avión).' },
   { q: '¿Necesito mi consola desbloqueada?', a: 'No. Los juegos son digitales y se descargan desde la eShop oficial de Nintendo.' },
   { q: '¿Existe riesgo de baneo?', a: 'Existe un riesgo mínimo del 0.7%. El cliente acepta este punto al comprar.' },
   { q: '¿Cuánto dura la garantía?', a: '7 días desde la entrega en juegos unitarios y 3 días en packs. Tu boleta queda disponible ese mismo plazo.' },
   { q: '¿Cuánto tiempo durará el juego?', a: 'Indefinido si sigues las instrucciones: no borres el juego ni la cuenta, ni modifiques datos.' },
 ];
 
-export default function SupportSection({ sectionMotion, onOpenTerms }: SupportSectionProps) {
+export default function SupportSection({ sectionMotion, onOpenTerms, onOpenPrivacy }: SupportSectionProps) {
   const router = useRouter();
   const tapCount = useRef(0);
   const tapTimer = useRef<number | null>(null);
@@ -87,19 +91,7 @@ export default function SupportSection({ sectionMotion, onOpenTerms }: SupportSe
 
       <div className="support-body">
 
-        {/* ── BANNER: entrada al formulario de consulta ── */}
-        <button type="button" onClick={() => setShowForm(true)} className="support-ticket-banner">
-          <span className="support-ticket-banner__ico">
-            <LifeBuoy size={22} strokeWidth={1.9} />
-          </span>
-          <span className="support-ticket-banner__text">
-            <span className="support-ticket-banner__title">¿Tienes problemas o dudas?</span>
-            <span className="support-ticket-banner__sub">Cuéntanos y te generamos un ticket. Te respondemos al contacto que nos dejes.</span>
-          </span>
-          <span className="support-ticket-banner__cta">
-            Abrir ticket <ChevronRight size={14} strokeWidth={2.6} />
-          </span>
-        </button>
+
 
         {/* ── TRUST CHECKLIST ── */}
         <div className="support-checks">
@@ -128,7 +120,7 @@ export default function SupportSection({ sectionMotion, onOpenTerms }: SupportSe
         </div>
 
         {/* ── FAQ ── */}
-        <div className="support-section-label">Preguntas frecuentes</div>
+        <div id="faq" className="support-section-label" style={{ scrollMarginTop: '1rem' }}>Preguntas frecuentes</div>
         <div className="support-faq">
           {FAQ.map(({ q, a }, i) => (
             <div key={i} className="support-faq__item">
@@ -138,17 +130,50 @@ export default function SupportSection({ sectionMotion, onOpenTerms }: SupportSe
           ))}
         </div>
 
-        {/* ── TÉRMINOS ── */}
-        <button onClick={onOpenTerms} className="support-terms-btn">
-          <ShieldCheck size={16} />
-          <span>Términos y condiciones</span>
-          <ChevronRight size={15} className="ml-auto" />
-        </button>
+        {/* ── LEGALES (TÉRMINOS Y PRIVACIDAD) ── */}
+        <div className="flex flex-col gap-3">
+          <button onClick={onOpenTerms} className="support-terms-btn">
+            <ShieldCheck size={16} />
+            <span>Términos y condiciones</span>
+            <ChevronRight size={15} className="ml-auto" />
+          </button>
+          
+          <button onClick={onOpenPrivacy} className="support-terms-btn" style={{ borderColor: 'rgba(168, 85, 247, 0.2)', backgroundColor: 'rgba(168, 85, 247, 0.05)' }}>
+            <ShieldAlert size={16} className="text-purple-400" />
+            <span className="text-purple-100">Política de Privacidad</span>
+            <ChevronRight size={15} className="ml-auto text-purple-400" />
+          </button>
+        </div>
+        
+        {/* ── FOOTER / BRANDING ── */}
+        <div className="mt-16 flex flex-col items-center justify-center text-center">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-500 to-purple-500 p-[2px] shadow-[0_0_20px_-5px_rgba(59,130,246,0.5)]">
+            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-[#0f1217]">
+              <Image src="/logo.png" alt="Alfeicon" width={24} height={24} className="opacity-80" />
+            </div>
+          </div>
+          
+          <h4 className="mb-1 text-sm font-black uppercase tracking-[0.2em] text-white">
+            Alfeicon Games
+          </h4>
+          <p className="mb-6 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+            Propiedad de Alfeicon Group Spa
+          </p>
+          
+          <div className="h-[1px] w-12 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          
+          <p className="mt-6 text-[9px] font-bold uppercase tracking-[0.3em] text-gray-600">
+            Diseñado y Creado con ❤️
+          </p>
+          <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-gray-700">
+            © {new Date().getFullYear()} Todos los derechos reservados
+          </p>
+          
+          {/* Indicador visual de final de página */}
+          <div className="mt-10 h-1 w-32 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-amber-500 opacity-80 shadow-[0_0_20px_rgba(168,85,247,0.6)]" />
+        </div>
 
       </div>
-
-      <SupportTicketModal open={showForm} onClose={() => setShowForm(false)} />
-
     </div>
   );
 }

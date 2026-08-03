@@ -155,16 +155,20 @@ export default function HomeSectionV2({
           Esto lo anuncia arriba y lleva hasta él. */}
       <button
         type="button"
-        onClick={() => dudasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        onClick={() => {
+          const faq = document.getElementById('faq');
+          if (faq) faq.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          else dudasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }}
         className="hs2-help-cta"
-        aria-label="Ir a la sección de ayuda"
+        aria-label="Ir a la sección de preguntas frecuentes"
       >
         <span className="hs2-help-cta__ico">
           <LifeBuoy size={19} strokeWidth={1.9} />
         </span>
         <span className="hs2-help-cta__text">
-          <span className="hs2-help-cta__title">¿Necesitas ayuda?</span>
-          <span className="hs2-help-cta__sub">Cómo comprar, cómo instalar y soporte directo.</span>
+          <span className="hs2-help-cta__title">Preguntas Frecuentes</span>
+          <span className="hs2-help-cta__sub">Cómo comprar, qué tipos de cuenta vendemos y más.</span>
         </span>
         <span className="hs2-help-cta__arrow">
           <ArrowDown size={15} strokeWidth={2.6} />
@@ -433,7 +437,6 @@ export default function HomeSectionV2({
 
       <div ref={dudasRef} style={{ scrollMarginTop: '1rem' }} />
 
-      <SupportTicketModal open={showTicketForm} onClose={() => setShowTicketForm(false)} />
     </div>
   );
 }

@@ -22,6 +22,8 @@ import HomeSectionV2 from '@/components/app-store/HomeSectionV2';
 import GuideSection, { type GuideConsole } from '@/components/app-store/GuideSection';
 import SupportSection from '@/components/app-store/SupportSection';
 import TermsModal from '@/components/app-store/TermsModal';
+import PrivacyModal from '@/components/app-store/PrivacyModal';
+import CookieBanner from '@/components/app-store/CookieBanner';
 import TransferDetailsPanel from '@/components/app-store/TransferDetailsPanel';
 import LoginModal from '@/components/auth/LoginModal';
 import EmbeddedLibrary from '@/components/app-store/EmbeddedLibrary';
@@ -164,6 +166,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
   const [showBottomNav, setShowBottomNav] = useState(true);
   const [dockCollapsed, setDockCollapsed] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Colapsa el dock al hacer scroll hacia abajo, lo expande al subir.
@@ -843,6 +846,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
                 <SupportSection
                   sectionMotion=""
                   onOpenTerms={() => setShowTerms(true)}
+                  onOpenPrivacy={() => setShowPrivacy(true)}
                 />
               </div>
             </div>
@@ -1010,6 +1014,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
 
 {/* MODAL TÉRMINOS Y CONDICIONES */}
 {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+{showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
 
 {/* PROMPT DE MONEDA (primera visita) */}
 <CurrencyWelcome />
@@ -1327,6 +1332,7 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
           </motion.div>
         ))}
 
+        <CookieBanner />
 
         <AppDock
           activeSection={activeSection}

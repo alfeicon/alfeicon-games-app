@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, ChevronLeft,
   Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X, PiggyBank,
-  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart, Lock
+  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart, Lock, Mail
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -21,6 +21,7 @@ import { Finanzas } from "./_components/Finanzas";
 import { Entregas } from "./_components/Entregas";
 import { Ajustes } from "./_components/Ajustes";
 import { Soporte } from "./_components/Soporte";
+import { Marketing } from "./_components/Marketing";
 import { SaleModal } from "./_components/SaleModal";
 import { CommandPalette, type Command } from "./_components/CommandPalette";
 import { useAdminStore } from "./_store/adminStore";
@@ -48,7 +49,8 @@ const NAV_ITEMS: { id: AdminSection; label: string; hint: string; Icon: React.El
   { id: "finanzas", label: "Finanzas",  hint: "Ingresos, historial y ventas",     Icon: PiggyBank,    accent: "text-emerald-400",   rgb: "52,211,153" },
   { id: "noticias", label: "Noticias",  hint: "Novedades visibles en la tienda",  Icon: Newspaper,    accent: "text-orange-400",    rgb: "251,146,60" },
   { id: "analiticas", label: "Analíticas", hint: "Métricas de tráfico e interés", Icon: LineChart,    accent: "text-pink-400",      rgb: "244,114,182" },
-  { id: "soporte",  label: "Soporte",   hint: "Consultas entrantes de clientes",  Icon: LifeBuoy,     accent: "text-sky-400",       rgb: "56,189,248" },
+  { id: "soporte",  label: "Soporte",   hint: "Consultas entrantes de clientes validados",  Icon: LifeBuoy,     accent: "text-sky-400",       rgb: "56,189,248" },
+  { id: "marketing", label: "Avisos",   hint: "Envío masivo de correos",          Icon: Mail,         accent: "text-purple-400",    rgb: "192,132,252" },
   { id: "ajustes",  label: "Ajustes",   hint: "Precios, garantías y proveedores", Icon: Settings,     accent: "text-gray-400",      rgb: "156,163,175" },
 ];
 
@@ -730,39 +732,27 @@ export default function AdminPage() {
         {busy && <div className="admin-topbar-progress h-full w-full bg-gradient-to-r from-transparent via-white/70 to-transparent" />}
       </div>
 
-      {/* Mobile top bar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0c0f12]/95 px-4 py-3 backdrop-blur-md md:hidden">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div
-            key={section}
-            className="admin-tile-in flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-            style={{ background: `rgba(${activeItem.rgb},0.10)`, border: `1px solid rgba(${activeItem.rgb},0.22)` }}
-          >
-            <activeItem.Icon size={14} className={activeItem.accent} />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-[11px] font-black uppercase tracking-widest text-white">{activeItem.label}</p>
-            <p className="truncate text-[9.5px] text-gray-600">{activeItem.hint}</p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          <button onClick={() => setNoticesOpen(true)} aria-label="Notificaciones"
-            className="admin-press relative rounded-xl p-2 text-gray-500 hover:text-white">
-            <Bell size={15} />
-            {notices.length > 0 && (
-              <span className="absolute right-1.5 top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-[#0c0f12] bg-blue-500 px-1 text-[8px] font-black text-white">
-                {notices.length}
-              </span>
-            )}
-          </button>
-          <button onClick={refreshAll} disabled={refreshing} aria-label="Recargar datos"
-            className="admin-press rounded-xl p-2 text-gray-500 disabled:opacity-40">
-            <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
-          </button>
-          <Link href="/" aria-label="Ver tienda" className="admin-press rounded-xl p-2 text-gray-500">
-            <Store size={15} />
-          </Link>
-        </div>
+      {/* Mobile floating actions pill */}
+      <div 
+        className="fixed z-40 flex items-center gap-1 rounded-full border border-white/10 bg-[#0c0f12]/80 px-2 py-1.5 shadow-2xl backdrop-blur-xl md:hidden"
+        style={{ top: "max(1.25rem, env(safe-area-inset-top))", right: "1rem" }}
+      >
+        <button onClick={() => setNoticesOpen(true)} aria-label="Notificaciones"
+          className="admin-press relative rounded-full p-2 text-gray-400 hover:text-white transition-colors">
+          <Bell size={16} />
+          {notices.length > 0 && (
+            <span className="absolute right-1 top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-[#0c0f12] bg-blue-500 px-1 text-[8px] font-black text-white">
+              {notices.length}
+            </span>
+          )}
+        </button>
+        <button onClick={refreshAll} disabled={refreshing} aria-label="Recargar datos"
+          className="admin-press rounded-full p-2 text-gray-400 disabled:opacity-40 hover:text-white transition-colors">
+          <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+        </button>
+        <Link href="/" aria-label="Ver tienda" className="admin-press rounded-full p-2 text-gray-400 hover:text-white transition-colors">
+          <Store size={16} />
+        </Link>
       </div>
 
       {/* Backdrop para el menú expandido (separa el contenido del fondo) */}
@@ -1051,6 +1041,9 @@ export default function AdminPage() {
           {section === "soporte" && (
             <Soporte requests={supportRequests} loading={loading} setLoading={setLoading}
               showNotice={showNotice} onReload={loadSupport} />
+          )}
+          {section === "marketing" && (
+            <Marketing loading={loading} setLoading={setLoading} showNotice={showNotice} />
           )}
           {section === "ajustes" && (
             <Ajustes settings={settings} providers={providers} loading={loading}

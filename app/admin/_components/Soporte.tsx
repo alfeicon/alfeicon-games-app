@@ -137,11 +137,15 @@ export function Soporte({ requests, loading, setLoading, showNotice, onReload }:
                   </p>
 
                   <div className="flex flex-wrap gap-2">
-                    {link && (
+                    {link ? (
                       <a href={link.href} target="_blank" rel="noreferrer"
                         className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-green-500/15 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-green-400 hover:bg-green-500/25">
                         <link.Icon size={12} /> {link.label}
                       </a>
+                    ) : (
+                      <div className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gray-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-gray-500 cursor-not-allowed" title="El cliente no dejó un correo ni número válido">
+                        Contacto Inválido
+                      </div>
                     )}
 
                     {r.status === "nueva" ? (

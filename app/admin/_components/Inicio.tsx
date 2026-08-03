@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
-  BarChart2, CalendarDays, DollarSign, Eye, Megaphone, Gamepad2, Gift, Handshake, Percent, Plus, Receipt, TrendingUp, Wallet, Zap,
+  BarChart2, CalendarDays, DollarSign, Eye, Megaphone, Gamepad2, Gift, Handshake, Percent, Plus, Receipt, TrendingUp, Wallet, Zap, ClipboardList, Loader2, Pin, X
 } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
 import type { AdminGame, AdminPack, AdminSection, AdSpend, Sale, SettingsState } from "../_types";
 import { fmt, fmtDate } from "../_helpers";
 
@@ -32,12 +33,62 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
   const now = new Date();
   const partnerName = settings.partnerName || "Socio";
 
-  // Dispara las animaciones de "dibujado" de los gráficos tras el primer paint.
   const [mounted, setMounted] = useState(false);
+  
+  type Note = { id: string, text: string, colorIdx: number };
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesLoaded, setNotesLoaded] = useState(false);
+  const [isPizarraOpen, setIsPizarraOpen] = useState(false);
+  const touchTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const postitColors = [
+    { bg: "bg-yellow-500/20", border: "border-yellow-500/30", text: "text-yellow-100", pin: "text-red-400" },
+    { bg: "bg-pink-500/20", border: "border-pink-500/30", text: "text-pink-100", pin: "text-sky-400" },
+    { bg: "bg-blue-500/20", border: "border-blue-500/30", text: "text-blue-100", pin: "text-orange-400" },
+    { bg: "bg-green-500/20", border: "border-green-500/30", text: "text-green-100", pin: "text-pink-400" }
+  ];
+
   useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 40);
-    return () => clearTimeout(t);
+    setMounted(true);
+    async function loadNotes() {
+      if (!supabase) return;
+      const { data } = await supabase.from("app_settings").select("value_text").eq("key", "admin_notes").single();
+      if (data && data.value_text) {
+        try {
+          const parsed = JSON.parse(data.value_text);
+          if (Array.isArray(parsed)) setNotes(parsed);
+          else if (typeof data.value_text === 'string' && data.value_text.trim() !== "") {
+            setNotes([{ id: "1", text: data.value_text, colorIdx: 0 }]);
+          }
+        } catch(e) {
+          if (data.value_text.trim() !== "") {
+            setNotes([{ id: "1", text: data.value_text, colorIdx: 0 }]);
+          }
+        }
+      }
+      setNotesLoaded(true);
+    }
+    loadNotes();
   }, []);
+
+  const saveNotes = async (newNotes: Note[]) => {
+    setNotes(newNotes);
+    if (!supabase) return;
+    setNotesSaving(true);
+    await supabase.from("app_settings").upsert({ key: "admin_notes", value: 0, value_text: JSON.stringify(newNotes) }, { onConflict: "key" });
+    setNotesSaving(false);
+  };
+
+  const addNote = () => {
+    const newNote = { id: Date.now().toString(), text: "", colorIdx: Math.floor(Math.random() * postitColors.length) };
+    saveNotes([newNote, ...notes]);
+  };
+  
+  const deleteNote = (id: string) => {
+    const updated = notes.filter(n => n.id !== id);
+    saveNotes(updated);
+  };
 
   const thisMonth = useMemo(
     () =>
@@ -55,7 +106,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
   const margin = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
 
   const CUTOFF_DATE = new Date("2026-08-01T00:00:00-04:00");
-  const { globalAdDebt, globalRealProfit, partnerNet, myShare } = useMemo(() => {
+  const { globalAdSpend, globalGrossProfit, globalAdDebt, globalRealProfit, partnerNet, myShare, daysRemaining } = useMemo(() => {
     const newSales = sales.filter(s => new Date(s.created_at) >= CUTOFF_DATE);
     const newAdSpends = adSpend.filter(a => new Date(a.date) >= CUTOFF_DATE);
     
@@ -64,12 +115,26 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
     
     const balance = globalGrossProfit - globalAdSpend;
     
+    let daysRemaining = 0;
+    const n = new Date();
+    newAdSpends.forEach(a => {
+      const start = new Date(a.date);
+      const end = new Date(start);
+      end.setDate(end.getDate() + (a.duration_days || 1));
+      if (end > n) {
+        const remaining = Math.ceil((end.getTime() - n.getTime()) / (1000 * 3600 * 24));
+        if (remaining > daysRemaining) daysRemaining = remaining;
+      }
+    });
+
     if (balance <= 0) {
-      return { globalAdDebt: Math.abs(balance), globalRealProfit: 0, partnerNet: 0, myShare: 0 };
+      return { globalAdSpend, globalGrossProfit, globalAdDebt: Math.abs(balance), globalRealProfit: 0, partnerNet: 0, myShare: 0, daysRemaining };
     } else {
-      return { globalAdDebt: 0, globalRealProfit: balance, partnerNet: balance * 0.15, myShare: balance * 0.85 };
+      return { globalAdSpend, globalGrossProfit, globalAdDebt: 0, globalRealProfit: balance, partnerNet: balance * 0.15, myShare: balance * 0.85, daysRemaining };
     }
   }, [sales, adSpend]);
+  
+  const adProgress = globalAdSpend > 0 ? Math.round((globalGrossProfit / globalAdSpend) * 100) : 0;
 
   const totalAdSpend = useMemo(() => {
     const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -325,6 +390,175 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
         </div>
       </div>
 
+      {/* ── PIZARRA DE NOTAS (INLINE HYBRID) ── */}
+      <div style={{ animationDelay: "20ms" }} className="dash-card-in flex flex-col rounded-[1.75rem] border border-orange-500/10 bg-gradient-to-br from-orange-500/[0.05] to-transparent p-6 relative">
+        <div className="relative z-10 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-500/15">
+              <Pin size={15} className="text-orange-400" />
+            </span>
+            <h3 className="text-sm font-black uppercase tracking-widest text-orange-200/80">Pizarra del Equipo</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            {notesSaving && <Loader2 size={14} className="animate-spin text-orange-500/50" />}
+            {notes.length > 2 && (
+               <button onClick={() => setIsPizarraOpen(true)} className="hidden sm:flex items-center gap-1.5 rounded-full bg-orange-500/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 transition-colors hover:bg-orange-500/30 active:scale-95 shadow-lg shadow-orange-500/10 border border-orange-500/20">
+                 <Eye size={12} /> Ver todo ({notes.length})
+               </button>
+            )}
+            <button onClick={() => {
+              if (notes.length >= 2) setIsPizarraOpen(true);
+              addNote();
+            }} className="flex items-center gap-1.5 rounded-full bg-orange-500/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 transition-colors hover:bg-orange-500/30 active:scale-95 shadow-lg shadow-orange-500/10 border border-orange-500/20">
+              <Plus size={12} /> Nuevo Post-it
+            </button>
+          </div>
+        </div>
+
+        {!notesLoaded ? (
+          <div className="h-32 w-full animate-pulse rounded-xl bg-white/5" />
+        ) : notes.length === 0 ? (
+          <div className="relative z-10 flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20 text-center p-6">
+            <p className="text-sm font-bold text-gray-400">La pizarra está vacía</p>
+            <p className="mt-1 text-xs text-gray-600">Agrega un post-it para dejar un mensaje a Diego o a ti mismo.</p>
+          </div>
+        ) : (
+          <div className="relative z-10 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 pb-2">
+            {notes.slice(0, 2).map((note, i) => {
+              const colors = postitColors[note.colorIdx] || postitColors[0];
+              const rot = i % 3 === 0 ? "-rotate-2" : i % 2 === 0 ? "rotate-2" : "rotate-1";
+              return (
+                <div 
+                  key={note.id} 
+                  className={`group relative flex min-h-[160px] flex-col rounded-md border ${colors.bg} ${colors.border} p-3 shadow-lg transition-transform hover:-translate-y-1 hover:rotate-0 hover:z-20 ${rot} backdrop-blur-md`}
+                >
+                  <div 
+                    onClick={() => {
+                      if (window.confirm("¿Deseas quitar este post-it?")) deleteNote(note.id);
+                    }}
+                    title="Quitar post-it"
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 cursor-pointer p-2 transition-transform hover:scale-125 active:scale-95 z-30"
+                  >
+                    <div className={`h-4 w-4 rounded-full ${colors.pin} bg-current shadow-[0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center`}>
+                       <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                    </div>
+                  </div>
+                  <textarea
+                    value={note.text}
+                    onChange={(e) => {
+                       const next = [...notes];
+                       const idx = next.findIndex(n => n.id === note.id);
+                       if(idx !== -1) next[idx].text = e.target.value;
+                       setNotes(next);
+                    }}
+                    onBlur={() => saveNotes(notes)}
+                    placeholder="Escribe aquí..."
+                    className={`mt-2 w-full flex-1 resize-none bg-transparent ${colors.text} placeholder:text-current/40 text-[13px] leading-relaxed font-bold outline-none`}
+                  />
+                </div>
+              );
+            })}
+            
+            {/* Si hay más de 2 notas, mostramos el botón extra en la grilla */}
+            {notes.length > 2 && (
+              <div 
+                onClick={() => setIsPizarraOpen(true)}
+                className="group relative flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-orange-500/30 bg-orange-500/5 p-3 shadow-sm transition-transform hover:-translate-y-1 hover:bg-orange-500/10 backdrop-blur-md"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-500/20 text-orange-400 group-hover:scale-110 transition-transform shadow-lg">
+                  <Eye size={20} />
+                </div>
+                <p className="mt-3 text-[11px] font-black text-orange-300/80 uppercase tracking-widest">
+                  Ver {notes.length - 2} {notes.length - 2 === 1 ? 'nota más' : 'notas más'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── MODAL DE PIZARRA FULLSCREEN ── */}
+      {isPizarraOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/80 backdrop-blur-md">
+          {/* Header del Modal */}
+          <div className="flex items-center justify-between border-b border-white/5 bg-[#120f0e] px-4 py-4 md:px-8">
+            <div className="flex items-center gap-3 md:gap-4">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/20">
+                <Pin size={18} className="text-orange-400" />
+              </span>
+              <div>
+                <h2 className="text-base md:text-lg font-black uppercase tracking-widest text-orange-100">Pizarra del Equipo</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest">Se guarda automático al dejar de escribir</p>
+                  {notesSaving && <Loader2 size={12} className="animate-spin text-orange-500" />}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 md:gap-4">
+              <button onClick={addNote} className="flex items-center gap-1.5 md:gap-2 rounded-full bg-orange-500/20 border border-orange-500/30 px-3 py-2 md:px-4 text-[9px] md:text-xs font-black uppercase tracking-widest text-orange-300 transition-transform hover:scale-105 active:scale-95 shadow-lg shadow-orange-500/20">
+                <Plus size={14} /> <span className="hidden sm:inline">Nuevo Post-it</span>
+              </button>
+              <button onClick={() => setIsPizarraOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-white transition-colors hover:bg-white/10 border border-white/10">
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+          
+          {/* Contenido del Modal (Scrollable) */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-gradient-to-br from-[#151110] to-black relative">
+             <div className="fixed inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/cork-board.png")' }} />
+             
+             {!notesLoaded ? (
+               <div className="flex h-full items-center justify-center">
+                 <Loader2 size={32} className="animate-spin text-orange-500/50" />
+               </div>
+             ) : notes.length === 0 ? (
+               <div className="flex h-full flex-col items-center justify-center text-center">
+                 <p className="text-lg font-bold text-gray-400">La pizarra está vacía</p>
+                 <p className="mt-2 text-sm text-gray-600">Agrega un post-it para dejar un mensaje a Diego o a ti mismo.</p>
+               </div>
+             ) : (
+               <div className="relative z-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 pb-20">
+                 {notes.map((note, i) => {
+                   const colors = postitColors[note.colorIdx] || postitColors[0];
+                   const rot = i % 3 === 0 ? "-rotate-2" : i % 2 === 0 ? "rotate-2" : "rotate-1";
+                   return (
+                    <div 
+                      key={note.id} 
+                      className={`group relative flex min-h-[160px] flex-col rounded-md border ${colors.bg} ${colors.border} p-3 shadow-xl transition-transform hover:-translate-y-1 hover:rotate-0 hover:z-20 ${rot} backdrop-blur-md`}
+                    >
+                      <div 
+                        onClick={() => {
+                          if (window.confirm("¿Deseas quitar este post-it?")) deleteNote(note.id);
+                        }}
+                        title="Quitar post-it"
+                        className="absolute -top-3 left-1/2 -translate-x-1/2 cursor-pointer p-2 transition-transform hover:scale-125 active:scale-95 z-30"
+                      >
+                        <div className={`h-4 w-4 rounded-full ${colors.pin} bg-current shadow-[0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center`}>
+                           <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                        </div>
+                      </div>
+                      <textarea
+                        value={note.text}
+                        onChange={(e) => {
+                           const next = [...notes];
+                           const idx = next.findIndex(n => n.id === note.id);
+                           if(idx !== -1) next[idx].text = e.target.value;
+                           setNotes(next);
+                        }}
+                        onBlur={() => saveNotes(notes)}
+                        placeholder="Escribe aquí..."
+                        className={`mt-2 w-full flex-1 resize-none bg-transparent ${colors.text} placeholder:text-current/40 text-[13px] leading-relaxed font-bold outline-none`}
+                      />
+                    </div>
+                   );
+                 })}
+               </div>
+             )}
+          </div>
+        </div>
+      )}
+
       {/* ── HOY: cuánto se vendió en el día, con la semana de contexto ── */}
       <div style={{ animationDelay: "30ms" }}
         className="dash-card-in grid grid-cols-1 gap-5 rounded-[1.75rem] border border-white/[0.07] bg-white/[0.02] p-6 lg:grid-cols-[minmax(0,320px)_1fr]">
@@ -435,36 +669,44 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-green-500/15">
               <Wallet size={20} className="text-green-400" />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Global (15/85)</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Ganancia Bruta (Total)</span>
           </div>
           {firstLoadDone ? (
-            <p key={globalRealProfit} className="dash-value-in text-4xl font-black leading-none tracking-tight text-green-400">{noSales ? "—" : `$${fmt(globalRealProfit)}`}</p>
+            <p key={globalGrossProfit} className="dash-value-in text-4xl font-black leading-none tracking-tight text-green-400">{noSales ? "—" : `$${fmt(globalGrossProfit)}`}</p>
           ) : (
             <div className="h-9 w-32 animate-pulse rounded-lg bg-white/10" />
           )}
-          <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-500">Ganancia libre (post-publicidad)</p>
+
+          {globalAdSpend > 0 && (
+            <div className="mt-5 w-full">
+              <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-green-100 mb-2">
+                <span>Recuperación de Publicidad</span>
+                <span className="text-green-400">{adProgress}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-black/40 overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-300 transition-all duration-1000" style={{ width: `${Math.min(adProgress, 100)}%` }} />
+              </div>
+              <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest text-white/50 mt-2">
+                <span>Gasto: ${fmt(globalAdSpend)}</span>
+                {daysRemaining > 0 && <span className="text-blue-300">Faltan {daysRemaining} días</span>}
+              </div>
+            </div>
+          )}
 
           {!noSales && firstLoadDone && (
             <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Tu parte</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Ganancia Bastian (85%)</p>
                 <p className="mt-0.5 text-sm font-black text-white">${fmt(Math.round(myShare))}</p>
               </div>
               <div>
                 <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-pink-400">
-                  <Handshake size={10} /> Pago a {partnerName}
+                  <Handshake size={10} /> Pago a {partnerName} (15%)
                 </p>
                 <p className={`mt-0.5 text-sm font-black ${partnerNet >= 0 ? "text-pink-300" : "text-red-400"}`}>
                   ${fmt(Math.round(partnerNet))}
                 </p>
               </div>
-            </div>
-          )}
-          
-          {globalAdDebt > 0 && (
-            <div className="mt-3 rounded-xl bg-red-500/10 p-3 border border-red-500/20">
-               <p className="text-[9px] font-black uppercase tracking-widest text-red-400">Deuda Publicidad Pendiente</p>
-               <p className="text-sm font-black text-red-300">-${fmt(Math.round(globalAdDebt))}</p>
             </div>
           )}
         </div>

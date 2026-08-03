@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Order } from "@/app/admin/_types";
-import { Gamepad2, LogOut, Clock, Play, Calendar, AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Gamepad2, LogOut, Clock, Play, Calendar, AlertCircle, ArrowRight, CheckCircle2, LifeBuoy, Send, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 
@@ -18,6 +18,10 @@ export default function BibliotecaClient({ initialOrders, userEmail }: Props) {
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [showConsoleAlert, setShowConsoleAlert] = useState<string | null>(null);
+
+  const [supportMessage, setSupportMessage] = useState("");
+  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
+  const [supportSent, setSupportSent] = useState(false);
 
   const handleLogout = async () => {
     if (supabase) {
@@ -43,6 +47,28 @@ export default function BibliotecaClient({ initialOrders, userEmail }: Props) {
       setSchedulingOrder(null);
     } else {
       alert("Error al programar la entrega.");
+    }
+  };
+
+  const handleSupportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportMessage.trim() || !supabase) return;
+    
+    setIsSubmittingSupport(true);
+    const { error } = await supabase.from("support_requests").insert({
+      name: userEmail.split("@")[0],
+      contact: userEmail,
+      message: supportMessage.trim(),
+      status: "nueva"
+    });
+    
+    setIsSubmittingSupport(false);
+    if (error) {
+      alert("Error al enviar el mensaje.");
+    } else {
+      setSupportSent(true);
+      setSupportMessage("");
+      setTimeout(() => setSupportSent(false), 5000);
     }
   };
 
@@ -212,6 +238,51 @@ export default function BibliotecaClient({ initialOrders, userEmail }: Props) {
               ))}
             </div>
           )}
+        </section>
+
+        {/* Soporte */}
+        <section className="mt-12 border-t border-white/5 pt-12">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/20 text-sky-400">
+              <LifeBuoy size={16} />
+            </div>
+            <h2 className="text-xl font-black uppercase tracking-widest">Soporte</h2>
+          </div>
+
+          <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 md:p-8">
+            <p className="mb-6 text-sm text-gray-400">
+              ¿Tienes algún problema con un juego o una consulta general? Escríbenos y te responderemos a tu correo (<strong className="text-white">{userEmail}</strong>).
+            </p>
+
+            {supportSent ? (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-green-400">
+                <CheckCircle2 size={20} />
+                <div>
+                  <p className="text-sm font-bold">¡Mensaje enviado!</p>
+                  <p className="text-xs">Te responderemos pronto a tu correo.</p>
+                </div>
+              </motion.div>
+            ) : (
+              <form onSubmit={handleSupportSubmit} className="flex flex-col gap-4">
+                <textarea 
+                  value={supportMessage}
+                  onChange={e => setSupportMessage(e.target.value)}
+                  placeholder="Explícanos tu problema o duda aquí..."
+                  rows={4}
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+                  required
+                />
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingSupport || !supportMessage.trim()}
+                  className="flex items-center justify-center gap-2 self-start rounded-xl bg-sky-600 px-6 py-3 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
+                >
+                  {isSubmittingSupport ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  Enviar Mensaje
+                </button>
+              </form>
+            )}
+          </div>
         </section>
       </main>
 

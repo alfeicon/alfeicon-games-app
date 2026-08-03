@@ -3,8 +3,9 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake, Send, MessageCircle, Receipt, ArrowLeft, CheckCheck, ShoppingCart, ShieldCheck, User, Mail, Key
+  AlertCircle, CheckCircle2, Clock, Loader2, PackageCheck, Plus, RefreshCw, Save, Trash2, X, Search, Gamepad2, Gift, Copy, KeyRound, Hash, Check, HelpCircle, Handshake, Send, MessageCircle, Receipt, ArrowLeft, CheckCheck, ShoppingCart, ShieldCheck, User, Mail, Key, ChevronDown
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/lib/supabase/client";
 import { urlImagen } from "@/lib/chat-image";
 import { EntregaItems } from "./EntregaItems";
@@ -441,6 +442,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const [openedForm, setOpenedForm] = useState<OrderForm>(emptyForm);
   const [splitEnabled, setSplitEnabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   // Pestaña activa del modal de una orden. Antes todo (datos, comprobante,
   // finanzas y chat) vivía apilado en la misma vista.
   const [modalTab, setModalTab] = useState<ModalTab>("orden");
@@ -472,11 +474,11 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
   const applyLayout = (type: 1 | 2 | 3) => {
     setActiveLayout(type);
-    if (bounds.w < 600) return;
+    if (bounds.w < 600 || bounds.h < 200) return;
     const pad = 10;
     const chatW = Math.max(320, Math.round(bounds.w * 0.34));
     const mainW = bounds.w - chatW - pad * 3;
-    const h = bounds.h - pad * 2;
+    const h = Math.max(200, bounds.h - pad * 2);
     const mainX = pad;
     const sideX = pad * 2 + mainW;
     const halfH = (h - pad) / 2;
@@ -537,12 +539,12 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const tiledRef = useRef<string | null>(null);
   useEffect(() => {
     if (!showAll || !selectedOrder) { tiledRef.current = null; return; }
-    if (tiledRef.current === selectedOrder.id || bounds.w < 600) return;
+    if (tiledRef.current === selectedOrder.id || bounds.w < 600 || bounds.h < 200) return;
     tiledRef.current = selectedOrder.id;
     const pad = 10;
     const chatW = Math.max(320, Math.round(bounds.w * 0.34));
     const mainW = bounds.w - chatW - pad * 3;
-    const h = bounds.h - pad * 2;
+    const h = Math.max(200, bounds.h - pad * 2);
     const mainX = pad;
     const sideX = pad * 2 + mainW;
 
@@ -765,11 +767,30 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   // Índice del paso actual en el stepper (‑1 si es "issue", que no está en STEPS).
   const currentStepIndex = STEPS.findIndex(s => s.key === form.status);
 
+  // Sincronizar selectedOrder y form cuando llegan actualizaciones por Realtime (background)
+  useEffect(() => {
+    if (selectedOrder) {
+      const updatedOrder = orders.find(o => o.id === selectedOrder.id);
+      if (updatedOrder) {
+        if (updatedOrder.console_code !== selectedOrder.console_code ||
+            updatedOrder.status !== selectedOrder.status ||
+            updatedOrder.payment_status !== selectedOrder.payment_status) {
+          setSelectedOrder(updatedOrder);
+          if (updatedOrder.status !== form.status) {
+            setForm(prev => ({ ...prev, status: updatedOrder.status }));
+            setOpenedForm(prev => ({ ...prev, status: updatedOrder.status }));
+          }
+        }
+      }
+    }
+  }, [orders]);
+
   const select = (o: Order) => {
     const f = toForm(o);
     setSelectedOrder(o); setForm(f); setOpenedForm(f); setSplitEnabled(o.partner_pct != null);
     setItemsCount(null);
     setQuery(""); setShowSuggestions(false); setCreatedCode(null); setModalOpen(true);
+    setStatusMenuOpen(false);
     // Si hay un comprobante esperando, el modal abre directo en Pago: es lo
     // único accionable en ese momento.
     setModalTab(o.payment_status === "pending" && o.receipt_url ? "pago" : "orden");
@@ -791,8 +812,12 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
   const handleStatusChange = async (newStatus: Order["status"]) => {
     if (!supabase) return;
-    setForm({ ...form, status: newStatus });
     if (selectedOrder) {
+      if (!window.confirm(`¿Estás seguro de cambiar el estado a "${STATUS_LABELS[newStatus]}"?`)) {
+        setForm({ ...form, status: selectedOrder.status });
+        return;
+      }
+      setForm({ ...form, status: newStatus });
       const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", selectedOrder.id);
       if (error) {
         showNotice("error", "Error al guardar el estado: " + error.message);
@@ -800,6 +825,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
         showNotice("success", "Estado guardado automáticamente.");
         await onReload();
       }
+    } else {
+      setForm({ ...form, status: newStatus });
     }
   };
 
@@ -1175,9 +1202,9 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   // para la creación de una nueva.
   const orderPanel = (
     <>
-          {/* HEADER PRINCIPAL */}
-          <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#0c0f12]/95 px-4 py-3 backdrop-blur-md pt-[calc(1rem+env(safe-area-inset-top))]">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
+          {/* HEADER PRINCIPAL UNIFICADO */}
+          <div className="flex flex-wrap shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] bg-[#0c0f12]/95 px-4 py-3 backdrop-blur-md pt-[calc(1rem+env(safe-area-inset-top))]">
+            <div className="flex items-center gap-3 min-w-0 flex-wrap flex-1">
               {selectedOrder ? (
                 <button onClick={closeIfConfirmed} type="button" title="Volver a la lista"
                   className="flex h-9 shrink-0 items-center justify-center rounded-xl bg-white/5 w-9 text-gray-400 transition-all hover:bg-white/10 hover:text-white active:scale-95 md:h-10 md:w-auto md:px-3 md:gap-2">
@@ -1189,7 +1216,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                   <PackageCheck size={16} className="text-yellow-500" />
                 </div>
               )}
-              <div className="min-w-0 flex-1">
+              
+              <div className="min-w-0 pr-4">
                 <p className="text-[12px] font-black uppercase tracking-[0.1em] text-white truncate md:text-[14px]">
                   {selectedOrder
                     ? `Orden ${selectedOrder.order_number ? `#${selectedOrder.order_number}` : selectedOrder.short_code}`
@@ -1211,24 +1239,92 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                   </div>
                 )}
               </div>
+
+              {/* Cartel de Fase Actual Integrado */}
+              {selectedOrder && (
+                 <div className="relative md:ml-2 mt-2 md:mt-0 w-full md:w-auto">
+                   <button
+                     type="button"
+                     onClick={() => setStatusMenuOpen(!statusMenuOpen)}
+                     className={`flex w-full md:w-auto justify-between md:justify-start items-center gap-3 rounded-xl px-4 py-2.5 text-[11px] font-black uppercase tracking-widest border transition-all active:scale-95 ${STATUS_COLORS[selectedOrder.status]} hover:brightness-110`}
+                   >
+                     <div className="flex items-center gap-2">
+                       <span>Fase Actual:</span>
+                       <span className="text-white drop-shadow-sm">{STATUS_LABELS[selectedOrder.status]}</span>
+                     </div>
+                     <motion.div animate={{ rotate: statusMenuOpen ? 180 : 0 }} className="opacity-70">
+                       <ChevronDown size={14} />
+                     </motion.div>
+                   </button>
+
+                   <AnimatePresence>
+                     {statusMenuOpen && (
+                       <motion.div
+                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                         animate={{ opacity: 1, y: 0, scale: 1 }}
+                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                         transition={{ duration: 0.2, ease: "easeOut" }}
+                         className="absolute left-0 top-full mt-2 z-50 w-full md:w-64 rounded-2xl border border-white/10 bg-[#12161a] p-2 shadow-2xl backdrop-blur-xl"
+                       >
+                         <div className="mb-2 px-2 text-[9px] font-bold uppercase tracking-widest text-gray-500">
+                           Cambiar Estado
+                         </div>
+                         <div className="flex flex-col gap-1">
+                           {[
+                             { val: "draft", label: "Borrador", icon: HelpCircle },
+                             { val: "pending_console_code", label: "Esperando", icon: Clock },
+                             { val: "pending_setup", label: "Recibido", icon: CheckCircle2 },
+                             { val: "preparing", label: "Avisado", icon: PackageCheck },
+                             { val: "ready", label: "Credenciales", icon: Key },
+                             { val: "completed", label: "Completa", icon: CheckCircle2 },
+                             { val: "issue", label: "Problema", icon: AlertCircle },
+                           ].map(s => {
+                              const active = selectedOrder.status === s.val;
+                              return (
+                                <button
+                                  type="button"
+                                  key={s.val}
+                                  onClick={() => {
+                                    setStatusMenuOpen(false);
+                                    if (!active) handleStatusChange(s.val as Order["status"]);
+                                  }}
+                                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    active ? "bg-white/10 text-white" : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                                  } ${s.val === 'issue' && !active ? 'hover:text-red-400' : ''} ${s.val === 'completed' && !active ? 'hover:text-green-400' : ''}`}
+                                >
+                                  <s.icon size={13} strokeWidth={active ? 3 : 2} className={active ? "text-yellow-500" : ""} />
+                                  {s.label}
+                                </button>
+                              );
+                           })}
+                         </div>
+                       </motion.div>
+                     )}
+                   </AnimatePresence>
+                 </div>
+              )}
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2 ml-auto w-full md:w-auto justify-end">
+              {selectedOrder && isWide && (
+                 <div className="flex shrink-0 items-center gap-1 rounded-2xl bg-white/5 px-1.5 py-1 mr-2">
+                   <button onClick={() => applyLayout(1)} title="Layout 1" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 1 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>1</button>
+                   <button onClick={() => applyLayout(2)} title="Layout 2" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 2 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>2</button>
+                   <button onClick={() => applyLayout(3)} title="Layout 3" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 3 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>3</button>
+                 </div>
+              )}
+              
               <button type="button" onClick={save} disabled={loading} className="flex items-center gap-1.5 rounded-full bg-yellow-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black shadow-[0_0_15px_rgba(234,179,8,0.2)] transition-all hover:bg-yellow-400 active:scale-95 disabled:opacity-50">
                 {loading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} strokeWidth={2.5} />}
                 <span className="hidden sm:inline">Guardar</span>
               </button>
+              
               {selectedOrder && (
-                <>
-                  <button type="button" onClick={restartOrder} title="Reiniciar Proceso" className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 transition-all hover:bg-white/10 hover:text-white active:scale-95">
-                    <RefreshCw size={16} />
-                  </button>
-                  <button type="button" onClick={() => del(selectedOrder)} title="Eliminar Orden" className="flex h-9 w-9 items-center justify-center rounded-xl text-red-500/60 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-95">
-                    <Trash2 size={16} />
-                  </button>
-                </>
+                <button type="button" onClick={() => del(selectedOrder)} title="Eliminar Orden" className="flex h-9 w-9 items-center justify-center rounded-xl text-red-500/60 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-95">
+                  <Trash2 size={16} />
+                </button>
               )}
-              {/* En escritorio el cierre con la X */}
+              
               {!selectedOrder && isWide && (
                 <button onClick={closeIfConfirmed} type="button" className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 hover:bg-white/10 hover:text-white transition-all active:scale-95">
                   <X size={16} />
@@ -1236,63 +1332,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
               )}
             </div>
           </div>
-          
-          {/* PROGRESS & STATUS BAR (Debajo del Header) */}
-          {selectedOrder ? (
-            <div className="shrink-0 flex items-center justify-between gap-4 border-b border-white/[0.04] bg-[#0c0f12] px-4 py-2 overflow-x-auto hide-scrollbar">
-               <div className="flex items-center gap-1.5 flex-nowrap">
-                 {[
-                   { val: "draft", label: "Borrador", icon: HelpCircle },
-                   { val: "pending_console_code", label: "Esperando", icon: Clock },
-                   { val: "pending_setup", label: "Recibido", icon: CheckCircle2 },
-                   { val: "preparing", label: "Avisado", icon: PackageCheck },
-                   { val: "ready", label: "Credenciales", icon: Key },
-                   { val: "completed", label: "Completa", icon: CheckCircle2 },
-                   { val: "issue", label: "Problema", icon: AlertCircle },
-                 ].map(s => {
-                    const active = form.status === s.val;
-                    return (
-                      <button type="button" key={s.val} onClick={() => handleStatusChange(s.val as Order["status"])}
-                        className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                          active ? "bg-white/10 text-white border border-white/10" : "text-gray-600 hover:bg-white/5 border border-transparent"
-                        } ${s.val === 'issue' && active ? '!bg-red-500/20 !text-red-400 !border-red-500/30' : ''} ${s.val === 'completed' && active ? '!bg-green-500/20 !text-green-400 !border-green-500/30' : ''}`}>
-                        <s.icon size={11} strokeWidth={active ? 3 : 2} /> {s.label}
-                      </button>
-                    );
-                 })}
-               </div>
-               
-               {isWide && (
-                 <div className="flex shrink-0 items-center gap-1 rounded-2xl bg-white/5 px-1.5 py-1">
-                   <button onClick={() => applyLayout(1)} title="Layout 1" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 1 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>1</button>
-                   <button onClick={() => applyLayout(2)} title="Layout 2" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 2 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>2</button>
-                   <button onClick={() => applyLayout(3)} title="Layout 3" className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-black transition-colors ${activeLayout === 3 ? 'bg-white/15 text-white' : 'text-gray-500 hover:text-white'}`}>3</button>
-                 </div>
-               )}
-            </div>
-          ) : (
-            <div className="shrink-0 border-b border-white/[0.04] bg-[#0c0f12] px-4 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Completando nueva orden manualmente...</p>
-            </div>
-          )}
 
-          {/* Selector de Juego Integrado (Oculto en móvil si es una orden existente) */}
-          {(!selectedOrder || isWide) && (
-            <div className="px-5 py-3 border-b border-white/[0.03] bg-[rgb(12,12,14)] flex items-center justify-between">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-500">
-                  <Gamepad2 size={18} />
-                </div>
-                <div className="min-w-0">
-                   <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Juego Adquirido</p>
-                   <p className="truncate text-[13px] font-bold text-white mt-0.5">{form.game_name || "Seleccionar Juego o Pack..."}</p>
-                </div>
-              </div>
-              <button type="button" onClick={() => { setQuery(""); setShowSuggestions(true); }} className="flex shrink-0 h-9 items-center gap-2 rounded-full bg-white/5 px-3 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:bg-white/10 hover:text-white active:scale-95 transition-all">
-                 <Search size={12} /> <span className="hidden sm:inline">Buscar</span>
-              </button>
-            </div>
-          )}
+
 
           {/* Suggestions Modal */}
           {showSuggestions && createPortal(
@@ -1667,13 +1708,13 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                   <div className="flex flex-col gap-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <div className="md:hidden mb-2">
+                        <div className="mb-5">
                           <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-yellow-500">
                             {selectedOrder ? `Orden #${selectedOrder.order_number}` : "Nueva Orden"}
                           </span>
                           <button type="button" onClick={() => { setQuery(""); setShowSuggestions(true); }} className="text-left group flex items-start gap-2 active:scale-[0.98] transition-transform">
-                            <h2 className="text-xl font-black text-white">{form.game_name || "Sin Juego"}</h2>
-                            <Search size={16} className="mt-1.5 shrink-0 text-gray-500 group-hover:text-white transition-colors" />
+                            <h2 className="text-2xl font-black text-white">{form.game_name || "Sin Juego"}</h2>
+                            <Search size={18} className="mt-1.5 shrink-0 text-gray-500 group-hover:text-white transition-colors" />
                           </button>
                         </div>
                         {selectedOrder?.client_name && (

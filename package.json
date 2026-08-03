@@ -26,6 +26,7 @@
     "nintendo-switch-eshop": "^9.0.0",
     "react": "19.2.1",
     "react-dom": "19.2.1",
+    "resend": "^6.18.1",
     "three": "^0.184.0",
     "zustand": "^5.0.14"
   },

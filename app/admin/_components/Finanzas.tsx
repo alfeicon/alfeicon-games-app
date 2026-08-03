@@ -68,7 +68,7 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
   const totalAdSpend = thisMonthAdSpend.reduce((a, s) => a + s.amount, 0);
 
   // -- NUEVA LOGICA DE DEUDA GLOBAL (Desde Agosto 2026) --
-  const { globalAdDebt, globalRealProfit, partnerNet, myProfit } = useMemo(() => {
+  const { globalAdSpend, globalGrossProfit, globalAdDebt, globalRealProfit, partnerNet, myProfit, daysRemaining } = useMemo(() => {
     const newSales = sales.filter(s => new Date(s.created_at) >= CUTOFF_DATE);
     const newAdSpends = adSpend.filter(a => new Date(a.date) >= CUTOFF_DATE);
     
@@ -77,12 +77,26 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
     
     const balance = globalGrossProfit - globalAdSpend;
     
+    let daysRemaining = 0;
+    const n = new Date();
+    newAdSpends.forEach(a => {
+      const start = new Date(a.date);
+      const end = new Date(start);
+      end.setDate(end.getDate() + (a.duration_days || 1));
+      if (end > n) {
+        const remaining = Math.ceil((end.getTime() - n.getTime()) / (1000 * 3600 * 24));
+        if (remaining > daysRemaining) daysRemaining = remaining;
+      }
+    });
+
     if (balance <= 0) {
-      return { globalAdDebt: Math.abs(balance), globalRealProfit: 0, partnerNet: 0, myProfit: 0 };
+      return { globalAdSpend, globalGrossProfit, globalAdDebt: Math.abs(balance), globalRealProfit: 0, partnerNet: 0, myProfit: 0, daysRemaining };
     } else {
-      return { globalAdDebt: 0, globalRealProfit: balance, partnerNet: balance * 0.15, myProfit: balance * 0.85 };
+      return { globalAdSpend, globalGrossProfit, globalAdDebt: 0, globalRealProfit: balance, partnerNet: balance * 0.15, myProfit: balance * 0.85, daysRemaining };
     }
   }, [sales, adSpend]);
+
+  const adProgress = globalAdSpend > 0 ? Math.round((globalGrossProfit / globalAdSpend) * 100) : 0;
 
   // -- AGRUPAR POR DÍAS (Calendario / Historial Diario) --
   const dailyStats = useMemo(() => {
@@ -283,18 +297,34 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
             <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full" />
             
             <span className="relative z-10 mb-2 flex items-center gap-2 rounded-full bg-emerald-500/20 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-400">
-              <DollarSign size={12} /> Tu Ganancia Mensual (15/85)
+              <DollarSign size={12} /> Ganancia Bruta (Total)
             </span>
-            <h2 className="relative z-10 text-5xl md:text-6xl font-black text-white tracking-tight">${fmt(Math.round(myProfit))}</h2>
+            <h2 className="relative z-10 text-5xl md:text-6xl font-black text-white tracking-tight">${fmt(Math.round(globalGrossProfit))}</h2>
+            
+            {globalAdSpend > 0 && (
+              <div className="relative z-10 mt-5 w-full">
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-emerald-100 mb-2">
+                  <span>Recuperación de Publicidad</span>
+                  <span className="text-emerald-400">{adProgress}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-black/40 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-all duration-1000" style={{ width: `${Math.min(adProgress, 100)}%` }} />
+                </div>
+                <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest text-white/50 mt-2">
+                  <span>Gasto: ${fmt(globalAdSpend)}</span>
+                  {daysRemaining > 0 && <span className="text-blue-300">Faltan {daysRemaining} días</span>}
+                </div>
+              </div>
+            )}
             
             <div className="relative z-10 mt-6 flex w-full justify-between border-t border-emerald-500/20 pt-4 px-2">
               <div className="flex flex-col">
-                 <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500/70 mb-1">Pago a {partnerName}</span>
-                 <span className="text-xl font-black text-emerald-100">${fmt(Math.round(partnerNet))}</span>
+                 <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500/70 mb-1">Ganancia Bastian (85%)</span>
+                 <span className="text-xl font-black text-emerald-100">${fmt(Math.round(myProfit))}</span>
               </div>
               <div className="flex flex-col text-right">
-                 <span className="text-[9px] font-bold uppercase tracking-widest text-red-500/70 mb-1">Deuda Publicidad</span>
-                 <span className="text-xl font-black text-red-400">${fmt(Math.round(globalAdDebt))}</span>
+                 <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500/70 mb-1">Pago a {partnerName} (15%)</span>
+                 <span className="text-xl font-black text-emerald-100">${fmt(Math.round(partnerNet))}</span>
               </div>
             </div>
           </div>

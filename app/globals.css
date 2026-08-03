@@ -4566,3 +4566,13 @@ html {
 .admin-drawer-out {
   animation: drawerOut 250ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* Fix for yellow background on autofilled inputs in WebKit browsers (Chrome, Safari) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+    transition: background-color 5000s ease-in-out 0s;
+    -webkit-text-fill-color: #fff !important;
+}
+

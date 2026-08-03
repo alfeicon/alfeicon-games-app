@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Order } from "@/app/admin/_types";
-import { Clock, Play, Calendar, AlertCircle, ArrowRight, ArrowLeft, CheckCircle2, Loader2, LogOut, ShieldCheck, Settings, Star } from "lucide-react";
+import { Clock, Play, Calendar, AlertCircle, ArrowRight, ArrowLeft, CheckCircle2, Loader2, LogOut, ShieldCheck, Settings, Star, LifeBuoy, Send, ChevronLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import OnboardingForm from "./OnboardingForm";
@@ -34,8 +34,12 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
   const [showConsoleAlert, setShowConsoleAlert] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showRewardsSoon, setShowRewardsSoon] = useState(false);
-  const [activeView, setActiveView] = useState<'profile' | 'settings' | 'entregas' | 'historial'>('profile');
+  const [activeView, setActiveView] = useState<'profile' | 'settings' | 'entregas' | 'historial' | 'soporte'>('profile');
   const [isAdmin, setIsAdmin] = useState(false);
+
+  const [supportMessage, setSupportMessage] = useState("");
+  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
+  const [supportSent, setSupportSent] = useState(false);
 
   useEffect(() => {
     onSettingsChange?.(activeView !== 'profile');
@@ -103,6 +107,28 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
       day: "2-digit", month: "2-digit", year: "numeric", 
       hour: "2-digit", minute: "2-digit" 
     });
+  };
+
+  const handleSupportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportMessage.trim() || !supabase) return;
+    
+    setIsSubmittingSupport(true);
+    const { error } = await supabase.from("support_requests").insert({
+      name: profile?.alias || user.email.split("@")[0],
+      contact: user.email,
+      message: supportMessage.trim(),
+      status: "nueva"
+    });
+    
+    setIsSubmittingSupport(false);
+    if (error) {
+      alert("Error al enviar el mensaje.");
+    } else {
+      setSupportSent(true);
+      setSupportMessage("");
+      setTimeout(() => setSupportSent(false), 5000);
+    }
   };
 
   if (loading) {
@@ -241,7 +267,7 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
 
                <button 
                  onClick={() => setActiveView('historial')} 
-                 className="flex w-full items-center gap-4 p-4 transition-colors hover:bg-white/10 group"
+                 className="flex w-full items-center gap-4 p-4 transition-colors hover:bg-white/10 border-b border-white/5 group"
                >
                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-500/20 text-green-500 group-hover:scale-105 transition-transform">
                     <CheckCircle2 size={20} />
@@ -249,7 +275,19 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
                  <span className="flex-1 text-left text-sm font-bold text-white">Historial de Compras</span>
                  <ArrowRight size={18} className="text-gray-500 group-hover:text-white transition-colors" />
                </button>
+
+               <button 
+                 onClick={() => setActiveView('soporte')} 
+                 className="flex w-full items-center gap-4 p-4 transition-colors hover:bg-white/10 group"
+               >
+                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/20 text-sky-500 group-hover:scale-105 transition-transform">
+                    <LifeBuoy size={20} />
+                 </div>
+                 <span className="flex-1 text-left text-sm font-bold text-white">Soporte y Ayuda</span>
+                 <ArrowRight size={18} className="text-gray-500 group-hover:text-white transition-colors" />
+               </button>
             </div>
+            <p className="text-center text-xs font-bold text-white/30 uppercase tracking-widest mt-auto">Alfeicon Games © 2026</p>
           </motion.div>
         )}
 
@@ -396,6 +434,61 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
                   ))}
                 </div>
               )}
+          </motion.div>
+        )}
+
+        {activeView === 'soporte' && (
+          <motion.div 
+            key="soporte"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="w-full"
+          >
+            <div className="mb-8 flex items-center gap-4">
+              <button 
+                onClick={() => setActiveView('profile')}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <h2 className="text-xl font-black uppercase tracking-widest">Soporte</h2>
+            </div>
+
+            <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-6 text-center">
+              <p className="mb-6 text-sm text-gray-400 text-left">
+                ¿Tienes algún problema con un juego o una consulta general? Escríbenos y te responderemos a tu correo (<strong className="text-white">{user.email}</strong>).
+              </p>
+
+              {supportSent ? (
+                <div className="flex items-center gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-green-400 text-left">
+                  <CheckCircle2 size={20} />
+                  <div>
+                    <p className="text-sm font-bold">¡Mensaje enviado!</p>
+                    <p className="text-xs">Te responderemos pronto a tu correo.</p>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSupportSubmit} className="flex flex-col gap-4">
+                  <textarea 
+                    value={supportMessage}
+                    onChange={e => setSupportMessage(e.target.value)}
+                    placeholder="Explícanos tu problema o duda aquí..."
+                    rows={4}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+                    required
+                  />
+                  <button 
+                    type="submit" 
+                    disabled={isSubmittingSupport || !supportMessage.trim()}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 py-3.5 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
+                  >
+                    {isSubmittingSupport ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    Enviar Mensaje
+                  </button>
+                </form>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

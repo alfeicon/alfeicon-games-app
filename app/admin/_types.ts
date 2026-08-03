@@ -146,7 +146,7 @@ export type DiscountCode = {
   created_at: string;
 };
 
-export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "analiticas" | "entregas" | "finanzas" | "soporte" | "ajustes";
+export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "analiticas" | "entregas" | "finanzas" | "soporte" | "marketing" | "ajustes";
 
 /** Consulta enviada desde la sección Soporte de la tienda (sin orden detrás). */
 export type SupportRequest = {
