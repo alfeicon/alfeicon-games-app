@@ -2,11 +2,12 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, ChevronLeft,
   Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X, PiggyBank,
-  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart, Lock, Mail
+  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart, Lock, Mail, Bot
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
@@ -62,6 +63,16 @@ const SIDEBAR_STORAGE_KEY = "admin:sidebar-pinned";
 const TOAST_MS = 3500;
 
 export default function AdminPage() {
+  const router = useRouter();
+  const [isExitingToStore, setIsExitingToStore] = useState(false);
+
+  const goToStore = () => {
+    setIsExitingToStore(true);
+    setTimeout(() => {
+      router.push("/");
+    }, 600); // mostrar pantalla de carga
+  };
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -90,7 +101,7 @@ export default function AdminPage() {
   type AppNotice = { id: string; type: "success" | "error" | "info"; text: string; timestamp: number; leaving: boolean; showToast: boolean };
   const [notices, setNotices] = useState<AppNotice[]>([]);
   const [noticesOpen, setNoticesOpen] = useState(false);
-  const [noticesClosing, setNoticesClosing] = useState(false);
+  const [noticesY, setNoticesY] = useState(0); // for drag if needed later
   const [bellY, setBellY] = useState<number | null>(null);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -98,6 +109,9 @@ export default function AdminPage() {
   // entre cerrar o volver a su sitio.
   const [sheetDrag, setSheetDrag] = useState(0);
   const [sheetPhase, setSheetPhase] = useState<"in" | "drag" | "settle">("in");
+  
+  // Ocultar controles de UI en móvil cuando un modal a pantalla completa (como pizarra) se abre
+  const [hideControls, setHideControls] = useState(false);
   const sheetStartY = useRef(0);
 
   const [isDockVisible, setIsDockVisible] = useState(true);
@@ -145,13 +159,7 @@ export default function AdminPage() {
   const [firstLoadDone, setFirstLoadDone] = useState(false);
   const didLoadRef = useRef(false);
 
-  const closeNoticesPanel = useCallback(() => {
-    setNoticesClosing(true);
-    setTimeout(() => {
-      setNoticesOpen(false);
-      setNoticesClosing(false);
-    }, 300);
-  }, []);
+  // Las notificaciones ahora se cierran simplemente con setNoticesOpen(false) ya que usamos AnimatePresence
 
 
   const showNotice = useCallback((type: "success" | "error" | "info", text: string, playSound = false) => {
@@ -402,7 +410,7 @@ export default function AdminPage() {
       });
       setSectionKey(k => k + 1);
     });
-    try { localStorage.setItem(SECTION_STORAGE_KEY, s); } catch {}
+    // Eliminado el guardado en localStorage para que siempre parta en Inicio
     if (s === "finanzas") {
       loadSales();
       loadAdSpend();
@@ -510,8 +518,7 @@ export default function AdminPage() {
   // Preferencias del panel: última sección abierta y sidebar fijado.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(SECTION_STORAGE_KEY) as AdminSection | null;
-      if (saved && NAV_ITEMS.some(i => i.id === saved)) setSection(saved);
+      // Eliminado el cargado de la última sección para forzar el inicio
       setSidebarPinned(localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1");
     } catch {}
   }, []);
@@ -727,16 +734,36 @@ export default function AdminPage() {
   // ── Main shell ────────────────────────────────────────────────────────────
   return (
     <div className="admin-shell flex h-screen overflow-hidden bg-[#090b0d]">
+      <AnimatePresence>
+        {isExitingToStore && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#090b0d]/90 backdrop-blur-xl"
+          >
+            <Loader2 size={40} className="animate-spin text-emerald-400 mb-6" />
+            <h2 className="text-xl font-black text-white tracking-[0.2em] uppercase">Redirigiendo</h2>
+            <p className="mt-2 text-xs font-bold uppercase tracking-widest text-gray-500">Volviendo a la tienda...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Barra de progreso global: carga inicial y refrescos manuales */}
       <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] h-0.5 overflow-hidden">
         {busy && <div className="admin-topbar-progress h-full w-full bg-gradient-to-r from-transparent via-white/70 to-transparent" />}
       </div>
 
       {/* Mobile floating actions pill */}
-      <div 
-        className="fixed z-40 flex items-center gap-1 rounded-full border border-white/10 bg-[#0c0f12]/80 px-2 py-1.5 shadow-2xl backdrop-blur-xl md:hidden"
-        style={{ top: "max(1.25rem, env(safe-area-inset-top))", right: "1rem" }}
-      >
+      {!hideControls && (
+        <div 
+          className="fixed z-40 flex items-center gap-1 rounded-full border border-white/10 bg-[#0c0f12]/80 px-2 py-1.5 shadow-2xl backdrop-blur-xl md:hidden"
+          style={{ top: "max(1.25rem, env(safe-area-inset-top))", right: "1rem" }}
+        >
+          {section === "finanzas" && (
+            <button onClick={() => document.dispatchEvent(new Event('generate-ai-report'))} aria-label="Reporte IA"
+              className="admin-press rounded-full p-2 text-emerald-400 hover:text-emerald-300 transition-colors">
+              <Bot size={16} />
+            </button>
+          )}
         <button onClick={() => setNoticesOpen(true)} aria-label="Notificaciones"
           className="admin-press relative rounded-full p-2 text-gray-400 hover:text-white transition-colors">
           <Bell size={16} />
@@ -750,10 +777,11 @@ export default function AdminPage() {
           className="admin-press rounded-full p-2 text-gray-400 disabled:opacity-40 hover:text-white transition-colors">
           <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
         </button>
-        <Link href="/" aria-label="Ver tienda" className="admin-press rounded-full p-2 text-gray-400 hover:text-white transition-colors">
+        <button onClick={goToStore} aria-label="Ver tienda" className="admin-press rounded-full p-2 text-gray-400 hover:text-white transition-colors">
           <Store size={16} />
-        </Link>
+        </button>
       </div>
+      )}
 
       {/* Backdrop para el menú expandido (separa el contenido del fondo) */}
       <div 
@@ -762,8 +790,9 @@ export default function AdminPage() {
       />
 
       {/* Morphing Dock & Menu (Mobile) */}
+      {!hideControls && (
       <div 
-        className={`fixed left-4 right-4 z-[100] md:hidden transition-all duration-[500ms] ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden bg-[#0c0f12]/90 backdrop-blur-3xl shadow-[0_20px_40px_rgba(0,0,0,0.8)] border border-white/10 flex flex-col ${
+        className={`fixed left-4 right-4 z-[100] md:hidden transition-all duration-[500ms] ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden bg-black/40 backdrop-blur-xl shadow-lg border border-white/10 flex flex-col ${
            showMobileMenu 
              ? 'translate-y-0 opacity-100 scale-100 rounded-[40px] max-h-[80vh]' 
              : `rounded-[34px] max-h-[68px] ${isDockVisible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-16 opacity-0 scale-90 pointer-events-none'}`
@@ -874,6 +903,7 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Sidebar (desktop) — plegado a iconos, se abre al acercar el cursor o
           fijado con el pin. El hueco de 64px queda fijo y el menú crece por
@@ -969,6 +999,22 @@ export default function AdminPage() {
 
           {/* Bottom */}
           <div className="relative space-y-0.5 border-t border-white/[0.05] px-2.5 py-3">
+            <button onClick={() => setNoticesOpen(true)} aria-label="Notificaciones"
+              className={`admin-nav-item group flex w-full items-center rounded-xl py-2.5 ${
+                sidebarOpen ? "gap-3 px-3" : "justify-center px-0"
+              }`}>
+              <div className="relative">
+                <Bell size={13} className="shrink-0 text-gray-700 group-hover:text-gray-400" />
+                {notices.length > 0 && (
+                  <span className={`absolute ${sidebarOpen ? '-right-1.5 -top-1.5' : '-right-1.5 -top-1.5'} flex h-3 min-w-[12px] items-center justify-center rounded-full border border-[#090b0d] bg-blue-500 px-1 text-[7px] font-black text-white`}>
+                    {notices.length}
+                  </span>
+                )}
+              </div>
+              {sidebarOpen
+                ? <span className="admin-nav-label text-[10px] font-black uppercase tracking-widest text-gray-700 group-hover:text-gray-400">Notificaciones</span>
+                : <span className="admin-tip">Notificaciones</span>}
+            </button>
             <button onClick={refreshAll} disabled={refreshing}
               className={`admin-nav-item group flex w-full items-center rounded-xl py-2.5 disabled:opacity-50 ${
                 sidebarOpen ? "gap-3 px-3" : "justify-center px-0"
@@ -978,15 +1024,15 @@ export default function AdminPage() {
                 ? <span className="admin-nav-label text-[10px] font-black uppercase tracking-widest text-gray-700 group-hover:text-gray-400">Recargar</span>
                 : <span className="admin-tip">Recargar</span>}
             </button>
-            <Link href="/"
-              className={`admin-nav-item group flex items-center rounded-xl py-2.5 ${
+            <button onClick={goToStore}
+              className={`admin-nav-item group flex w-full items-center rounded-xl py-2.5 ${
                 sidebarOpen ? "gap-3 px-3" : "justify-center px-0"
               }`}>
               <ArrowLeft size={13} className="shrink-0 text-gray-700 group-hover:text-gray-400" />
               {sidebarOpen
                 ? <span className="admin-nav-label text-[10px] font-black uppercase tracking-widest text-gray-700 group-hover:text-gray-400">Ver tienda</span>
                 : <span className="admin-tip">Ver tienda</span>}
-            </Link>
+            </button>
             <button onClick={signOut}
               className={`admin-nav-item group flex w-full items-center rounded-xl py-2.5 hover:bg-red-500/[0.08] ${
                 sidebarOpen ? "gap-3 px-3" : "justify-center px-0"
@@ -1008,7 +1054,8 @@ export default function AdminPage() {
               salesTableExists={salesTableExists}
               firstLoadDone={firstLoadDone}
               onNavigate={navigate}
-              onRegisterSale={() => setShowSaleModal(true)} />
+              onRegisterSale={() => setShowSaleModal(true)}
+              onFullscreenChange={setHideControls} />
           )}
           {section === "juegos" && catalogTab === "unitarios" && (
             <JuegosCatalog games={games} loading={loading} setLoading={setLoading}
@@ -1051,32 +1098,7 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* Trigger invisible en el borde derecho (Hover para asomar, Clic para abrir) */}
-        <div className="group fixed bottom-0 right-0 top-0 z-[90] hidden w-6 cursor-pointer items-center justify-center transition-all hover:w-16 sm:flex"
-             onClick={() => setNoticesOpen(true)}
-             onMouseMove={(e) => setBellY(e.clientY)}
-             onMouseLeave={() => setBellY(null)}
-             aria-label="Abrir notificaciones">
-          
-          {/* Zona de hover (gradiente sutil) */}
-          <div className="absolute inset-y-0 right-0 w-full bg-gradient-to-l from-white/[0.03] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-          
-          {/* Indicador visual que se asoma */}
-          <div 
-            style={bellY !== null ? { top: `${bellY}px`, marginTop: '-32px' } : {}}
-            className="absolute right-0 flex h-16 w-12 translate-x-full items-center justify-start rounded-l-2xl border border-r-0 border-white/[0.08] bg-[#0c0f12]/80 pl-2 text-white/40 shadow-[0_0_20px_rgba(0,0,0,0.5)] backdrop-blur-md transition-all duration-300 group-hover:translate-x-0 group-hover:text-white group-hover:shadow-[0_0_30px_rgba(255,255,255,0.05)]">
-            <ChevronLeft size={16} className="shrink-0 transition-transform duration-300 group-hover:-translate-x-1" />
-            <div className="relative ml-1">
-              <Bell size={16} />
-              {notices.length > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-[#0c0f12] bg-blue-500 px-1 text-[8px] font-black text-white">
-                  {notices.length}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
+        {/* Eliminado: Trigger invisible en el borde derecho (Hover para asomar) */}
         {/* Botón de campana oculto en móviles (movido a top bar) */}
 
         {/* Stacked Toasts (Esquina superior derecha) */}
@@ -1103,49 +1125,117 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {/* Panel Lateral Historial de Notificaciones */}
-        {(noticesOpen || noticesClosing) && (
-          <div className="fixed inset-0 z-[110] flex justify-end">
-            <div className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${noticesClosing ? "opacity-0" : "opacity-100"}`} onClick={closeNoticesPanel} />
-            <div className={`relative flex w-full max-w-sm flex-col border-l border-white/10 bg-[#0c0f12] shadow-2xl ${noticesClosing ? "admin-drawer-out" : "admin-drawer-in"}`}>
-              <div className="flex items-center justify-between border-b border-white/[0.05] p-5">
-                <div className="flex items-center gap-3">
-                  <Bell size={18} className="text-white" />
-                  <h2 className="text-sm font-black uppercase tracking-widest text-white">Notificaciones</h2>
+        {/* Panel Lateral / Popover Historial de Notificaciones */}
+        <AnimatePresence>
+          {noticesOpen && (
+            <div className="fixed inset-0 z-[110] flex md:justify-end">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                onClick={() => setNoticesOpen(false)}
+              />
+
+              {/* MOBILE (Popover saliendo de la pastilla) */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8, y: -20, x: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: -20, x: 20 }}
+                transition={{ type: "spring", damping: 25, stiffness: 350 }}
+                style={{ transformOrigin: "top right" }}
+                className="absolute flex flex-col bg-[#0c0f12]/85 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl overflow-hidden md:hidden
+                  top-[calc(max(1.25rem,env(safe-area-inset-top))+3rem)] right-4 left-4 rounded-[2rem] border border-white/[0.08] max-h-[65vh]
+                "
+              >
+                <div className="flex shrink-0 items-center justify-between border-b border-white/[0.04] p-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/10">
+                      <Bell size={14} className="text-blue-400" />
+                    </div>
+                    <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">Notificaciones</h2>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setNotices([])} title="Limpiar historial" className="rounded-full p-2 text-gray-500 transition-colors hover:bg-white/10 hover:text-white active:scale-95">
+                      <Trash2 size={14} />
+                    </button>
+                    <button onClick={() => setNoticesOpen(false)} className="rounded-full p-2 text-gray-500 transition-colors hover:bg-white/10 hover:text-white active:scale-95">
+                      <X size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setNotices([])} title="Limpiar historial" className="rounded-lg p-2 text-gray-500 hover:bg-white/10 hover:text-white">
-                    <Trash2 size={15} />
-                  </button>
-                  <button onClick={closeNoticesPanel} className="rounded-lg p-2 text-gray-500 hover:bg-white/10 hover:text-white">
-                    <X size={18} />
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-5">
-                {notices.length === 0 ? (
-                  <p className="mt-10 text-center text-xs font-bold uppercase tracking-widest text-gray-600">No hay notificaciones</p>
-                ) : (
-                  <div className="space-y-3">
-                    {notices.map(notice => (
-                      <div key={notice.id} className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+                  {notices.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 opacity-50">
+                      <Bell size={24} className="mb-3 text-gray-500" />
+                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Sin notificaciones</p>
+                    </div>
+                  ) : (
+                    notices.map(notice => (
+                      <div key={notice.id} className="flex gap-3 rounded-2xl border border-white/[0.03] bg-white/[0.02] p-3.5 transition-colors hover:bg-white/[0.04]">
                         <div className={`mt-0.5 shrink-0 ${notice.type === "success" ? "text-green-400" : "text-red-400"}`}>
-                          {notice.type === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+                          {notice.type === "success" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
                         </div>
                         <div className="flex-1 space-y-1">
-                          <p className="text-xs font-medium text-white/90">{notice.text}</p>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600">
-                            {new Date(notice.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          <p className="text-[13px] font-medium leading-snug text-white/90">{notice.text}</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">
+                            {new Date(notice.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
                       </div>
-                    ))}
+                    ))
+                  )}
+                </div>
+              </motion.div>
+
+              {/* DESKTOP (Drawer lateral) */}
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 28, stiffness: 250 }}
+                className="hidden relative md:flex h-full w-full max-w-sm flex-col border-l border-white/5 bg-[#0a0c0e] shadow-2xl"
+              >
+                <div className="flex shrink-0 items-center justify-between border-b border-white/[0.05] p-5">
+                  <div className="flex items-center gap-3">
+                    <Bell size={18} className="text-white" />
+                    <h2 className="text-sm font-black uppercase tracking-widest text-white">Notificaciones</h2>
                   </div>
-                )}
-              </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setNotices([])} title="Limpiar historial" className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-white/10 hover:text-white">
+                      <Trash2 size={15} />
+                    </button>
+                    <button onClick={() => setNoticesOpen(false)} className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-white/10 hover:text-white">
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-5">
+                  {notices.length === 0 ? (
+                    <p className="mt-10 text-center text-xs font-bold uppercase tracking-widest text-gray-600">No hay notificaciones</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {notices.map(notice => (
+                        <div key={notice.id} className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3 transition-colors hover:bg-white/[0.04]">
+                          <div className={`mt-0.5 shrink-0 ${notice.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                            {notice.type === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <p className="text-xs font-medium text-white/90">{notice.text}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600">
+                              {new Date(notice.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
             </div>
-          </div>
-        )}
+          )}
+        </AnimatePresence>
       </div>
 
       {paletteOpen && (

@@ -42,7 +42,7 @@ const MoneyJar = ({ amount }: { amount: number }) => {
 
   return (
     <div className="relative mb-2 flex items-center justify-center drop-shadow-[0_0_20px_rgba(52,211,153,0.3)] z-10">
-      <svg viewBox="0 0 100 120" className="w-28 h-32 md:w-32 md:h-36">
+      <svg viewBox="0 0 100 120" className="w-16 h-20 md:w-24 md:h-28">
         <defs>
           <clipPath id="jarClip">
             <path d="M 30 15 L 30 25 C 15 30 15 45 15 60 L 15 105 C 15 115 25 115 50 115 C 75 115 85 115 85 105 L 85 60 C 85 45 85 30 70 25 L 70 15 Z" />
@@ -87,6 +87,7 @@ type Tab = "resumen" | "publicidad" | "historial";
 export function Finanzas({ sales, adSpend, games, packs, providers, settings, salesTableExists, salesError, loading, setLoading, showNotice, onReload }: Props) {
   const partnerName = settings.partnerName || "Socio";
   const [tab, setTab] = useState<Tab>("resumen");
+  const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const [showAddAd, setShowAddAd] = useState(false);
   const [adForm, setAdForm] = useState({ platform: AD_PLATFORMS[0], amount: "", description: "", date: new Date().toISOString().slice(0, 10), duration_days: "7" });
 
@@ -311,41 +312,60 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
     );
   }
 
-  return (
-    <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
-      {/* Header */}
-      <div className="shrink-0 border-b border-white/5 px-4 pt-4 pb-3 flex flex-col gap-4">
-        {/* En móvil ocultamos este H1 porque ya está en la barra superior */}
-        <div className="hidden md:flex justify-between items-center">
-          <h1 className="text-lg font-black uppercase tracking-widest text-emerald-400">Finanzas</h1>
-          <button 
-            onClick={generateAIReport}
-            className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500/20"
-          >
-            <Bot size={14} /> Reporte IA Avanzado
-          </button>
-        </div>
+  // Escuchar evento del botón de IA en la pastilla flotante
+  useEffect(() => {
+    const handler = () => generateAIReport();
+    document.addEventListener('generate-ai-report', handler);
+    return () => document.removeEventListener('generate-ai-report', handler);
+  });
 
-        {/* TABS (Segmented Control style) */}
-        <div className="flex rounded-xl bg-white/[0.04] p-1 mx-2 md:mx-0">
-          {(["resumen", "publicidad", "historial"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 rounded-lg py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                tab === t ? "bg-white/10 text-white shadow-sm" : "text-gray-500 hover:text-white"
-              }`}
-            >
-              {t === "resumen" ? "Resumen" : t === "publicidad" ? "Publicidad" : "Historial"}
-            </button>
-          ))}
+  const TAB_LABELS: Record<Tab, string> = { resumen: "Resumen", publicidad: "Publicidad", historial: "Historial" };
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden pt-4 md:pt-0">
+      {/* Header */}
+      <div className="shrink-0 border-b border-white/5 px-4 pt-4 pb-3 flex items-center justify-between">
+        {/* Título clickeable con dropdown */}
+        <div className="relative">
+          <button 
+            onClick={() => setTabMenuOpen(v => !v)}
+            className="flex items-center gap-2 text-lg font-black uppercase tracking-widest text-emerald-400 transition-colors hover:text-emerald-300 active:scale-95"
+          >
+            {TAB_LABELS[tab]}
+            <ChevronDown size={18} className={`transition-transform duration-200 ${tabMenuOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {tabMenuOpen && (
+            <>
+              {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+              <div 
+                className="fixed inset-0 z-30" 
+                onPointerUp={(e) => {
+                  try { (e.target as HTMLElement).releasePointerCapture?.(e.pointerId); } catch {}
+                  setTabMenuOpen(false);
+                }}
+              />
+              <div className="absolute left-0 top-full mt-2 z-40 min-w-[180px] rounded-2xl border border-white/10 bg-[#151212] p-1.5 shadow-2xl backdrop-blur-xl">
+                {(["resumen", "publicidad", "historial"] as Tab[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { setTab(t); setTabMenuOpen(false); }}
+                    className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-widest transition-colors ${
+                      tab === t ? "bg-emerald-500/15 text-emerald-400" : "text-gray-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    {TAB_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {tab === "resumen" && (
         <div className="flex-1 overflow-y-auto pb-32 md:pb-0">
           {/* Dashboard Balance Card */}
-          <div className="mx-4 mt-6 flex flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-6 border border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.05)] relative overflow-visible">
+          <div className="mx-4 mt-6 flex flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-6 border border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.05)] relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full" />
             <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full" />
             

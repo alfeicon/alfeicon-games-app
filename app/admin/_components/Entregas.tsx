@@ -1913,7 +1913,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   );
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden pt-14 md:pt-0">
+    <div className="relative flex h-full flex-col overflow-hidden pt-4 md:pt-0">
       {/* Header - Sólo Desktop */}
       <div className="hidden shrink-0 flex-col border-b border-white/[0.06] md:flex">
         <div className="flex items-center gap-4 px-6 py-4">
@@ -1936,14 +1936,14 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
       {/* Info extra móvil (Resumen) - Oculto si estamos dentro de una vista detallada */}
       {activeTab === 'menu' && (
-        <div className="flex shrink-0 items-center justify-between bg-[#0c0f12] px-4 py-3 md:hidden">
-          <p className="text-[11px] text-gray-500 font-medium">
-            {orders.length} órdenes en total
-            {cancelledOrders.length > 0 && ` · ${cancelledOrders.length} canceladas`}
-          </p>
-          <button onClick={onReload} disabled={loading} className="rounded-full bg-white/5 p-2 text-white hover:bg-white/10 active:scale-95 disabled:opacity-50">
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          </button>
+        <div className="flex shrink-0 items-center bg-transparent px-5 py-4 md:hidden">
+          <div className="flex flex-col gap-0.5 pr-28">
+            <h2 className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-400">Resumen de Entregas</h2>
+            <p className="text-[11px] font-medium text-gray-600">
+              {orders.length} en total
+              {cancelledOrders.length > 0 && ` · ${cancelledOrders.length} canceladas`}
+            </p>
+          </div>
         </div>
       )}
 
@@ -2226,13 +2226,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
         );
       })()}
 
-      {/* FAB para nueva orden (Sólo móvil - Solo en Menú) */}
-      {activeTab === 'menu' && (
-        <button onClick={newOrder} aria-label="Nueva Entrega"
-          className="fixed bottom-6 right-4 z-[110] flex h-14 w-14 items-center justify-center rounded-full bg-yellow-500 text-black shadow-lg shadow-yellow-500/20 transition-transform active:scale-95 md:hidden">
-          <Plus size={24} strokeWidth={2.5} />
-        </button>
-      )}
+
 
       {/* Modales */}
       {modalOpen && (selectedOrder ? (

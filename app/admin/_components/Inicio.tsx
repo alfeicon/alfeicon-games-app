@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   BarChart2, CalendarDays, DollarSign, Eye, Megaphone, Gamepad2, Gift, Handshake, Percent, Plus, Receipt, TrendingUp, Wallet, Zap, ClipboardList, Loader2, Pin, X
 } from "lucide-react";
@@ -20,6 +21,7 @@ type Props = {
   firstLoadDone?: boolean;
   onNavigate: (s: AdminSection) => void;
   onRegisterSale: () => void;
+  onFullscreenChange?: (isFullscreen: boolean) => void;
 };
 
 // Formato compacto para etiquetas de gráficos ($87k, $1.2M).
@@ -29,18 +31,24 @@ const compact = (n: number) => {
   return `$${n}`;
 };
 
-export function Inicio({ games, packs, sales, adSpend, views, settings, salesTableExists, firstLoadDone = true, onNavigate, onRegisterSale }: Props) {
+export function Inicio({ games, packs, sales, adSpend, views, settings, salesTableExists, firstLoadDone = true, onNavigate, onRegisterSale, onFullscreenChange }: Props) {
   const now = new Date();
   const partnerName = settings.partnerName || "Socio";
 
   const [mounted, setMounted] = useState(false);
   
-  type Note = { id: string, text: string, colorIdx: number };
+  type Note = { id: string, text: string, colorIdx: number, author?: string, createdAt?: string };
   const [notes, setNotes] = useState<Note[]>([]);
   const [notesSaving, setNotesSaving] = useState(false);
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [isPizarraOpen, setIsPizarraOpen] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
   const touchTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const togglePizarra = (open: boolean) => {
+    setIsPizarraOpen(open);
+    onFullscreenChange?.(open);
+  };
 
   const postitColors = [
     { bg: "bg-yellow-500/20", border: "border-yellow-500/30", text: "text-yellow-100", pin: "text-red-400" },
@@ -51,6 +59,10 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
 
   useEffect(() => {
     setMounted(true);
+    // Obtener email del usuario logueado
+    supabase?.auth.getUser().then(({ data }) => {
+      if (data?.user?.email) setCurrentUserEmail(data.user.email);
+    });
     async function loadNotes() {
       if (!supabase) return;
       const { data } = await supabase.from("app_settings").select("value_text").eq("key", "admin_notes").single();
@@ -80,8 +92,15 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
     setNotesSaving(false);
   };
 
+  const getAuthorName = (email?: string) => {
+    if (!email) return "";
+    // Extraer nombre legible del email
+    const name = email.split('@')[0].replace(/[._-]/g, ' ');
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  };
+
   const addNote = () => {
-    const newNote = { id: Date.now().toString(), text: "", colorIdx: Math.floor(Math.random() * postitColors.length) };
+    const newNote = { id: Date.now().toString(), text: "", colorIdx: Math.floor(Math.random() * postitColors.length), author: currentUserEmail, createdAt: new Date().toISOString() };
     saveNotes([newNote, ...notes]);
   };
   
@@ -378,7 +397,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
   const packFrac = typeTotal > 0 ? byType.pack / typeTotal : 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col overflow-y-auto px-6 pb-32 pt-16 space-y-8 md:pb-10 md:pt-8 lg:px-10">
+    <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col overflow-y-auto px-6 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))] space-y-8 md:pb-10 md:pt-8 lg:px-10">
       {/* Title */}
       <div className="dash-card-in flex items-start gap-3.5">
         <span className="mt-1 h-9 w-1.5 shrink-0 rounded-full bg-green-400" />
@@ -401,13 +420,13 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
           </div>
           <div className="flex items-center gap-3">
             {notesSaving && <Loader2 size={14} className="animate-spin text-orange-500/50" />}
-            {notes.length > 2 && (
-               <button onClick={() => setIsPizarraOpen(true)} className="hidden sm:flex items-center gap-1.5 rounded-full bg-orange-500/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 transition-colors hover:bg-orange-500/30 active:scale-95 shadow-lg shadow-orange-500/10 border border-orange-500/20">
+            {notes.length > 3 && (
+               <button onClick={() => togglePizarra(true)} className="hidden sm:flex items-center gap-1.5 rounded-full bg-orange-500/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 transition-colors hover:bg-orange-500/30 active:scale-95 shadow-lg shadow-orange-500/10 border border-orange-500/20">
                  <Eye size={12} /> Ver todo ({notes.length})
                </button>
             )}
             <button onClick={() => {
-              if (notes.length >= 2) setIsPizarraOpen(true);
+              if (notes.length >= 2) togglePizarra(true);
               addNote();
             }} className="flex items-center gap-1.5 rounded-full bg-orange-500/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 transition-colors hover:bg-orange-500/30 active:scale-95 shadow-lg shadow-orange-500/10 border border-orange-500/20">
               <Plus size={12} /> Nuevo Post-it
@@ -424,62 +443,85 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
           </div>
         ) : (
           <div className="relative z-10 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 pb-2">
-            {notes.slice(0, 2).map((note, i) => {
-              const colors = postitColors[note.colorIdx] || postitColors[0];
-              const rot = i % 3 === 0 ? "-rotate-2" : i % 2 === 0 ? "rotate-2" : "rotate-1";
-              return (
-                <div 
-                  key={note.id} 
-                  className={`group relative flex min-h-[160px] flex-col rounded-md border ${colors.bg} ${colors.border} p-3 shadow-lg transition-transform hover:-translate-y-1 hover:rotate-0 hover:z-20 ${rot} backdrop-blur-md`}
-                >
-                  <div 
-                    onClick={() => {
-                      if (window.confirm("¿Deseas quitar este post-it?")) deleteNote(note.id);
-                    }}
-                    title="Quitar post-it"
-                    className="absolute -top-3 left-1/2 -translate-x-1/2 cursor-pointer p-2 transition-transform hover:scale-125 active:scale-95 z-30"
+            <AnimatePresence mode="popLayout">
+              {notes.slice(0, 4).map((note, i) => {
+                const colors = postitColors[note.colorIdx] || postitColors[0];
+                const rot = i % 3 === 0 ? "-rotate-2" : i % 2 === 0 ? "rotate-2" : "rotate-1";
+                const hiddenClass = i === 3 ? "hidden sm:flex" : "flex";
+                return (
+                  <motion.div 
+                    layout
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8, filter: "blur(10px)" }}
+                    transition={{ duration: 0.3 }}
+                    key={note.id} 
+                    className={`group relative ${hiddenClass} min-h-[160px] flex-col rounded-md border ${colors.bg} ${colors.border} p-3 shadow-lg transition-transform hover:-translate-y-1 hover:rotate-0 hover:z-20 ${rot} backdrop-blur-md`}
                   >
-                    <div className={`h-4 w-4 rounded-full ${colors.pin} bg-current shadow-[0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center`}>
-                       <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                    <div 
+                      onClick={() => {
+                        if (window.confirm("¿Deseas quitar este post-it?")) deleteNote(note.id);
+                      }}
+                      title="Quitar post-it"
+                      className="absolute -top-3 left-1/2 -translate-x-1/2 cursor-pointer p-2 transition-transform hover:scale-125 active:scale-95 z-30"
+                    >
+                      <div className={`h-4 w-4 rounded-full ${colors.pin} bg-current shadow-[0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center`}>
+                         <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                      </div>
                     </div>
+                    <textarea
+                      value={note.text}
+                      onChange={(e) => {
+                         const next = [...notes];
+                         const idx = next.findIndex(n => n.id === note.id);
+                         if(idx !== -1) next[idx].text = e.target.value;
+                         setNotes(next);
+                      }}
+                      onBlur={() => saveNotes(notes)}
+                      placeholder="Escribe aquí..."
+                      className={`mt-2 w-full flex-1 resize-none bg-transparent ${colors.text} placeholder:text-current/40 text-[13px] leading-relaxed font-bold outline-none`}
+                    />
+                    {(note.author || note.createdAt) && (
+                      <div className="mt-1 flex flex-wrap items-center justify-between text-[9px] font-bold text-white/30 gap-1">
+                        <span>{note.createdAt ? new Date(note.createdAt).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }) : ""}</span>
+                        <span className="truncate">{note.author ? `— ${getAuthorName(note.author)}` : ""}</span>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+              
+              {/* Si hay más de 4 notas (o 3 en móvil), mostramos el botón extra en la grilla */}
+              {notes.length > 3 && (
+                <motion.div 
+                  layout
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => togglePizarra(true)}
+                  className={`group relative min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-orange-500/30 bg-orange-500/5 p-3 shadow-sm transition-transform hover:-translate-y-1 hover:bg-orange-500/10 backdrop-blur-md ${notes.length === 4 ? "flex sm:hidden" : "flex"}`}
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-500/20 text-orange-400 group-hover:scale-110 transition-transform shadow-lg">
+                    <Eye size={20} />
                   </div>
-                  <textarea
-                    value={note.text}
-                    onChange={(e) => {
-                       const next = [...notes];
-                       const idx = next.findIndex(n => n.id === note.id);
-                       if(idx !== -1) next[idx].text = e.target.value;
-                       setNotes(next);
-                    }}
-                    onBlur={() => saveNotes(notes)}
-                    placeholder="Escribe aquí..."
-                    className={`mt-2 w-full flex-1 resize-none bg-transparent ${colors.text} placeholder:text-current/40 text-[13px] leading-relaxed font-bold outline-none`}
-                  />
-                </div>
-              );
-            })}
-            
-            {/* Si hay más de 2 notas, mostramos el botón extra en la grilla */}
-            {notes.length > 2 && (
-              <div 
-                onClick={() => setIsPizarraOpen(true)}
-                className="group relative flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-orange-500/30 bg-orange-500/5 p-3 shadow-sm transition-transform hover:-translate-y-1 hover:bg-orange-500/10 backdrop-blur-md"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-500/20 text-orange-400 group-hover:scale-110 transition-transform shadow-lg">
-                  <Eye size={20} />
-                </div>
-                <p className="mt-3 text-[11px] font-black text-orange-300/80 uppercase tracking-widest">
-                  Ver {notes.length - 2} {notes.length - 2 === 1 ? 'nota más' : 'notas más'}
-                </p>
-              </div>
-            )}
+                  <p className="mt-3 text-[11px] font-black text-orange-300/80 uppercase tracking-widest text-center flex flex-col">
+                    <span className="sm:hidden">
+                      Ver {notes.length - 3} {notes.length - 3 === 1 ? 'nota más' : 'notas más'}
+                    </span>
+                    <span className="hidden sm:inline">
+                      Ver {notes.length - 4} {notes.length - 4 === 1 ? 'nota más' : 'notas más'}
+                    </span>
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
       </div>
 
       {/* ── MODAL DE PIZARRA FULLSCREEN ── */}
       {isPizarraOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-black/80 backdrop-blur-md">
+        <div className="fixed inset-0 z-[200] flex flex-col bg-black/95 backdrop-blur-md">
           {/* Header del Modal */}
           <div className="flex items-center justify-between border-b border-white/5 bg-[#120f0e] px-4 py-4 md:px-8">
             <div className="flex items-center gap-3 md:gap-4">
@@ -498,7 +540,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
               <button onClick={addNote} className="flex items-center gap-1.5 md:gap-2 rounded-full bg-orange-500/20 border border-orange-500/30 px-3 py-2 md:px-4 text-[9px] md:text-xs font-black uppercase tracking-widest text-orange-300 transition-transform hover:scale-105 active:scale-95 shadow-lg shadow-orange-500/20">
                 <Plus size={14} /> <span className="hidden sm:inline">Nuevo Post-it</span>
               </button>
-              <button onClick={() => setIsPizarraOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-white transition-colors hover:bg-white/10 border border-white/10">
+              <button onClick={() => togglePizarra(false)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-white transition-colors hover:bg-white/10 border border-white/10">
                 <X size={20} />
               </button>
             </div>
@@ -519,40 +561,53 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
                </div>
              ) : (
                <div className="relative z-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 pb-20">
-                 {notes.map((note, i) => {
-                   const colors = postitColors[note.colorIdx] || postitColors[0];
-                   const rot = i % 3 === 0 ? "-rotate-2" : i % 2 === 0 ? "rotate-2" : "rotate-1";
-                   return (
-                    <div 
-                      key={note.id} 
-                      className={`group relative flex min-h-[160px] flex-col rounded-md border ${colors.bg} ${colors.border} p-3 shadow-xl transition-transform hover:-translate-y-1 hover:rotate-0 hover:z-20 ${rot} backdrop-blur-md`}
-                    >
-                      <div 
-                        onClick={() => {
-                          if (window.confirm("¿Deseas quitar este post-it?")) deleteNote(note.id);
-                        }}
-                        title="Quitar post-it"
-                        className="absolute -top-3 left-1/2 -translate-x-1/2 cursor-pointer p-2 transition-transform hover:scale-125 active:scale-95 z-30"
+                 <AnimatePresence mode="popLayout">
+                   {notes.map((note, i) => {
+                     const colors = postitColors[note.colorIdx] || postitColors[0];
+                     const rot = i % 3 === 0 ? "-rotate-2" : i % 2 === 0 ? "rotate-2" : "rotate-1";
+                     return (
+                      <motion.div 
+                        layout
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8, filter: "blur(10px)" }}
+                        transition={{ duration: 0.3 }}
+                        key={note.id} 
+                        className={`group relative flex min-h-[160px] flex-col rounded-md border ${colors.bg} ${colors.border} p-3 shadow-xl transition-transform hover:-translate-y-1 hover:rotate-0 hover:z-20 ${rot} backdrop-blur-md`}
                       >
-                        <div className={`h-4 w-4 rounded-full ${colors.pin} bg-current shadow-[0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center`}>
-                           <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                        <div 
+                          onClick={() => {
+                            if (window.confirm("¿Deseas quitar este post-it?")) deleteNote(note.id);
+                          }}
+                          title="Quitar post-it"
+                          className="absolute -top-3 left-1/2 -translate-x-1/2 cursor-pointer p-2 transition-transform hover:scale-125 active:scale-95 z-30"
+                        >
+                          <div className={`h-4 w-4 rounded-full ${colors.pin} bg-current shadow-[0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center`}>
+                             <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                          </div>
                         </div>
-                      </div>
-                      <textarea
-                        value={note.text}
-                        onChange={(e) => {
-                           const next = [...notes];
-                           const idx = next.findIndex(n => n.id === note.id);
-                           if(idx !== -1) next[idx].text = e.target.value;
-                           setNotes(next);
-                        }}
-                        onBlur={() => saveNotes(notes)}
-                        placeholder="Escribe aquí..."
-                        className={`mt-2 w-full flex-1 resize-none bg-transparent ${colors.text} placeholder:text-current/40 text-[13px] leading-relaxed font-bold outline-none`}
-                      />
-                    </div>
-                   );
-                 })}
+                        <textarea
+                          value={note.text}
+                          onChange={(e) => {
+                             const next = [...notes];
+                             const idx = next.findIndex(n => n.id === note.id);
+                             if(idx !== -1) next[idx].text = e.target.value;
+                             setNotes(next);
+                          }}
+                          onBlur={() => saveNotes(notes)}
+                          placeholder="Escribe aquí..."
+                          className={`mt-2 w-full flex-1 resize-none bg-transparent ${colors.text} placeholder:text-current/40 text-[13px] leading-relaxed font-bold outline-none`}
+                        />
+                        {(note.author || note.createdAt) && (
+                          <div className="mt-1 flex flex-wrap items-center justify-between text-[9px] font-bold text-white/30 gap-1">
+                            <span>{note.createdAt ? new Date(note.createdAt).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }) : ""}</span>
+                            <span className="truncate">{note.author ? `— ${getAuthorName(note.author)}` : ""}</span>
+                          </div>
+                        )}
+                      </motion.div>
+                     );
+                   })}
+                 </AnimatePresence>
                </div>
              )}
           </div>

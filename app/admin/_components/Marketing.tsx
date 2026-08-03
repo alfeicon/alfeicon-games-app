@@ -82,7 +82,7 @@ export function Marketing({ loading, setLoading, showNotice }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
+    <div className="flex h-full flex-col overflow-hidden pt-4 md:pt-0">
       <div className="flex shrink-0 flex-col border-b border-white/[0.06] px-6 py-4">
         <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Marketing y Avisos</h1>
         <p className="mt-0.5 text-[10px] text-gray-600">Envía correos a {uniqueEmails.length} clientes registrados</p>

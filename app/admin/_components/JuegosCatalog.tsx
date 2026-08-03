@@ -295,7 +295,7 @@ export function JuegosCatalog({ games, loading, setLoading, showNotice, onReload
   const previewOriginal = form.is_offer && previewOffer > 0 ? toPrice(form.price) : null;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
+    <div className="flex h-full flex-col overflow-hidden pt-4 md:pt-0">
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-white/5 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

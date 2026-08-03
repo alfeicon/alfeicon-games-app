@@ -172,122 +172,114 @@ export default function EmbeddedLibrary({ user, onLogout, onSettingsChange }: Em
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="w-full flex flex-col"
+            className="w-full flex flex-col gap-4"
           >
-            <div className="relative mb-8 w-full overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-blue-900/40 to-purple-900/20 p-5 shadow-2xl">
-              <div className="absolute right-3 top-3 flex items-center gap-2">
+            {/* ── Tarjeta de Perfil ── */}
+            <div className="relative w-full overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-6 shadow-2xl">
+              {/* Glow decorativo */}
+              <div className="absolute -top-16 -right-16 h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
+              
+              {/* Acciones arriba derecha */}
+              <div className="absolute right-4 top-4 flex items-center gap-2">
                 <button 
                   onClick={() => setShowLogoutConfirm(true)}
-                  className="rounded-full bg-red-500/10 p-2 text-red-400 backdrop-blur-md transition-colors hover:bg-red-500/20 hover:text-red-300"
+                  className="rounded-full bg-white/5 p-2 text-gray-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
                   aria-label="Cerrar Sesión"
                 >
-                  <LogOut size={18} />
+                  <LogOut size={16} />
                 </button>
                 <button 
                   onClick={() => setActiveView('settings')}
-                  className="rounded-full bg-white/5 p-2 text-white/50 backdrop-blur-md transition-colors hover:bg-white/10 hover:text-white"
+                  className="rounded-full bg-white/5 p-2 text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
                   aria-label="Configuración"
                 >
-                  <Settings size={18} />
+                  <Settings size={16} />
                 </button>
               </div>
               
-              <div className="flex items-center gap-4 pr-16 mt-2">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 p-[2px]">
-                  <div className="flex h-full w-full items-center justify-center rounded-full bg-[#120a0a]">
-                    <span className="text-lg font-black text-white">{profile?.alias?.[0]?.toUpperCase() || profile?.first_name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}</span>
-                  </div>
+              {/* Avatar + Nombre */}
+              <div className="flex items-center gap-4 pr-20">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg shadow-blue-500/20">
+                  <span className="text-xl font-black text-white">{profile?.alias?.[0]?.toUpperCase() || profile?.first_name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}</span>
                 </div>
-                
-                <div className="flex flex-col items-start justify-center text-left">
-                  <p className="mb-0.5 text-[8px] font-black uppercase tracking-widest text-blue-300">Bienvenido</p>
-                  <h2 className="text-xl font-black text-white leading-none truncate max-w-[150px]">{profile?.alias || profile?.first_name || user.email.split('@')[0]}</h2>
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-blue-400">Bienvenido</p>
+                  <h2 className="text-lg font-black text-white leading-tight truncate">{profile?.alias || profile?.first_name || user.email.split('@')[0]}</h2>
+                  <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
                 </div>
               </div>
             </div>
 
-            {/* Banner de Puntos Alfeicon */}
-            <div className="relative mb-8 flex w-full items-center justify-between overflow-hidden rounded-3xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-amber-500/10 p-5 shadow-[0_0_30px_-5px_rgba(245,158,11,0.2)]">
-              {/* Brillos decorativos */}
-              <div className="absolute -left-10 top-1/2 h-24 w-24 -translate-y-1/2 rounded-full bg-amber-500/20 blur-2xl" />
-              <div className="absolute -right-10 top-1/2 h-24 w-24 -translate-y-1/2 rounded-full bg-amber-500/20 blur-2xl" />
-              
-              <div className="relative flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-600 shadow-lg">
-                  <Star size={24} className="text-white fill-white" />
-                </div>
-                <div className="text-left">
-                  <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-amber-500">Alfeicon Rewards</p>
-                  <h3 className="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-yellow-500 leading-none">
-                    {profile?.points || 0} PTS
-                  </h3>
-                </div>
-              </div>
-              
-              <div className="relative">
-                 <button 
-                   onClick={() => setShowRewardsSoon(true)}
-                   className="rounded-full border border-amber-500/50 bg-amber-500/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-amber-400 backdrop-blur-sm transition-colors hover:bg-amber-500/30 shadow-[0_0_15px_-5px_rgba(245,158,11,0.4)]"
-                 >
-                   Usar
-                 </button>
-              </div>
-            </div>
-              
-            {isAdmin && (
-              <Link 
-                href="/admin"
-                className="group relative mx-auto mb-8 flex w-full items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-purple-600 p-5 shadow-[0_0_30px_-5px_rgba(59,130,246,0.4)] transition-all hover:scale-[1.02] active:scale-95 border border-white/10"
+            {/* ── Rewards + Admin ── */}
+            <div className="flex gap-3">
+              {/* Rewards */}
+              <button 
+                onClick={() => setShowRewardsSoon(true)}
+                className="group flex flex-1 items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 transition-colors hover:bg-amber-500/10 active:scale-[0.98]"
               >
-                <div className="absolute -left-10 top-1/2 h-24 w-24 -translate-y-1/2 rounded-full bg-white/20 blur-2xl" />
-                <div className="relative flex items-center gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 shadow-inner">
-                    <ShieldCheck size={24} className="text-white" />
-                  </div>
-                  <div className="text-left">
-                    <p className="mb-0.5 text-[9px] font-black uppercase tracking-widest text-blue-200">Acceso Exclusivo</p>
-                    <h3 className="text-sm font-black uppercase tracking-wider text-white leading-tight">Panel de<br/>Administración</h3>
-                  </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 shadow-lg shadow-amber-500/20">
+                  <Star size={18} className="text-white fill-white" />
                 </div>
-                <ArrowRight size={20} className="relative z-10 text-white/50 transition-transform group-hover:translate-x-1 group-hover:text-white" />
-              </Link>
-            )}
+                <div className="text-left min-w-0">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-amber-500">Rewards</p>
+                  <p className="text-lg font-black text-amber-200 leading-none">{profile?.points || 0} <span className="text-[10px] text-amber-400">PTS</span></p>
+                </div>
+              </button>
 
-            <div className="w-full rounded-3xl bg-white/5 border border-white/10 overflow-hidden flex flex-col mb-12">
+              {/* Admin (solo si es admin) */}
+              {isAdmin && (
+                <Link 
+                  href="/admin"
+                  className="group flex flex-1 items-center gap-3 rounded-2xl border border-purple-500/20 bg-gradient-to-br from-blue-600/10 to-purple-600/10 p-4 transition-all hover:from-blue-600/20 hover:to-purple-600/20 active:scale-[0.98]"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg shadow-purple-500/20">
+                    <ShieldCheck size={18} className="text-white" />
+                  </div>
+                  <div className="text-left min-w-0">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-purple-400">Admin</p>
+                    <p className="text-sm font-black text-white leading-tight">Panel</p>
+                  </div>
+                </Link>
+              )}
+            </div>
+
+            {/* ── Menú de opciones ── */}
+            <div className="w-full rounded-2xl border border-white/5 bg-white/[0.03] overflow-hidden">
                <button 
                  onClick={() => setActiveView('entregas')} 
-                 className="flex w-full items-center gap-4 p-4 transition-colors hover:bg-white/10 border-b border-white/5 group"
+                 className="flex w-full items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-white/5 border-b border-white/5 group"
                >
-                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/20 text-orange-500 group-hover:scale-105 transition-transform">
-                    <Clock size={20} />
+                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 text-orange-400 group-hover:scale-105 transition-transform">
+                    <Clock size={17} />
                  </div>
-                 <span className="flex-1 text-left text-sm font-bold text-white">Entregas Reprogramadas</span>
-                 <ArrowRight size={18} className="text-gray-500 group-hover:text-white transition-colors" />
+                 <span className="flex-1 text-left text-[13px] font-bold text-white">Entregas Reprogramadas</span>
+                 <ArrowRight size={15} className="text-gray-600 group-hover:text-white transition-colors" />
                </button>
 
                <button 
                  onClick={() => setActiveView('historial')} 
-                 className="flex w-full items-center gap-4 p-4 transition-colors hover:bg-white/10 border-b border-white/5 group"
+                 className="flex w-full items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-white/5 border-b border-white/5 group"
                >
-                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-500/20 text-green-500 group-hover:scale-105 transition-transform">
-                    <CheckCircle2 size={20} />
+                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 group-hover:scale-105 transition-transform">
+                    <CheckCircle2 size={17} />
                  </div>
-                 <span className="flex-1 text-left text-sm font-bold text-white">Historial de Compras</span>
-                 <ArrowRight size={18} className="text-gray-500 group-hover:text-white transition-colors" />
+                 <span className="flex-1 text-left text-[13px] font-bold text-white">Historial de Compras</span>
+                 <ArrowRight size={15} className="text-gray-600 group-hover:text-white transition-colors" />
                </button>
 
                <button 
                  onClick={() => setActiveView('soporte')} 
-                 className="flex w-full items-center gap-4 p-4 transition-colors hover:bg-white/10 group"
+                 className="flex w-full items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-white/5 group"
                >
-                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/20 text-sky-500 group-hover:scale-105 transition-transform">
-                    <LifeBuoy size={20} />
+                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400 group-hover:scale-105 transition-transform">
+                    <LifeBuoy size={17} />
                  </div>
-                 <span className="flex-1 text-left text-sm font-bold text-white">Soporte y Ayuda</span>
-                 <ArrowRight size={18} className="text-gray-500 group-hover:text-white transition-colors" />
+                 <span className="flex-1 text-left text-[13px] font-bold text-white">Soporte y Ayuda</span>
+                 <ArrowRight size={15} className="text-gray-600 group-hover:text-white transition-colors" />
                </button>
             </div>
-            <p className="text-center text-xs font-bold text-white/30 uppercase tracking-widest mt-auto">Alfeicon Games © 2026</p>
+
+            <p className="text-center text-[10px] font-bold text-white/20 uppercase tracking-widest mt-2 pb-4">Alfeicon Games © 2026</p>
           </motion.div>
         )}
 

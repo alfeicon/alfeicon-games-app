@@ -70,7 +70,7 @@ export function Soporte({ requests, loading, setLoading, showNotice, onReload }:
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
+    <div className="flex h-full flex-col overflow-hidden pt-4 md:pt-0">
       <div className="flex shrink-0 flex-col border-b border-white/[0.06]">
         <div className="flex items-center gap-4 px-6 py-4">
           <div className="flex-1">

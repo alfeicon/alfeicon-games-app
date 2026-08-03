@@ -117,9 +117,9 @@ export function Noticias({ news, newsTableExists, loading, setLoading, showNotic
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden pt-14 md:pt-0">
-      {/* Header */}
-      <div className="flex shrink-0 items-center gap-4 border-b border-white/[0.06] px-6 py-4">
+    <div className="flex h-full flex-col overflow-hidden pt-4 md:pt-0">
+      {/* Header Desktop */}
+      <div className="hidden md:flex shrink-0 items-center gap-4 border-b border-white/[0.06] px-6 py-4">
         <div className="flex-1">
           <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Noticias</h1>
           <p className="mt-0.5 text-[10px] text-gray-600">{news.length} publicadas · {counts.active} visibles</p>
@@ -127,6 +127,18 @@ export function Noticias({ news, newsTableExists, loading, setLoading, showNotic
         <button onClick={newNews}
           className="flex items-center gap-1.5 rounded-full bg-orange-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all duration-200 hover:bg-orange-400 active:scale-95">
           <Plus size={12} strokeWidth={3} /> Nueva noticia
+        </button>
+      </div>
+
+      {/* Header Mobile */}
+      <div className="flex md:hidden flex-col gap-4 border-b border-white/[0.06] px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))]">
+        <div className="flex flex-col gap-0.5 pr-28">
+           <h1 className="text-base font-black uppercase tracking-[0.15em] text-white">Noticias</h1>
+           <p className="text-[10px] text-gray-600">{news.length} publicadas · {counts.active} visibles</p>
+        </div>
+        <button onClick={newNews}
+          className="flex w-full items-center justify-center gap-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-orange-400 transition-all duration-200 hover:bg-orange-500/20 active:scale-95">
+          <Plus size={12} strokeWidth={3} /> Crear Noticia
         </button>
       </div>
 
