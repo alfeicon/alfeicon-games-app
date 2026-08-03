@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, useEffect } from "react";
 import {
   Banknote, CalendarDays, ChevronDown, ChevronUp, DollarSign, Gamepad2, Gift, Handshake, Loader2, Megaphone, Plus, Receipt, RefreshCw, Trash2, TrendingDown, TrendingUp, Bot, X
 } from "lucide-react";
@@ -228,7 +228,7 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `finanzas_avanzadas_${new Date().toISOString().slice(0, 10)}.md`;
+    a.download = `finanzas_avanzadas_${new Date().toISOString().slice(0, 10)}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -295,6 +295,8 @@ export function Finanzas({ sales, adSpend, games, packs, providers, settings, sa
           <div className="mx-4 mt-6 flex flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-6 border border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.05)] relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full" />
             <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full" />
+            
+            <MoneyJar amount={globalGrossProfit} />
             
             <span className="relative z-10 mb-2 flex items-center gap-2 rounded-full bg-emerald-500/20 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-400">
               <DollarSign size={12} /> Ganancia Bruta (Total)
