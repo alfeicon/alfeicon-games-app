@@ -41,15 +41,16 @@ export type AdSpend = {
   amount: number;
   description: string | null;
   date: string;
+  start_at?: string | null;
   duration_days?: number | null;
   created_at: string;
 };
 
 export type SettingsState = {
   nintendoOnlinePrice: string;
-  packPriceIncrease: string;
   garantiaJuegoDias: string;
   garantiaPackDias: string;
+  profitGoal: string;
   partnerSplitPct: string;
   partnerName: string;
 };
@@ -71,6 +72,8 @@ export type Order = {
   game_name: string;
   status: 'draft' | 'pending_console_code' | 'pending_setup' | 'preparing' | 'ready' | 'completed' | 'issue';
   console_code: string | null;
+  /** Inicio de la hora de preparación del último código enviado. */
+  console_code_submitted_at?: string | null;
   client_name?: string | null;
   client_email?: string | null;
   account_email: string | null;
@@ -146,7 +149,21 @@ export type DiscountCode = {
   created_at: string;
 };
 
-export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "analiticas" | "entregas" | "finanzas" | "soporte" | "marketing" | "ajustes";
+export type ActivityLog = {
+  id: string;
+  entity_table: "games" | "packs" | "app_settings" | string;
+  entity_id: string | null;
+  entity_title: string | null;
+  action: "insert" | "update" | "delete";
+  changed_fields: string[];
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  reason: string | null;
+  changed_by: string | null;
+  created_at: string;
+};
+
+export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "analiticas" | "entregas" | "finanzas" | "soporte" | "marketing" | "historial" | "ajustes";
 
 /** Consulta enviada desde la sección Soporte de la tienda (sin orden detrás). */
 export type SupportRequest = {

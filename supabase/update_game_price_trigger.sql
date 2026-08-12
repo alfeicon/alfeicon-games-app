@@ -33,7 +33,7 @@ BEGIN
   FROM (
     SELECT cost_price, created_at
     FROM order_items
-    WHERE item_id = v_game_id::text
+    WHERE item_id = v_game_id
       AND item_type = 'game'
       AND kind = 'compra'
     ORDER BY created_at DESC

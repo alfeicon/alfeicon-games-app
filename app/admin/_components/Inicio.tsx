@@ -6,8 +6,9 @@ import {
   BarChart2, CalendarDays, DollarSign, Eye, Megaphone, Gamepad2, Gift, Handshake, Percent, Plus, Receipt, TrendingUp, Wallet, Zap, ClipboardList, Loader2, Pin, X
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { saleNetProfit, saleNetRevenue, salePaymentFee } from "@/lib/sales-finance";
 import type { AdminGame, AdminPack, AdminSection, AdSpend, Sale, SettingsState } from "../_types";
-import { fmt, fmtDate } from "../_helpers";
+import { fmt, fmtDate, inicioCampana, ventaDentroDeCampana } from "../_helpers";
 
 type Props = {
   games: AdminGame[];
@@ -119,41 +120,71 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
     [sales],
   );
 
-  const totalRevenue = thisMonth.reduce((a, s) => a + s.price_sold, 0);
+  const totalRevenue = thisMonth.reduce((a, s) => a + saleNetRevenue(s), 0);
   const totalCost = thisMonth.reduce((a, s) => a + (s.cost_price || 0), 0);
   const totalProfit = totalRevenue - totalCost;
   const margin = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
 
   const CUTOFF_DATE = new Date("2026-08-01T00:00:00-04:00");
-  const { globalAdSpend, globalGrossProfit, globalAdDebt, globalRealProfit, partnerNet, myShare, daysRemaining } = useMemo(() => {
+  const activeCampaign = useMemo(() => {
+    const nowMs = Date.now();
+    return [...adSpend]
+      .filter(campaign => {
+        const start = inicioCampana(campaign);
+        const end = new Date(start);
+        end.setDate(end.getDate() + Math.max(1, Number(campaign.duration_days) || 1));
+        return nowMs >= start.getTime() && nowMs < end.getTime();
+      })
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  }, [adSpend]);
+
+  const { globalAdSpend, campaignAdSpend, globalGrossProfit, campaignGrossProfit, globalAdDebt, globalRealProfit, campaignRealProfit, partnerNet, myShare, daysRemaining } = useMemo(() => {
     const newSales = sales.filter(s => new Date(s.created_at) >= CUTOFF_DATE);
     const newAdSpends = adSpend.filter(a => new Date(a.date) >= CUTOFF_DATE);
     
     const globalAdSpend = newAdSpends.reduce((a, b) => a + b.amount, 0);
-    const globalGrossProfit = newSales.reduce((a, s) => a + (s.price_sold - (s.cost_price ?? 0)), 0);
+    const globalGrossProfit = newSales.reduce((a, s) => a + saleNetProfit(s), 0);
     
-    const balance = globalGrossProfit - globalAdSpend;
+    const campaignGrossProfit = newSales
+      .filter(s => activeCampaign && ventaDentroDeCampana(s.created_at, [activeCampaign]))
+      .reduce((a, s) => a + saleNetProfit(s), 0);
+    const campaignAdSpend = activeCampaign?.amount || 0;
+    const outsideCampaignProfit = globalGrossProfit - campaignGrossProfit;
+    const campaignBalance = campaignGrossProfit - campaignAdSpend;
+    const campaignRealProfit = Math.max(0, campaignBalance);
     
     let daysRemaining = 0;
     const n = new Date();
-    newAdSpends.forEach(a => {
-      const start = new Date(a.date);
+    if (activeCampaign) {
+      const a = activeCampaign;
+      const start = inicioCampana(a);
       const end = new Date(start);
-      end.setDate(end.getDate() + (a.duration_days || 1));
+      end.setDate(end.getDate() + Math.max(1, Number(a.duration_days) || 1));
       if (end > n) {
         const remaining = Math.ceil((end.getTime() - n.getTime()) / (1000 * 3600 * 24));
         if (remaining > daysRemaining) daysRemaining = remaining;
       }
-    });
-
-    if (balance <= 0) {
-      return { globalAdSpend, globalGrossProfit, globalAdDebt: Math.abs(balance), globalRealProfit: 0, partnerNet: 0, myShare: 0, daysRemaining };
-    } else {
-      return { globalAdSpend, globalGrossProfit, globalAdDebt: 0, globalRealProfit: balance, partnerNet: balance * 0.15, myShare: balance * 0.85, daysRemaining };
     }
-  }, [sales, adSpend]);
+
+    return {
+      globalAdSpend,
+      campaignAdSpend,
+      globalGrossProfit,
+      campaignGrossProfit,
+      globalAdDebt: Math.max(0, -campaignBalance),
+      globalRealProfit: outsideCampaignProfit + campaignRealProfit,
+      campaignRealProfit,
+      partnerNet: campaignRealProfit * 0.15,
+      myShare: outsideCampaignProfit + campaignRealProfit * 0.85,
+      daysRemaining,
+    };
+  }, [sales, adSpend, activeCampaign]);
   
-  const adProgress = globalAdSpend > 0 ? Math.round((globalGrossProfit / globalAdSpend) * 100) : 0;
+  const adProgress = campaignAdSpend > 0 ? Math.round((campaignGrossProfit / campaignAdSpend) * 100) : 0;
+  const campaignRemaining = Math.max(0, campaignAdSpend - campaignGrossProfit);
+  const campaignOverTarget = Math.max(0, campaignGrossProfit - campaignAdSpend);
+  const primaryProfit = activeCampaign ? campaignGrossProfit : globalGrossProfit;
+  const primaryMyShare = activeCampaign ? campaignRealProfit * 0.85 : myShare;
 
   const totalAdSpend = useMemo(() => {
     const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -185,8 +216,8 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sales, todayKey],
   );
-  const todayRevenue = todaySales.reduce((a, s) => a + s.price_sold, 0);
-  const todayProfit = todaySales.reduce((a, s) => a + s.price_sold - (s.cost_price || 0), 0);
+  const todayRevenue = todaySales.reduce((a, s) => a + saleNetRevenue(s), 0);
+  const todayProfit = todaySales.reduce((a, s) => a + saleNetProfit(s), 0);
 
   const last7 = useMemo(() => {
     const buckets = Array.from({ length: 7 }, (_, i) => {
@@ -202,8 +233,8 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
     sales.forEach(s => {
       const b = buckets.find(x => x.key === dayKey(new Date(s.created_at)));
       if (b) {
-        b.revenue += s.price_sold;
-        b.profit += s.price_sold - (s.cost_price || 0);
+        b.revenue += saleNetRevenue(s);
+        b.profit += saleNetProfit(s);
         b.count += 1;
       }
     });
@@ -329,7 +360,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
     sales.forEach(s => {
       const d = new Date(s.created_at);
       const b = buckets.find(x => x.month === d.getMonth() && x.year === d.getFullYear());
-      if (b) { b.revenue += s.price_sold; b.cost += s.cost_price || 0; }
+      if (b) { b.revenue += saleNetRevenue(s); b.cost += s.cost_price || 0; }
     });
     return buckets.map(b => ({ ...b, profit: b.revenue - b.cost }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -342,7 +373,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
   const byType = useMemo(() => {
     const acc = { game: 0, pack: 0 };
     thisMonth.forEach(s => {
-      const profit = s.price_sold - (s.cost_price || 0);
+      const profit = saleNetProfit(s);
       if (s.item_type === "pack") acc.pack += profit; else acc.game += profit;
     });
     return acc;
@@ -353,7 +384,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
     const counts = new Map<string, { title: string; count: number; revenue: number }>();
     thisMonth.forEach(s => {
       const prev = counts.get(s.item_title) ?? { title: s.item_title, count: 0, revenue: 0 };
-      counts.set(s.item_title, { ...prev, count: prev.count + 1, revenue: prev.revenue + s.price_sold });
+      counts.set(s.item_title, { ...prev, count: prev.count + 1, revenue: prev.revenue + saleNetRevenue(s) });
     });
     return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 5);
   }, [thisMonth]);
@@ -364,7 +395,7 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
 
   const metrics = [
     {
-      label: "Ingresos", value: noSales ? "—" : `$${fmt(totalRevenue)}`, sub: "CLP este mes",
+      label: "Ingresos", value: noSales ? "—" : `$${fmt(totalRevenue)}`, sub: "CLP recibido este mes",
       Icon: DollarSign, color: "text-blue-400", bg: "bg-blue-500/10",
     },
     {
@@ -724,26 +755,33 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-green-500/15">
               <Wallet size={20} className="text-green-400" />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Ganancia Bruta (Total)</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{activeCampaign ? "Ganancia bruta · campaña activa" : "Ganancia bruta acumulada"}</span>
           </div>
           {firstLoadDone ? (
-            <p key={globalGrossProfit} className="dash-value-in text-4xl font-black leading-none tracking-tight text-green-400">{noSales ? "—" : `$${fmt(globalGrossProfit)}`}</p>
+            <p key={primaryProfit} className="dash-value-in text-4xl font-black leading-none tracking-tight text-green-400">{noSales ? "—" : `$${fmt(primaryProfit)}`}</p>
           ) : (
             <div className="h-9 w-32 animate-pulse rounded-lg bg-white/10" />
           )}
 
-          {globalAdSpend > 0 && (
+          {campaignAdSpend > 0 && (
             <div className="mt-5 w-full">
               <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-green-100 mb-2">
-                <span>Recuperación de Publicidad</span>
+                <span>{activeCampaign ? "Campaña activa · recuperación" : "Sin campaña activa"}</span>
                 <span className="text-green-400">{adProgress}%</span>
               </div>
               <div className="h-2 w-full rounded-full bg-black/40 overflow-hidden">
                 <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-300 transition-all duration-1000" style={{ width: `${Math.min(adProgress, 100)}%` }} />
               </div>
               <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest text-white/50 mt-2">
-                <span>Gasto: ${fmt(globalAdSpend)}</span>
-                {daysRemaining > 0 && <span className="text-blue-300">Faltan {daysRemaining} días</span>}
+                <span>Gasto campaña: ${fmt(campaignAdSpend)}</span>
+                {daysRemaining > 0 ? <span className="text-blue-300">Faltan {daysRemaining} días</span> : <span className="text-gray-500">Campaña finalizada</span>}
+              </div>
+              <div className="mt-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest">
+                {campaignRemaining > 0 ? (
+                  <span className="text-yellow-300">Falta recuperar: ${fmt(campaignRemaining)}</span>
+                ) : (
+                  <span className="text-green-300">Sobre meta: ${fmt(campaignOverTarget)}</span>
+                )}
               </div>
             </div>
           )}
@@ -751,12 +789,12 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
           {!noSales && firstLoadDone && (
             <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Ganancia Bastian (85%)</p>
-                <p className="mt-0.5 text-sm font-black text-white">${fmt(Math.round(myShare))}</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">{activeCampaign ? "Tu ganancia campaña" : "Tu ganancia total"}</p>
+                <p className="mt-0.5 text-sm font-black text-white">${fmt(Math.round(primaryMyShare))}</p>
               </div>
               <div>
                 <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-pink-400">
-                  <Handshake size={10} /> Pago a {partnerName} (15%)
+                  <Handshake size={10} /> Pago a {partnerName} (15% campaña)
                 </p>
                 <p className={`mt-0.5 text-sm font-black ${partnerNet >= 0 ? "text-pink-300" : "text-red-400"}`}>
                   ${fmt(Math.round(partnerNet))}
@@ -1251,7 +1289,8 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
           ) : (
             <div className="divide-y divide-white/5">
               {sales.slice(0, 6).map((sale, i) => {
-                const profit = sale.price_sold - (sale.cost_price || 0);
+                const fee = salePaymentFee(sale);
+                const profit = saleNetProfit(sale);
                 return (
                   <div key={sale.id} className="dash-value-in flex items-center gap-3 py-2.5" style={{ animationDelay: `${i * 55}ms` }}>
                     <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
@@ -1266,7 +1305,8 @@ export function Inicio({ games, packs, sales, adSpend, views, settings, salesTab
                       {profit > 0 && <p className="text-[10px] font-bold text-green-500/80">+${fmt(profit)} ganancia</p>}
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-xs font-black text-white">${fmt(sale.price_sold)}</p>
+                      <p className="text-xs font-black text-white">${fmt(saleNetRevenue(sale))}</p>
+                      {fee > 0 && <p className="text-[9px] text-sky-500">MP -${fmt(fee)}</p>}
                       <p className="text-[10px] text-gray-600">{fmtDate(sale.created_at)}</p>
                     </div>
                   </div>

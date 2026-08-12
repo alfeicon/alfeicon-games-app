@@ -12,9 +12,9 @@ import Fuse from 'fuse.js';
 import { fetchCatalogFromSupabase, findCatalogItemBySlug, slugifyTitulo, type CatalogGame, type CatalogPack, type CatalogItem } from '@/lib/catalog';
 import { fetchNewsFromSupabase, type NewsItem } from '@/lib/news';
 import { fetchAppSettings, type AppSettings } from '@/lib/settings';
-import { crearItemsDeOrden } from '@/lib/order-items';
 import { validarCodigo, type DescuentoAplicado } from '@/lib/descuentos';
 import { supabase } from '@/lib/supabase/client';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { trackView } from '@/lib/track';
 import { createPortal } from 'react-dom';
 
@@ -114,7 +114,7 @@ export default function MobileAppStore({ initial, openSlug }: { initial: StoreIn
 }
 
 function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?: string }) {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
 
   useEffect(() => {
     supabase?.auth.getUser().then(({ data }) => {
@@ -446,6 +446,32 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     setPagoEnCurso(false);
   }, [quitarCodigo]);
 
+  const crearOrdenCheckout = useCallback(async (data: {
+    code: string;
+    items: CatalogItem[];
+    paymentMethod: 'transferencia' | 'mercadopago' | 'global66' | 'prex' | 'binance';
+  }) => {
+    const session = (await supabase?.auth.getSession())?.data.session;
+    const response = await fetch('/api/create-order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        code: data.code,
+        payment_method: data.paymentMethod,
+        discount_code: descuento?.code ?? null,
+        garantia_juego_dias: appSettings.garantiaJuegoDias,
+        garantia_pack_dias: appSettings.garantiaPackDias,
+        items: data.items.map(item => ({ id: item.id, esPack: item.esPack })),
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'No pudimos preparar tu orden');
+    return result as { id: string; code: string; total: number };
+  }, [appSettings.garantiaJuegoDias, appSettings.garantiaPackDias, descuento?.code]);
+
   const notaInternacional = isBase
     ? ''
     : `\n(Precio internacional en ${currency.label}, incluye +US$7 por costos de cambio y transferencia. Pago por transferencia internacional o tarjeta de crédito.)`;
@@ -462,14 +488,6 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
 
     const code = generateShortCode();
     
-    // Calcular totales para Mercado Pago. El descuento ya viene validado por la
-    // base; aquí solo se resta.
-    const bruto = items.reduce((acc, item) => acc + item.precio, 0);
-    const rebaja = descuento?.monto ?? 0;
-    const total_precio = Math.max(0, bruto - rebaja);
-    const titulos = items.map(item => item.titulo).join(' + ');
-    const pack_ids = items.filter(item => item.esPack).map(item => item.id);
-
     // Orden pendiente de pago. Queda bloqueada hasta que el webhook de Mercado
     // Pago confirme (/api/mp-webhook): volver de la pasarela no es prueba de
     // pago, esa URL la puede abrir cualquiera.
@@ -477,43 +495,13 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     // Se ESPERA a que termine antes de mandar al cliente a la pasarela. Sin
     // await, el navegador cancelaba el insert al navegar y el cliente pagaba
     // una orden que no existía: ni el webhook ni su portal la encontraban.
-    const { data: nuevaOrden, error: insertErr } = await (supabase?.from('orders').insert({
-      short_code: code,
-      game_name: titulos,
-      pack_ids: pack_ids.length > 0 ? pack_ids : null,
-      status: 'draft',
-      // Sin `source`: esa columna no existe en `orders` y Postgres rechazaba
-      // la fila entera. Nadie la lee tampoco.
-      sale_price: total_precio,
-      discount_code: descuento?.code ?? null,
-      discount_amount: rebaja,
-      payment_method: 'mercadopago',
-      payment_status: 'pending',
-      user_id: user?.id ?? null,
-    }).select('id').single() ?? Promise.resolve({ data: null, error: null }));
-
-    if (insertErr) {
-      console.error("Error creating draft order", insertErr);
-      alert('No pudimos preparar tu orden. Revisa tu conexión e inténtalo de nuevo.');
-      setPurchaseTransition(false);
-      pagoEnCursoRef.current = false;
-      setPagoEnCurso(false);
-      return;
-    }
-
-    // Una cuenta por producto: el cliente las instala una a una desde su enlace.
-    if (nuevaOrden?.id) await crearItemsDeOrden(nuevaOrden.id, items, appSettings);
-
     try {
+      await crearOrdenCheckout({ code, items, paymentMethod: 'mercadopago' });
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: code,
-          title: titulos,
-          unit_price: total_precio,
-          quantity: 1,
-          code: code
+          code,
         })
       });
 
@@ -526,14 +514,14 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
         pagoEnCursoRef.current = false;
         setPagoEnCurso(false);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert('Error de conexión: ' + error.message);
+      alert('Error de conexión: ' + (error instanceof Error ? error.message : 'inténtalo de nuevo'));
       setPurchaseTransition(false);
       pagoEnCursoRef.current = false;
       setPagoEnCurso(false);
     }
-  }, [appSettings, descuento]);
+  }, [crearOrdenCheckout, descuento]);
 
   // Transferencia: crea la orden (transferencia pendiente, con the monto en
   // sale_price) y lleva al cliente a su portal /entrega/[code], donde ve los
@@ -548,36 +536,18 @@ function StoreApp({ initial, openSlug }: { initial: StoreInitialData; openSlug?:
     const brutoTransf = items.reduce((acc, item) => acc + item.precio, 0);
     const rebajaTransf = descuento?.monto ?? 0;
     const total = Math.max(0, brutoTransf - rebajaTransf);
-    const titulos = items.map(item => item.titulo).join(' + ');
-    const pack_ids = items.filter(item => item.esPack).map(item => item.id);
-
-    const { data: nuevaOrden, error } = await (supabase?.from('orders').insert({
-      short_code: code,
-      game_name: titulos,
-      pack_ids: pack_ids.length > 0 ? pack_ids : null,
-      status: 'draft',
-      sale_price: total,
-      discount_code: descuento?.code ?? null,
-      discount_amount: rebajaTransf,
-      payment_method: method,
-      payment_status: 'pending',
-      user_id: user?.id ?? null,
-    }).select('id').single() ?? Promise.resolve({ data: null, error: null }));
-
-    if (error) {
-      console.error("Error creating transfer order:", JSON.stringify(error));
+    try {
+      await crearOrdenCheckout({ code, items, paymentMethod: method });
+      // El proceso vive en /entrega/[code]: datos + comprobante → validación →
+      // tutorial de instalación. El modal solo elige el método de pago.
+      window.location.href = `/entrega/${code}`;
+    } catch (error) {
+      console.error("Error creating transfer order:", error);
       setTransferOrder({ code, total }); // fallback: datos en el modal
       pagoEnCursoRef.current = false;
       setPagoEnCurso(false);
-      return;
     }
-
-    if (nuevaOrden?.id) await crearItemsDeOrden(nuevaOrden.id, items, appSettings);
-
-    // El proceso vive en /entrega/[code]: datos + comprobante → validación →
-    // tutorial de instalación. El modal solo elige el método de pago.
-    window.location.href = `/entrega/${code}`;
-  }, [appSettings, descuento]);
+  }, [crearOrdenCheckout, descuento]);
 
   const addToCart = useCallback((item: CatalogItem, event?: MouseEvent<HTMLElement>) => {
     if (event) {

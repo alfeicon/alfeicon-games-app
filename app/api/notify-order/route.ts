@@ -52,6 +52,21 @@ export async function POST(request: Request) {
       case "MP_REJECTED":
         texts.push(`❌ <b>PAGO RECHAZADO (MERCADO PAGO)</b>\n\nEl cliente intentó pagar y no se aprobó. Está esperando en su portal — conviene escribirle.\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}`);
         break;
+      case "ORDER_CANCELLED": {
+        const clp = (n: number) => `$${Number(n || 0).toLocaleString("es-CL")}`;
+        const requiereDevolucion = order?.payment_status === "approved";
+        texts.push(
+          `🚫 <b>ORDEN CANCELADA POR EL CLIENTE</b>\n\n` +
+          `<b>Orden:</b> <code>${shortCode}</code>\n` +
+          `<b>Juego:</b> ${gameName}\n` +
+          `<b>Monto:</b> ${clp(salePrice)}\n` +
+          `<b>Método:</b> ${order?.payment_method || "sin método"}\n\n` +
+          (requiereDevolucion
+            ? `💸 <b>Requiere gestionar devolución.</b> El cliente ya había pagado.`
+            : `No registra pago aprobado al momento de cancelar.`),
+        );
+        break;
+      }
       case "WAITING_TOO_LONG":
         texts.push(`⏰ <b>UN CLIENTE LLEVA RATO ESPERANDO</b>\n\nYa mandó su código y sigue con la página abierta esperando sus credenciales.\n\n<b>Orden:</b> <code>${shortCode}</code>\n<b>Juego:</b> ${gameName}\n<b>Esperando:</b> ${message || "un buen rato"}`);
         break;

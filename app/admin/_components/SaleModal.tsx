@@ -3,11 +3,12 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Gamepad2, Gift, Handshake, Loader2, Search, X } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { saleNetProfit, saleNetRevenue, salePaymentFee } from "@/lib/sales-finance";
 import type { AdminGame, AdminPack, Provider, SettingsState } from "../_types";
 import { fmt, toPct, toPrice } from "../_helpers";
 
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none";
-const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Débito", "Crédito", "Otro"];
+const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Mercado Pago", "Débito", "Crédito", "Otro"];
 
 type Props = {
   games: AdminGame[];
@@ -38,6 +39,10 @@ export function SaleModal({ games, packs, providers, settings, loading, setLoadi
   const [saved, setSaved] = useState<{ title: string; price: number } | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const activeProviders = providers.filter(p => p.is_active);
+  const previewSale = { price_sold: toPrice(price), cost_price: toPrice(cost), payment_method: method };
+  const fee = salePaymentFee(previewSale);
+  const netRevenue = saleNetRevenue(previewSale);
+  const gain = saleNetProfit(previewSale);
 
   useEffect(() => () => { if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current); }, []);
 
@@ -187,17 +192,29 @@ export function SaleModal({ games, packs, providers, settings, loading, setLoadi
               {/* Profit preview */}
               {toPrice(price) > 0 && toPrice(cost) > 0 && (
                 <div className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm ${
-                  toPrice(price) - toPrice(cost) >= 0
+                  gain >= 0
                     ? "border border-green-500/15 bg-green-500/6"
                     : "border border-red-500/15 bg-red-500/6"
                 }`}>
                   <span className="text-[10px] font-black uppercase tracking-widest text-gray-600">Ganancia estimada</span>
-                  <span className={`font-black ${toPrice(price) - toPrice(cost) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    ${(toPrice(price) - toPrice(cost)).toLocaleString("es-CL")}
+                  <span className={`font-black ${gain >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    ${gain.toLocaleString("es-CL")}
                     <span className="ml-1.5 text-[10px] opacity-70">
-                      ({Math.round((1 - toPrice(cost) / toPrice(price)) * 100)}%)
+                      ({Math.round((1 - toPrice(cost) / Math.max(1, netRevenue)) * 100)}%)
                     </span>
                   </span>
+                </div>
+              )}
+              {fee > 0 && (
+                <div className="rounded-xl border border-sky-500/15 bg-sky-500/6 px-3 py-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="font-bold text-gray-500">Comisión Mercado Pago</span>
+                    <span className="font-black text-sky-400">-${fmt(fee)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between border-t border-white/5 pt-1">
+                    <span className="font-bold text-gray-500">Recibido</span>
+                    <span className="font-black text-green-400">${fmt(netRevenue)}</span>
+                  </div>
                 </div>
               )}
 
@@ -222,12 +239,12 @@ export function SaleModal({ games, packs, providers, settings, loading, setLoadi
                   <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2 text-xs">
                     <span className="text-gray-500">
                       {partnerName} ({toPct(partnerPct)}%): <span className="font-black text-pink-400">
-                        ${fmt(Math.round((toPrice(price) - toPrice(cost)) * toPct(partnerPct) / 100))}
+                        ${fmt(Math.round(gain * toPct(partnerPct) / 100))}
                       </span>
                     </span>
                     <span className="text-gray-500">
                       Tú ({100 - toPct(partnerPct)}%): <span className="font-black text-green-400">
-                        ${fmt(Math.round((toPrice(price) - toPrice(cost)) * (100 - toPct(partnerPct)) / 100))}
+                        ${fmt(Math.round(gain * (100 - toPct(partnerPct)) / 100))}
                       </span>
                     </span>
                   </div>

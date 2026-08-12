@@ -136,7 +136,7 @@ function Shell({ id, title, Icon, ctx, fill, children }: {
 }
 
 // Una orden "por validar": pagó por transferencia, subió comprobante y todavía
-// no lo apruebas. Es lo único que debería aparecer en la pestaña Validación.
+// no lo apruebas. Es lo único que debería aparecer en Atención.
 const needsValidation = (o: Order | null) =>
   !!o && o.payment_status === "pending" && !!o.receipt_url;
 
@@ -583,14 +583,15 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   // Comprobante ampliado (modo validación de pago).
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [autoSaving, setAutoSaving] = useState(false);
   
   // Tabs/Menu: 'menu' es sólo para móvil.
-  const [activeTab, setActiveTab] = useState<'menu' | 'validacion' | 'active' | 'problemas' | 'completadas'>('menu');
+  const [activeTab, setActiveTab] = useState<'menu' | 'atencion' | 'curso' | 'historial'>('menu');
 
   useEffect(() => {
     // Si carga en desktop, forzar a salir del menú
     if (window.innerWidth >= 768 && activeTab === 'menu') {
-      setActiveTab('active');
+      setActiveTab('atencion');
     }
   }, [activeTab]);
 
@@ -603,8 +604,9 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const [itemsCount, setItemsCount] = useState<number | null>(null);
   const [itemsHaveCreds, setItemsHaveCreds] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
-  // "Esperando pago" abierta por defecto: conviene verla sin tener que abrirla.
-  const [showAwaiting, setShowAwaiting] = useState(true);
+  // Los intentos de pago sin confirmación van plegados: son ruido operativo
+  // hasta que llega comprobante o webhook.
+  const [showAwaiting, setShowAwaiting] = useState(false);
   // Selección múltiple para borrar de a varias (no una por una). `selMode` dice
   // en qué sección está activo el modo, así "Esperando pago" y "Canceladas" no
   // se mezclan; `selIds` guarda solo las de esa sección.
@@ -661,7 +663,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     setShowSuggestions(false);
   };
 
-  // Validación = solo lo que requiere una decisión tuya: un comprobante de
+  // Comprobantes que requieren una decisión tuya.
   // transferencia esperando aprobación. Una orden recién creada todavía no
   // pagó nada, y las de Mercado Pago las resuelve el webhook solo.
   const draftOrders = useMemo(
@@ -675,9 +677,9 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
   // Compras a medio camino: eligieron método de pago y no completaron. No son
   // trabajo pendiente, pero saber cuántas son dice mucho, así que van aparte.
-  // Las rechazadas viven acá y no en Validación: la pelota está en el cliente,
+  // Las rechazadas viven en Atención: la pelota está en el cliente,
   // que tiene que volver a subir su comprobante. Cuando lo hace, el portal
-  // deja el pago en 'pending' otra vez y la orden reaparece en Validación.
+  // deja el pago en 'pending' otra vez y la orden reaparece en Atención.
   const awaitingPayment = useMemo(
     () => orders.filter(o =>
       o.status === 'draft' &&
@@ -685,28 +687,49 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     ),
     [orders],
   );
+  const awaitingConfirmationOrders = useMemo(
+    () => awaitingPayment.filter(o => o.payment_status !== 'rejected'),
+    [awaitingPayment],
+  );
+  const awaitingReceiptOrders = useMemo(
+    () => awaitingConfirmationOrders.filter(o => o.payment_method !== "mercadopago"),
+    [awaitingConfirmationOrders],
+  );
+  const awaitingMercadoPagoOrders = useMemo(
+    () => awaitingConfirmationOrders.filter(o => o.payment_method === "mercadopago"),
+    [awaitingConfirmationOrders],
+  );
+  const rejectedPaymentOrders = useMemo(
+    () => awaitingPayment.filter(o => o.payment_status === 'rejected'),
+    [awaitingPayment],
+  );
   const cancelledOrders = useMemo(() => orders.filter(o => o.payment_status === 'cancelled'), [orders]);
   // Una orden con el pago aprobado ya es trabajo activo aunque su `status` siga
   // en 'draft': el cliente recién sale de 'draft' cuando ingresa su código de
   // Nintendo. Sin esta segunda condición esas órdenes no caían en NINGUNA
-  // pestaña (salían de Validación al aprobar y no entraban a Activas hasta que
+  // pestaña (salían de Atención al aprobar y no entraban a En curso hasta que
   // llegaba el código), así que desaparecían del panel a mitad del proceso.
   const activeOrders = useMemo(
     () => orders.filter(o =>
-      !['draft', 'completed', 'issue'].includes(o.status) ||
-      (o.status === 'draft' && o.payment_status === 'approved'),
+      !['cancelled', 'refunded'].includes(o.payment_status || '') &&
+      (
+        !['draft', 'completed', 'issue'].includes(o.status) ||
+        (o.status === 'draft' && o.payment_status === 'approved')
+      ),
     ),
     [orders],
   );
-  // Los problemas tienen su propia pestaña: son tickets abiertos, no entregas
-  // terminadas. Antes caían en el historial junto a las completadas.
+  // Tickets abiertos y cancelaciones que requieren revisar/devolver dinero.
   const issueOrders = useMemo(() => orders.filter(o => o.status === 'issue'), [orders]);
-  const historyOrders = useMemo(() => orders.filter(o => o.status === 'completed'), [orders]);
+  const historyOrders = useMemo(() => orders.filter(o => o.status === 'completed' || o.payment_status === 'refunded'), [orders]);
+  const setupOrders = useMemo(() => activeOrders.filter(o => o.status === 'pending_setup'), [activeOrders]);
+  const courseOrders = useMemo(() => activeOrders.filter(o => o.status !== 'pending_setup'), [activeOrders]);
+  const attentionCount = cancelledOrders.length + draftOrders.length + rejectedPaymentOrders.length + setupOrders.length + issueOrders.length;
+  const courseCount = awaitingReceiptOrders.length + courseOrders.length;
 
   const counts = {
-    drafts: draftOrders.length,
-    active: activeOrders.length,
-    issues: issueOrders.length,
+    attention: attentionCount,
+    course: courseCount,
     history: historyOrders.length,
   };
 
@@ -722,7 +745,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     const { error } = await supabase.from("orders").update({ status: next }).eq("id", o.id);
     setLoading(false);
     if (error) { showNotice("error", `No se pudo resolver: ${error.message}`); return; }
-    showNotice("success", "Problema resuelto — la orden volvió a Activas.");
+    showNotice("success", "Problema resuelto — la orden volvió a En curso.");
     await onReload();
   };
 
@@ -753,15 +776,15 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     return Array.from(groups.entries());
   }, [filteredHistoryOrders]);
 
-  // Secciones para "Activas"
+  // Secciones para "En curso"
   const activeSections = [
     // Los 'draft' que llegan aquí ya tienen el pago aprobado (ver activeOrders):
     // están exactamente en el mismo punto que un 'pending_console_code', solo
     // que su fila todavía no se actualizó porque el cliente no abrió el enlace.
-    { label: "Esperando código de Nintendo", status: "pending_console_code", items: activeOrders.filter(o => o.status === 'pending_console_code' || o.status === 'draft'), icon: Clock },
-    { label: "Código recibido (¡Tienes que preparar!)", status: "pending_setup", items: activeOrders.filter(o => o.status === 'pending_setup'), icon: AlertCircle, color: "text-yellow-500" },
-    { label: "Cliente avisado (Barra en 85%)", status: "preparing", items: activeOrders.filter(o => o.status === 'preparing'), icon: CheckCircle2 },
-    { label: "Credenciales Listas (Esperando confirmación)", status: "ready", items: activeOrders.filter(o => o.status === 'ready'), icon: KeyRound },
+    { label: "Esperando comprobante de pago", status: "awaiting_receipt", items: awaitingReceiptOrders, icon: Clock, color: "text-gray-500" },
+    { label: "Esperando código de Nintendo", status: "pending_console_code", items: courseOrders.filter(o => o.status === 'pending_console_code' || o.status === 'draft'), icon: Clock, color: "text-blue-400" },
+    { label: "Cliente avisado (Barra en 85%)", status: "preparing", items: courseOrders.filter(o => o.status === 'preparing'), icon: CheckCircle2, color: "text-orange-400" },
+    { label: "Credenciales listas", status: "ready", items: courseOrders.filter(o => o.status === 'ready'), icon: KeyRound, color: "text-teal-400" },
   ];
 
   // Índice del paso actual en el stepper (‑1 si es "issue", que no está en STEPS).
@@ -772,18 +795,44 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     if (selectedOrder) {
       const updatedOrder = orders.find(o => o.id === selectedOrder.id);
       if (updatedOrder) {
-        if (updatedOrder.console_code !== selectedOrder.console_code ||
-            updatedOrder.status !== selectedOrder.status ||
-            updatedOrder.payment_status !== selectedOrder.payment_status) {
+        if (JSON.stringify(updatedOrder) !== JSON.stringify(selectedOrder)) {
           setSelectedOrder(updatedOrder);
-          if (updatedOrder.status !== form.status) {
-            setForm(prev => ({ ...prev, status: updatedOrder.status }));
-            setOpenedForm(prev => ({ ...prev, status: updatedOrder.status }));
-          }
+          setForm(prev => updatedOrder.status !== prev.status ? ({ ...prev, status: updatedOrder.status }) : prev);
+          setOpenedForm(prev => updatedOrder.status !== prev.status ? ({ ...prev, status: updatedOrder.status }) : prev);
         }
       }
     }
   }, [orders]);
+
+  useEffect(() => {
+    if (!supabase || !selectedOrder?.id || !modalOpen) return;
+    const client = supabase;
+    const orderId = selectedOrder.id;
+    const applyFreshOrder = (fresh: Order) => {
+      setSelectedOrder(prev => prev?.id === orderId ? { ...prev, ...fresh } : prev);
+      setForm(prev => fresh.status !== prev.status ? ({ ...prev, status: fresh.status }) : prev);
+      setOpenedForm(prev => fresh.status !== prev.status ? ({ ...prev, status: fresh.status }) : prev);
+    };
+
+    const channel = client
+      .channel(`admin-open-order-${orderId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders", filter: `id=eq.${orderId}` },
+        (payload) => applyFreshOrder(payload.new as Order),
+      )
+      .subscribe();
+
+    const timer = window.setInterval(async () => {
+      const { data, error } = await client.from("orders").select("*").eq("id", orderId).maybeSingle();
+      if (!error && data) applyFreshOrder(data as Order);
+    }, 3000);
+
+    return () => {
+      window.clearInterval(timer);
+      client.removeChannel(channel);
+    };
+  }, [selectedOrder?.id, modalOpen]);
 
   const select = (o: Order) => {
     const f = toForm(o);
@@ -814,12 +863,18 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     if (!supabase) return;
     if (selectedOrder) {
       if (!window.confirm(`¿Estás seguro de cambiar el estado a "${STATUS_LABELS[newStatus]}"?`)) {
-        setForm({ ...form, status: selectedOrder.status });
+        setForm(prev => ({ ...prev, status: selectedOrder.status }));
         return;
       }
-      setForm({ ...form, status: newStatus });
+      const previousStatus = selectedOrder.status;
+      setLoading(true);
+      setForm(prev => ({ ...prev, status: newStatus }));
+      setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : prev);
       const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", selectedOrder.id);
+      setLoading(false);
       if (error) {
+        setForm(prev => ({ ...prev, status: previousStatus }));
+        setSelectedOrder(prev => prev ? { ...prev, status: previousStatus } : prev);
         showNotice("error", "Error al guardar el estado: " + error.message);
       } else {
         showNotice("success", "Estado guardado automáticamente.");
@@ -830,8 +885,24 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     }
   };
 
-  const save = async (e: FormEvent) => {
-    e.preventDefault(); if (!supabase) return;
+  const marcarReembolso = async (order = selectedOrder) => {
+    if (!supabase || !order) return;
+    const ok = window.confirm(
+      "Marca esta orden como reembolsada solo si ya hiciste la devolución en Mercado Pago o por el medio correspondiente.\n\n" +
+      "La orden saldrá de Atención y quedará como registro de reembolso. ¿Confirmar?",
+    );
+    if (!ok) return;
+    setLoading(true);
+    const { error } = await supabase.from("orders").update({ payment_status: "refunded" }).eq("id", order.id);
+    setLoading(false);
+    if (error) { showNotice("error", `No se pudo marcar reembolso: ${error.message}`); return; }
+    if (selectedOrder?.id === order.id) setSelectedOrder({ ...selectedOrder, payment_status: "refunded" });
+    showNotice("success", "Orden marcada como reembolsada.");
+    await onReload();
+  };
+
+  const save = async (e?: FormEvent, silent = false) => {
+    e?.preventDefault(); if (!supabase) return;
     const finalGameName = form.game_name.replace(/\+\s*$/, '').trim();
 
     // Solo se guardan los ids de packs cuyo título siga siendo, exactamente,
@@ -884,9 +955,11 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
         setSelectedOrder({ ...selectedOrder, ...payload } as any);
         setOpenedForm(form);
 
-        showNotice("success", missingPackIdsColumn
-          ? "Orden actualizada — falta correr orders-delete-pack-on-sale.sql en Supabase para el borrado automático de packs."
-          : (payload.status === "ready" ? "Datos guardados — orden marcada como Lista." : "Orden actualizada."));
+        if (!silent) {
+          showNotice("success", missingPackIdsColumn
+            ? "Orden actualizada — falta correr orders-delete-pack-on-sale.sql en Supabase para el borrado automático de packs."
+            : (payload.status === "ready" ? "Datos guardados — orden marcada como Lista." : "Orden actualizada."));
+        }
         // Ya no cerramos la ventana automáticamente para que el admin pueda seguir viendo.
         await onReload();
       } else {
@@ -908,8 +981,22 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       showNotice("error", error instanceof Error ? error.message : "No se pudo guardar.");
     } finally {
       setLoading(false);
+      setAutoSaving(false);
     }
   };
+
+  // Los campos principales se guardan automáticamente por orden. Las cuentas
+  // ya tienen su propio auto-guardado en EntregaItems; este bloque cubre orden,
+  // finanzas y proveedor sin pisar esos registros.
+  useEffect(() => {
+    if (!selectedOrder || !modalOpen || createdCode) return;
+    if (JSON.stringify(form) === JSON.stringify(openedForm)) return;
+    const timer = window.setTimeout(() => {
+      setAutoSaving(true);
+      void save(undefined, true);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [form, selectedOrder?.id, modalOpen, createdCode]);
 
   const del = async (orderToDel = selectedOrder) => {
     if (!supabase || !orderToDel) return;
@@ -971,7 +1058,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
    * Rechazar un comprobante SIN borrar la orden. El portal del cliente ya sabe
    * leer 'rejected': le avisa con un modal, le muestra el aviso en rojo y le
    * deja volver a subir la foto, lo que devuelve el pago a 'pending' y la
-   * orden a Validación. Borrarla, como se hacía antes, obligaba a rehacer la
+   * orden a Atención. Borrarla, como se hacía antes, obligaba a rehacer la
    * compra entera por una foto borrosa o un monto mal escrito.
    */
   const rechazarPago = async (order: Order) => {
@@ -1003,8 +1090,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
     }
     const done = await aprobarPago(order);
     if (!done) return;
-    showNotice("success", "Pago aprobado — la orden pasó a Activas, esperando el código.");
-    setActiveTab("active");
+    showNotice("success", "Pago aprobado — la orden pasó a En curso, esperando el código.");
+    setActiveTab("curso");
   };
 
   // Reinicia el proceso: el cliente vuelve a empezar.
@@ -1203,7 +1290,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
   const orderPanel = (
     <>
           {/* HEADER PRINCIPAL UNIFICADO */}
-          <div className="flex flex-wrap shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] bg-[#0c0f12]/95 px-4 py-3 backdrop-blur-md pt-[calc(1rem+env(safe-area-inset-top))]">
+          <div className="relative z-[200] flex flex-wrap shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] bg-[#0c0f12]/95 px-4 py-3 backdrop-blur-md pt-[calc(1rem+env(safe-area-inset-top))]">
             <div className="flex items-center gap-3 min-w-0 flex-wrap flex-1">
               {selectedOrder ? (
                 <button onClick={closeIfConfirmed} type="button" title="Volver a la lista"
@@ -1264,7 +1351,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                          animate={{ opacity: 1, y: 0, scale: 1 }}
                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
                          transition={{ duration: 0.2, ease: "easeOut" }}
-                         className="absolute left-0 top-full mt-2 z-50 w-full md:w-64 rounded-2xl border border-white/10 bg-[#12161a] p-2 shadow-2xl backdrop-blur-xl"
+                         className="absolute left-0 top-full z-[220] mt-2 w-full rounded-2xl border border-white/10 bg-[#12161a] p-2 shadow-2xl backdrop-blur-xl md:w-64"
                        >
                          <div className="mb-2 px-2 text-[9px] font-bold uppercase tracking-widest text-gray-500">
                            Cambiar Estado
@@ -1295,11 +1382,27 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                                   <s.icon size={13} strokeWidth={active ? 3 : 2} className={active ? "text-yellow-500" : ""} />
                                   {s.label}
                                 </button>
-                              );
+                             );
                            })}
+                           {selectedOrder.payment_status !== "refunded" && (
+                             <>
+                               <div className="my-1 h-px bg-white/10" />
+                               <button
+                                 type="button"
+                                 onClick={() => {
+                                   setStatusMenuOpen(false);
+                                   void marcarReembolso();
+                                 }}
+                                 className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 transition-all hover:bg-red-500/10 hover:text-red-200"
+                               >
+                                 <Receipt size={13} />
+                                 Reembolso hecho
+                               </button>
+                             </>
+                           )}
                          </div>
-                       </motion.div>
-                     )}
+                      </motion.div>
+                    )}
                    </AnimatePresence>
                  </div>
               )}
@@ -1314,10 +1417,17 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                  </div>
               )}
               
-              <button type="button" onClick={save} disabled={loading} className="flex items-center gap-1.5 rounded-full bg-yellow-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black shadow-[0_0_15px_rgba(234,179,8,0.2)] transition-all hover:bg-yellow-400 active:scale-95 disabled:opacity-50">
-                {loading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} strokeWidth={2.5} />}
-                <span className="hidden sm:inline">Guardar</span>
-              </button>
+              {selectedOrder ? (
+                <span className={`mr-2 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest ${autoSaving ? "text-yellow-500" : "text-green-500"}`}>
+                  {autoSaving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
+                  {autoSaving ? "Guardando" : "Guardado"}
+                </span>
+              ) : (
+                <button type="button" onClick={() => void save()} disabled={loading} className="flex items-center gap-1.5 rounded-full bg-yellow-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black shadow-[0_0_15px_rgba(234,179,8,0.2)] transition-all hover:bg-yellow-400 active:scale-95 disabled:opacity-50">
+                  {loading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} strokeWidth={2.5} />}
+                  <span className="hidden sm:inline">Crear orden</span>
+                </button>
+              )}
               
               {selectedOrder && (
                 <button type="button" onClick={() => del(selectedOrder)} title="Eliminar Orden" className="flex h-9 w-9 items-center justify-center rounded-xl text-red-500/60 transition-all hover:bg-red-500/10 hover:text-red-400 active:scale-95">
@@ -1460,8 +1570,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                               // de todas las pestañas hasta que llegara el código.
                               const done = await aprobarPago(selectedOrder);
                               if (!done) return;
-                              showNotice("success", "Pago aprobado — la orden pasó a Activas, esperando el código.");
-                              setActiveTab("active");
+                              showNotice("success", "Pago aprobado — la orden pasó a En curso, esperando el código.");
+                              setActiveTab("curso");
                             }} className="w-full rounded-full bg-green-500 py-2.5 text-[11px] font-black uppercase tracking-widest text-black transition-colors hover:bg-green-400 active:scale-95 disabled:opacity-60">
                               {loading ? "Aprobando…" : "Aprobar Pago"}
                             </button>
@@ -1481,20 +1591,30 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                               <AlertCircle size={14} /> Comprobante rechazado
                             </div>
                             <p className="px-1 text-center text-[10px] leading-snug text-gray-600">
-                              Esperando que el cliente suba uno nuevo. Vuelve a Validación cuando lo haga.
+                              Esperando que el cliente suba uno nuevo. Vuelve a Atención cuando lo haga.
                             </p>
                             <button type="button" disabled={loading} onClick={async () => {
                               const done = await aprobarPago(selectedOrder);
                               if (!done) return;
-                              showNotice("success", "Pago aprobado — la orden pasó a Activas, esperando el código.");
-                              setActiveTab("active");
+                              showNotice("success", "Pago aprobado — la orden pasó a En curso, esperando el código.");
+                              setActiveTab("curso");
                             }} className="w-full rounded-full border border-green-500/25 bg-green-500/10 py-2.5 text-[11px] font-black uppercase tracking-widest text-green-400 transition-colors hover:bg-green-500/20 active:scale-95 disabled:opacity-60">
                               Aprobar de todas formas
                             </button>
                           </div>
+                        ) : selectedOrder.payment_status === "refunded" ? (
+                          <div className="flex items-center justify-center gap-2 rounded-full border border-slate-400/25 bg-slate-400/10 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-300">
+                            <CheckCheck size={14} /> Reembolso registrado
+                          </div>
                         ) : (
+                          <div className="flex flex-col gap-2">
                           <div className="flex items-center justify-center gap-2 rounded-full border border-green-500/25 bg-green-500/10 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-green-400">
                             <CheckCircle2 size={14} /> Pago aprobado
+                          </div>
+                            <button type="button" disabled={loading} onClick={() => void marcarReembolso(selectedOrder)}
+                              className="w-full rounded-full border border-red-500/20 bg-red-500/10 py-2.5 text-[11px] font-black uppercase tracking-widest text-red-400 transition-colors hover:bg-red-500/20 active:scale-95 disabled:opacity-60">
+                              Marcar reembolso hecho
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1512,6 +1632,16 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                               : "Pago por Mercado Pago sin confirmar todavía. Se aprueba sola cuando llega el aviso de Mercado Pago; no la apruebes a mano salvo que sepas que el pago entró."
                             : "Esta orden no se pagó por transferencia, así que no hay comprobante que validar."}
                         </p>
+                        {selectedOrder.payment_status === "refunded" ? (
+                          <div className="mt-4 flex items-center justify-center gap-2 rounded-full border border-slate-400/25 bg-slate-400/10 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-300">
+                            <CheckCheck size={14} /> Reembolso registrado
+                          </div>
+                        ) : selectedOrder.payment_method === "mercadopago" || selectedOrder.payment_status === "cancelled" ? (
+                          <button type="button" disabled={loading} onClick={() => void marcarReembolso(selectedOrder)}
+                            className="mt-4 rounded-full border border-red-500/20 bg-red-500/10 px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-red-400 transition-colors hover:bg-red-500/20 active:scale-95 disabled:opacity-60">
+                            Marcar reembolso hecho
+                          </button>
+                        ) : null}
                       </div>
                     )}
                   </Shell>
@@ -1950,16 +2080,13 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
       {/* Tabs - Desktop */}
       <div className="hidden shrink-0 border-b border-white/[0.06] md:block">
         <div className="flex overflow-x-auto px-4 pb-3 pt-1 md:gap-2 md:pt-0">
-          <button onClick={() => setActiveTab('validacion')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mr-2 md:mr-0 ${activeTab === 'validacion' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
-            <span className="flex items-center gap-1.5">Validación {counts.drafts > 0 && <span className="bg-purple-500 text-black px-1.5 py-0.5 rounded-full text-[8px]">{counts.drafts}</span>}</span>
+          <button onClick={() => setActiveTab('atencion')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mr-2 md:mr-0 ${activeTab === 'atencion' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/25' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+            <span className="flex items-center gap-1.5">Atención {counts.attention > 0 && <span className="bg-yellow-500 text-black px-1.5 py-0.5 rounded-full text-[8px]">{counts.attention}</span>}</span>
           </button>
-          <button onClick={() => setActiveTab('active')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mr-2 md:mr-0 ${activeTab === 'active' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
-            <span className="flex items-center gap-1.5">Activas {counts.active > 0 && <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-full text-[8px]">{counts.active}</span>}</span>
+          <button onClick={() => setActiveTab('curso')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mr-2 md:mr-0 ${activeTab === 'curso' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+            <span className="flex items-center gap-1.5">En curso {counts.course > 0 && <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-full text-[8px]">{counts.course}</span>}</span>
           </button>
-          <button onClick={() => setActiveTab('problemas')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mr-2 md:mr-0 ${activeTab === 'problemas' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
-            <span className="flex items-center gap-1.5">Problemas {counts.issues > 0 && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[8px]">{counts.issues}</span>}</span>
-          </button>
-          <button onClick={() => setActiveTab('completadas')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'completadas' ? 'bg-slate-400/10 text-slate-300 border border-slate-400/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
+          <button onClick={() => setActiveTab('historial')} className={`shrink-0 md:flex-1 flex items-center justify-center px-4 md:px-0 py-2.5 md:py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'historial' ? 'bg-slate-400/10 text-slate-300 border border-slate-400/20' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>
             <span className="flex items-center gap-1.5">Historial {counts.history > 0 && <span className="bg-slate-400 text-black px-1.5 py-0.5 rounded-full text-[8px]">{counts.history}</span>}</span>
           </button>
         </div>
@@ -1967,37 +2094,38 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
       {/* MENÚ MÓVIL (Grid Dashboard) */}
       <div className={`md:hidden ${activeTab !== 'menu' ? 'hidden' : 'flex-1 overflow-y-auto px-4 py-6 pb-32'}`}>
-        <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setActiveTab('validacion')} className="flex flex-col items-center justify-center p-6 bg-purple-500/10 border border-purple-500/20 rounded-2xl active:scale-95 transition-all gap-3 relative">
-            {counts.drafts > 0 && <span className="absolute top-3 right-3 bg-purple-500 text-black px-2 py-0.5 rounded-full text-[10px] font-black">{counts.drafts}</span>}
-            <div className="p-3 bg-purple-500/20 rounded-full text-purple-400">
-              <CheckCircle2 size={24} />
+        <div className="grid gap-3">
+          <button onClick={() => setActiveTab('atencion')} className="relative flex items-center gap-4 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-5 text-left transition-all active:scale-95">
+            {counts.attention > 0 && <span className="absolute right-4 top-4 rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-black text-black">{counts.attention}</span>}
+            <div className="rounded-xl bg-yellow-500/20 p-3 text-yellow-400">
+              <AlertCircle size={22} />
             </div>
-            <span className="text-[11px] font-black uppercase tracking-widest text-purple-400">Validación</span>
+            <div>
+              <span className="text-[12px] font-black uppercase tracking-widest text-yellow-400">Atención</span>
+              <p className="mt-1 text-[11px] font-semibold text-gray-500">Comprobantes, devoluciones y códigos recibidos.</p>
+            </div>
           </button>
           
-          <button onClick={() => setActiveTab('active')} className="flex flex-col items-center justify-center p-6 bg-blue-500/10 border border-blue-500/20 rounded-2xl active:scale-95 transition-all gap-3 relative">
-            {counts.active > 0 && <span className="absolute top-3 right-3 bg-blue-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black">{counts.active}</span>}
-            <div className="p-3 bg-blue-500/20 rounded-full text-blue-400">
-              <RefreshCw size={24} />
+          <button onClick={() => setActiveTab('curso')} className="relative flex items-center gap-4 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5 text-left transition-all active:scale-95">
+            {counts.course > 0 && <span className="absolute right-4 top-4 rounded-full bg-blue-500 px-2 py-0.5 text-[10px] font-black text-white">{counts.course}</span>}
+            <div className="rounded-xl bg-blue-500/20 p-3 text-blue-400">
+              <RefreshCw size={22} />
             </div>
-            <span className="text-[11px] font-black uppercase tracking-widest text-blue-400">Activas</span>
+            <div>
+              <span className="text-[12px] font-black uppercase tracking-widest text-blue-400">En curso</span>
+              <p className="mt-1 text-[11px] font-semibold text-gray-500">Pedidos esperando pago, código o confirmación.</p>
+            </div>
           </button>
 
-          <button onClick={() => setActiveTab('problemas')} className="flex flex-col items-center justify-center p-6 bg-red-500/10 border border-red-500/20 rounded-2xl active:scale-95 transition-all gap-3 relative">
-            {counts.issues > 0 && <span className="absolute top-3 right-3 bg-red-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black">{counts.issues}</span>}
-            <div className="p-3 bg-red-500/20 rounded-full text-red-400">
-              <AlertCircle size={24} />
+          <button onClick={() => setActiveTab('historial')} className="relative flex items-center gap-4 rounded-2xl border border-slate-400/20 bg-slate-400/10 p-5 text-left transition-all active:scale-95">
+            {counts.history > 0 && <span className="absolute right-4 top-4 rounded-full bg-slate-400 px-2 py-0.5 text-[10px] font-black text-black">{counts.history}</span>}
+            <div className="rounded-xl bg-slate-400/20 p-3 text-slate-300">
+              <PackageCheck size={22} />
             </div>
-            <span className="text-[11px] font-black uppercase tracking-widest text-red-400">Problemas</span>
-          </button>
-
-          <button onClick={() => setActiveTab('completadas')} className="flex flex-col items-center justify-center p-6 bg-slate-400/10 border border-slate-400/20 rounded-2xl active:scale-95 transition-all gap-3 relative">
-            {counts.history > 0 && <span className="absolute top-3 right-3 bg-slate-400 text-black px-2 py-0.5 rounded-full text-[10px] font-black">{counts.history}</span>}
-            <div className="p-3 bg-slate-400/20 rounded-full text-slate-300">
-              <PackageCheck size={24} />
+            <div>
+              <span className="text-[12px] font-black uppercase tracking-widest text-slate-300">Historial</span>
+              <p className="mt-1 text-[11px] font-semibold text-gray-500">Entregas completadas y archivo.</p>
             </div>
-            <span className="text-[11px] font-black uppercase tracking-widest text-slate-300">Historial</span>
           </button>
         </div>
       </div>
@@ -2015,9 +2143,8 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                     <ArrowLeft size={18} />
                   </button>
                   <h2 className="text-[13px] font-black uppercase tracking-[0.15em] text-white">
-                    {activeTab === 'validacion' ? 'Validación' :
-                     activeTab === 'active' ? 'Órdenes Activas' :
-                     activeTab === 'problemas' ? 'Problemas' : 'Historial'}
+                    {activeTab === 'atencion' ? 'Atención' :
+                     activeTab === 'curso' ? 'En curso' : 'Historial'}
                   </h2>
                 </div>
                 <button onClick={newOrder} className="flex shrink-0 items-center gap-1 rounded-full bg-yellow-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-black active:scale-95 transition-transform">
@@ -2026,7 +2153,7 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
               </div>
 
               {/* Search Bar in Mobile Header */}
-              {activeTab === 'completadas' && historyOrders.length > 0 && (
+              {activeTab === 'historial' && historyOrders.length > 0 && (
                 <div className="px-4 pb-3">
                   <div className="relative">
                     <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
@@ -2043,111 +2170,159 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
 
             {/* Contenedor escroleable de la lista */}
             <div className="flex-1 overflow-y-auto pb-6 md:pb-0 relative">
-              {/* Vista: Nuevas Consultas (Borradores) */}
-              {activeTab === 'validacion' && (
+              {/* Vista: Atención (todo lo que requiere acción tuya) */}
+              {activeTab === 'atencion' && (
                 <div>
-                  {draftOrders.length === 0 ? (
-                    <div className="flex flex-col items-center gap-3 py-16 text-center">
-                      <HelpCircle size={24} className="text-gray-800" />
-                      <p className="text-xs text-gray-700">Nada por validar</p>
-                      <p className="text-[10px] text-gray-600 max-w-[240px]">
-                        Aquí aparecen solo las transferencias con comprobante subido, esperando que lo revises.
-                      </p>
-                    </div>
-                  ) : (
-                    draftOrders.map(item => <OrderItem key={item.id} item={item} />)
-                  )}
-                  {/* Canceladas o esperando sin comprobante se ocultan tras un botón para no hacer ruido */}
-                  <div className="mt-4 flex flex-col gap-2 border-t border-white/5 pt-4">
-                    <div className="flex w-full items-center gap-2 px-6">
-                      <button type="button" onClick={() => setShowAwaiting(v => !v)} className="flex flex-1 items-center gap-2 text-left">
-                        <X size={12} className="text-gray-600" />
-                        <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                          Esperando confirmación o pago ({awaitingPayment.length})
-                        </h2>
-                      </button>
-                      {showAwaiting ? botonSeleccion("await") : (
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">Ver</span>
-                      )}
-                    </div>
-
-                    {showAwaiting && (
-                      <>
-                        {barraSeleccion("await", awaitingPayment)}
-                        <p className="px-6 py-2 text-[10px] leading-relaxed text-gray-600">
-                          Eligieron un método de pago y no completaron. Las de Mercado Pago se aprueban solas
-                          cuando llega la confirmación; las de transferencia, cuando suban su comprobante.
-                          Las marcadas <span className="font-black text-red-400">Rechazado</span> ya subieron uno
-                          que no aprobaste: vuelven a Validación en cuanto suban otro.
-                        </p>
-                        {awaitingPayment.map(item => filaSeleccionable(item, "await"))}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Vista: Activas (Agrupadas por secciones) */}
-              {activeTab === 'active' && (
-                <div>
-                  {activeOrders.length === 0 ? (
-                    <div className="flex flex-col items-center gap-3 py-16 text-center">
-                      <PackageCheck size={24} className="text-gray-800" />
-                      <p className="text-xs text-gray-700">No hay entregas activas</p>
-                    </div>
-                  ) : (
-                    activeSections.map((section, i) => (
-                      section.items.length > 0 && (
-                        <div key={section.status} className="mb-6">
-                          {/* Cabecera de estado: numerada para que se lea como las
-                              etapas por las que va pasando la entrega. */}
-                          <div className="sticky top-0 z-10 flex items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
-                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-[8px] font-black text-gray-300">{i + 1}</span>
-                            <section.icon size={13} className={section.color || "text-gray-500"} />
-                            <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-400">{section.label} ({section.items.length})</h2>
-                          </div>
-                          {section.items.map(item => <OrderItem key={item.id} item={item} />)}
-                        </div>
-                      )
-                    ))
-                  )}
-                </div>
-              )}
-
-              {/* Vista: Problemas (tickets abiertos) */}
-              {activeTab === 'problemas' && (
-                <div>
-                  {issueOrders.length === 0 ? (
+                  {attentionCount === 0 ? (
                     <div className="flex flex-col items-center gap-3 py-16 text-center">
                       <CheckCircle2 size={24} className="text-gray-800" />
-                      <p className="text-xs text-gray-700">Sin problemas abiertos</p>
-                      <p className="max-w-[220px] text-[10px] text-gray-600">Aquí aparecen las entregas donde el cliente reportó un problema durante la instalación.</p>
+                      <p className="text-xs text-gray-700">Nada urgente</p>
+                      <p className="max-w-[260px] text-[10px] text-gray-600">Aquí aparecen comprobantes, devoluciones, códigos recibidos y tickets que necesitan revisión.</p>
                     </div>
                   ) : (
                     <>
-                      <div className="mb-2 border-b border-red-500/10 bg-red-500/5 p-4">
-                        <p className="text-[10px] font-bold text-red-400">
-                          Cada uno es un ticket abierto. Ábrelo para hablar con el cliente por el chat y, cuando esté solucionado, márcalo como resuelto: la orden vuelve a Activas donde quedó.
-                        </p>
-                      </div>
-                      {issueOrders.map(item => (
-                        <div key={item.id} className="flex items-center gap-2 border-b border-white/[0.04] pr-4">
-                          <div className="min-w-0 flex-1">
-                            <OrderItem item={item} />
+                      {cancelledOrders.length > 0 && (
+                        <div className="mb-6">
+                          <div className="flex w-full items-center gap-2 border-y border-red-500/10 bg-red-500/5 px-6 py-2">
+                            <button type="button" onClick={() => setShowCancelled(v => !v)} className="flex flex-1 items-center gap-2 text-left">
+                              <X size={12} className="text-red-400" />
+                              <h2 className="text-[10px] font-black uppercase tracking-widest text-red-300">
+                                Canceladas / devolución ({cancelledOrders.length})
+                              </h2>
+                            </button>
+                            {showCancelled ? botonSeleccion("cancel") : (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-red-400/70">Ver</span>
+                            )}
                           </div>
-                          <button type="button" onClick={() => resolverProblema(item)} disabled={loading}
-                            className="flex shrink-0 items-center gap-1.5 rounded-full border border-green-500/25 bg-green-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-green-400 transition-colors hover:bg-green-500/20 disabled:opacity-50">
-                            <Check size={12} strokeWidth={3} /> Resuelto
-                          </button>
+
+                          {showCancelled && (
+                            <>
+                              {barraSeleccion("cancel", cancelledOrders)}
+                              <p className="px-6 py-2 text-[10px] leading-relaxed text-red-200/70">
+                                Revisa o confirma la devolución. Cuando ya esté resuelto, puedes eliminar la orden del registro.
+                              </p>
+                              {cancelledOrders.map(item => filaSeleccionable(item, "cancel", "opacity-70"))}
+                            </>
+                          )}
                         </div>
+                      )}
+
+                      {draftOrders.length > 0 && (
+                        <div className="mb-6">
+                          <div className="sticky top-0 z-10 flex items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
+                            <Receipt size={13} className="text-yellow-400" />
+                            <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-300">Comprobantes por validar ({draftOrders.length})</h2>
+                          </div>
+                          {draftOrders.map(item => <OrderItem key={item.id} item={item} />)}
+                        </div>
+                      )}
+
+                      {setupOrders.length > 0 && (
+                        <div className="mb-6">
+                          <div className="sticky top-0 z-10 flex items-center gap-2 border-y border-yellow-500/10 bg-yellow-500/5 px-6 py-2">
+                            <AlertCircle size={13} className="text-yellow-400" />
+                            <h2 className="text-[10px] font-black uppercase tracking-widest text-yellow-300">Código recibido, preparar cuenta ({setupOrders.length})</h2>
+                          </div>
+                          {setupOrders.map(item => <OrderItem key={item.id} item={item} />)}
+                        </div>
+                      )}
+
+                      {issueOrders.length > 0 && (
+                        <div className="mb-6">
+                          <div className="border-b border-red-500/10 bg-red-500/5 p-4">
+                            <p className="text-[10px] font-bold text-red-400">
+                              Tickets abiertos. Ábrelos para hablar con el cliente y, cuando esté solucionado, márcalos como resueltos.
+                            </p>
+                          </div>
+                          {issueOrders.map(item => (
+                            <div key={item.id} className="flex items-center gap-2 border-b border-white/[0.04] pr-4">
+                              <div className="min-w-0 flex-1">
+                                <OrderItem item={item} />
+                              </div>
+                              <button type="button" onClick={() => resolverProblema(item)} disabled={loading}
+                                className="flex shrink-0 items-center gap-1.5 rounded-full border border-green-500/25 bg-green-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-green-400 transition-colors hover:bg-green-500/20 disabled:opacity-50">
+                                <Check size={12} strokeWidth={3} /> Resuelto
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {rejectedPaymentOrders.length > 0 && (
+                        <div className="mb-6">
+                          <div className="flex w-full items-center gap-2 border-y border-red-500/10 bg-red-500/5 px-6 py-2">
+                            <AlertCircle size={13} className="text-red-400" />
+                            <h2 className="text-[10px] font-black uppercase tracking-widest text-red-300">Pagos rechazados ({rejectedPaymentOrders.length})</h2>
+                          </div>
+                          <p className="px-6 py-2 text-[10px] leading-relaxed text-red-200/70">
+                            El cliente debe subir otro comprobante o intentar pagar nuevamente.
+                          </p>
+                          {rejectedPaymentOrders.map(item => filaSeleccionable(item, "await"))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Vista: En curso (seguimiento sin urgencia inmediata) */}
+              {activeTab === 'curso' && (
+                <div>
+                  {courseCount === 0 && awaitingMercadoPagoOrders.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 py-16 text-center">
+                      <PackageCheck size={24} className="text-gray-800" />
+                      <p className="text-xs text-gray-700">No hay entregas en curso</p>
+                      <p className="max-w-[240px] text-[10px] text-gray-600">Aquí queda lo que está esperando pago, código o confirmación del cliente.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {activeSections.map((section, i) => (
+                        section.items.length > 0 && (
+                          <div key={section.status} className="mb-6">
+                            {/* Cabecera de estado: numerada para que se lea como las
+                                etapas por las que va pasando la entrega. */}
+                            <div className="sticky top-0 z-10 flex items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-[8px] font-black text-gray-300">{i + 1}</span>
+                              <section.icon size={13} className={section.color || "text-gray-500"} />
+                              <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-400">{section.label} ({section.items.length})</h2>
+                            </div>
+                            {section.items.map(item => <OrderItem key={item.id} item={item} />)}
+                          </div>
+                        )
                       ))}
+
+                      {awaitingMercadoPagoOrders.length > 0 && (
+                        <div className="mb-6 opacity-80">
+                          <div className="flex w-full items-center gap-2 border-y border-sky-500/10 bg-sky-500/5 px-6 py-2">
+                            <button type="button" onClick={() => setShowAwaiting(v => !v)} className="flex flex-1 items-center gap-2 text-left">
+                              <Receipt size={13} className="text-sky-400" />
+                              <h2 className="text-[10px] font-black uppercase tracking-widest text-sky-300">
+                                Intentos Mercado Pago sin confirmar ({awaitingMercadoPagoOrders.length})
+                              </h2>
+                            </button>
+                            {showAwaiting ? botonSeleccion("await") : (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-sky-400/70">Ver</span>
+                            )}
+                          </div>
+
+                          {showAwaiting && (
+                            <>
+                              {barraSeleccion("await", awaitingMercadoPagoOrders)}
+                              <p className="px-6 py-2 text-[10px] leading-relaxed text-sky-200/70">
+                                Son preferencias creadas antes de que Mercado Pago confirme el cobro. Si no tienen pago aprobado después de un rato, puedes eliminarlas sin afectar la orden que sí pagó.
+                              </p>
+                              {awaitingMercadoPagoOrders.map(item => filaSeleccionable(item, "await", "opacity-70"))}
+                            </>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
               )}
 
               {/* Vista: Historial */}
-              {activeTab === 'completadas' && (
+              {activeTab === 'historial' && (
                 <div>
                   {historyOrders.length > 0 && (
                     <div className="hidden md:block sticky top-0 z-10 border-b border-white/5 bg-[rgb(9,9,11)] px-4 py-3">
@@ -2182,26 +2357,6 @@ export function Entregas({ orders, games, packs, providers, settings, loading, s
                         <HistoryTable items={items} onSelect={select} />
                       </div>
                     ))
-                  )}
-
-                  {/* Canceladas */}
-                  {cancelledOrders.length > 0 && (
-                    <div className="mt-4">
-                      <div className="flex w-full items-center gap-2 border-y border-white/5 bg-[rgb(12,12,14)] px-6 py-2">
-                        <button type="button" onClick={() => setShowCancelled(v => !v)} className="flex flex-1 items-center gap-2 text-left">
-                          <X size={12} className="text-gray-600" />
-                          <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                            Canceladas por el cliente ({cancelledOrders.length})
-                          </h2>
-                        </button>
-                        {showCancelled ? botonSeleccion("cancel") : (
-                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">Ver</span>
-                        )}
-                      </div>
-
-                      {showCancelled && barraSeleccion("cancel", cancelledOrders)}
-                      {showCancelled && cancelledOrders.map(item => filaSeleccionable(item, "cancel", "opacity-60"))}
-                    </div>
                   )}
                 </div>
               )}

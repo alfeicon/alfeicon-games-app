@@ -5,6 +5,7 @@ import {
   Gamepad2, Gift, Loader2, Pencil, Receipt, RefreshCw, Search, Trash2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { saleNetProfit, saleNetRevenue, salePaymentFee } from "@/lib/sales-finance";
 import type { Provider, Sale, SettingsState } from "../_types";
 import { fmt, fmtDate, fmtTime } from "../_helpers";
 import { EditSaleModal } from "./EditSaleModal";
@@ -130,7 +131,9 @@ export function Ventas({ sales, providers, settings, salesTableExists, salesErro
                   <Fragment key={month}>
                     <p className="px-1 pt-2 text-[10px] font-black uppercase tracking-widest text-gray-500 capitalize first:pt-0">{month} ({items.length})</p>
                     {items.map(sale => {
-                  const gain = sale.price_sold - (sale.cost_price ?? 0);
+                  const fee = salePaymentFee(sale);
+                  const netRevenue = saleNetRevenue(sale);
+                  const gain = saleNetProfit(sale);
                   const hasCost = (sale.cost_price ?? 0) > 0;
                   return (
                     <div key={sale.id} className="brand-shell rounded-2xl p-3.5">
@@ -159,6 +162,7 @@ export function Ventas({ sales, providers, settings, salesTableExists, salesErro
                         <div>
                           <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Venta</p>
                           <p className="text-sm font-black text-green-400">${fmt(sale.price_sold)}</p>
+                          {fee > 0 && <p className="text-[9px] font-bold text-sky-400">Rec. ${fmt(netRevenue)}</p>}
                         </div>
                         <div>
                           <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Costo</p>
@@ -196,7 +200,9 @@ export function Ventas({ sales, providers, settings, salesTableExists, salesErro
                         <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 capitalize">{month} ({items.length})</p>
                       </div>
                       {items.map(sale => {
-                    const gain = sale.price_sold - (sale.cost_price ?? 0);
+                    const fee = salePaymentFee(sale);
+                    const netRevenue = saleNetRevenue(sale);
+                    const gain = saleNetProfit(sale);
                     const hasCost = (sale.cost_price ?? 0) > 0;
                     return (
                       <div key={sale.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto_auto] items-center gap-x-3 px-4 py-3 hover:bg-white/[0.02] transition-colors">
@@ -209,7 +215,10 @@ export function Ventas({ sales, providers, settings, salesTableExists, salesErro
                           {sale.item_type === "pack" ? <Gift size={11} /> : <Gamepad2 size={11} />}
                           {sale.item_type === "pack" ? "Pack" : "Juego"}
                         </div>
-                        <p className="text-sm font-black text-green-400">${fmt(sale.price_sold)}</p>
+                        <div>
+                          <p className="text-sm font-black text-green-400">${fmt(sale.price_sold)}</p>
+                          {fee > 0 && <p className="text-[9px] font-bold text-sky-400">Rec. ${fmt(netRevenue)}</p>}
+                        </div>
                         <p className="text-sm text-orange-400/80">{hasCost ? `$${fmt(sale.cost_price)}` : <span className="text-gray-700">—</span>}</p>
                         <div>
                           <p className={`text-sm font-black ${!hasCost ? "text-gray-700" : gain >= 0 ? "text-green-400" : "text-red-400"}`}>

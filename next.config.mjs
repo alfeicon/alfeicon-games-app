@@ -21,6 +21,9 @@ const nextConfig = {
     root: __dirname,
   },
   images: {
+    // Las portadas de Nintendo a veces vencen el timeout del optimizador local.
+    // En desarrollo se cargan directo desde Nintendo para que no bloqueen la UI.
+    unoptimized: process.env.NODE_ENV === "development",
     remotePatterns: [
       {
         protocol: "https",

@@ -4293,6 +4293,21 @@ html {
   from { opacity: 0; transform: translate3d(-22px, 0, 0); }
   to   { opacity: 1; transform: translate3d(0, 0, 0); }
 }
+
+/* Animación de ingreso de monedas del resumen financiero. */
+@keyframes moneyBillDrop {
+  0% { opacity: 0; transform: translateY(-38px) rotate(-18deg) scale(0.75); }
+  18% { opacity: 1; }
+  78% { opacity: 1; transform: translateY(4px) rotate(8deg) scale(1); }
+  90% { transform: translateY(-2px) rotate(-4deg) scale(1.04, 0.88); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+}
+
+.money-bill {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: moneyBillDrop 900ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+}
 .admin-section-in-right {
   animation: adminSectionInRight 300ms var(--ease-standard) both;
 }
@@ -4520,7 +4535,8 @@ html {
   .admin-sheet-out,
   .admin-backdrop,
   .admin-badge,
-  .admin-skeleton {
+  .admin-skeleton,
+  .money-bill {
     animation: none !important;
   }
   .admin-sidebar,
@@ -4575,4 +4591,3 @@ input:-webkit-autofill:active {
     transition: background-color 5000s ease-in-out 0s;
     -webkit-text-fill-color: #fff !important;
 }
-

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
-import { ArrowRight, ArrowLeft, Smartphone, Maximize, X, CheckCircle2, Copy, Gamepad2, Loader2, PackageCheck, MonitorSmartphone, KeyRound, Check, AlertCircle, Hash, Camera, LifeBuoy, BellRing, Send, ChevronDown, MessageCircle, CheckCheck, ShieldCheck, ImagePlus } from "lucide-react";
+import { ArrowRight, ArrowLeft, Smartphone, Maximize, X, CheckCircle2, Copy, Gamepad2, Loader2, PackageCheck, MonitorSmartphone, KeyRound, Check, AlertCircle, Hash, Camera, LifeBuoy, BellRing, Send, ChevronDown, MessageCircle, CheckCheck, ShieldCheck, ImagePlus, Receipt } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import TransferDetailsPanel from "@/components/app-store/TransferDetailsPanel";
 import SupportTicketModal from "@/components/app-store/SupportTicketModal";
@@ -43,6 +43,7 @@ const usarRespaldoInstruccion = (e: React.SyntheticEvent<HTMLImageElement>, paso
 type WizardState =
   | "loading"
   | "error"
+  | "closed"
   | "payment"
   | "select_console"
   | "tutorial"
@@ -71,6 +72,7 @@ export function EntregaWizard() {
   const nombreTitularOk = nombreTitular.trim().split(/\s+/).filter(Boolean).length >= 2;
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
+  const [cancelDone, setCancelDone] = useState(false);
   const [state, setState] = useState<WizardState>("loading");
   const [consoleType, setConsoleType] = useState<"switch1" | "switch2" | null>(null);
   const [tutorialStep, setTutorialStep] = useState(1);
@@ -98,10 +100,10 @@ export function EntregaWizard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [chatError, setChatError] = useState<string | null>(null);
   const [adminTyping, setAdminTyping] = useState(false);
-  const chatChannelRef = useRef<any>(null);
   const typingTimerRef = useRef<number | null>(null);
   const chatOpenRef = useRef(false);
   const [messages, setMessages] = useState<OrderMessage[]>([]);
+  const messagesRef = useRef<OrderMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
@@ -111,10 +113,23 @@ export function EntregaWizard() {
   const notifiedWaitingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const progressRef = useRef(0);
-  const subscriptionRef = useRef<any>(null);
   const playedPreparingSound = useRef(false);
   const wakeLockRef = useRef<any>(null);
+  const mpReturnCheckedRef = useRef(false);
   const [notificationStatus, setNotificationStatus] = useState<NotificationPermission | "default">("default");
+
+  const deliveryApi = async (method: "GET" | "POST", body?: Record<string, unknown>) => {
+    const code = encodeURIComponent(String(params.codigo || "").trim().toUpperCase());
+    const response = await fetch(`/api/entrega/${code}`, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "No se pudo actualizar la entrega");
+    return data as { order: Order; items: OrderItem[]; messages: OrderMessage[] };
+  };
 
   useEffect(() => {
     try {
@@ -238,42 +253,32 @@ export function EntregaWizard() {
     };
   }, [state]);
 
-  // Progreso simulado para waiting_setup (lento)
+  // La barra representa una hora real desde el último código enviado. Nunca
+  // llega al 100% por sí sola: el 1% final queda reservado para las
+  // credenciales, y un código nuevo reinicia el contador desde cero.
   useEffect(() => {
-    let interval: any;
-    if (state === "waiting_setup") {
-      if (order?.status === "preparing" && progressRef.current < 85) {
-        progressRef.current = 85;
-        setProgress(85);
+    if (state !== "waiting_setup" || !order) return;
+    const startedAt = Date.parse(order.console_code_submitted_at || order.created_at);
+    const hour = 60 * 60 * 1000;
+    const updateProgress = () => {
+      const elapsed = Math.max(0, Date.now() - (Number.isFinite(startedAt) ? startedAt : Date.now()));
+      const currentProgress = Math.min(99, Math.floor((elapsed / hour) * 99));
+      progressRef.current = currentProgress;
+      setProgress(currentProgress);
+      if (currentProgress >= 85 && !playedPreparingSound.current) {
+        playNotificationSound();
+        playedPreparingSound.current = true;
+        if (!notifiedRef.current.has("85")) {
+          notifiedRef.current.add("85");
+          notifyClient("¡Estamos por terminar! ⏳", "El proceso va en un 85%, prepárate para recibir tus credenciales.");
+        }
       }
-      
-      interval = setInterval(() => {
-        if (order?.status === "preparing" && progressRef.current < 85) {
-          progressRef.current = 85;
-        }
-
-        if (progressRef.current < 40) progressRef.current += 0.5; // Rápido hasta el 40%
-        else if (progressRef.current < 75) progressRef.current += 0.1; // Lento hasta el 75% (~6 minutos)
-        else if (progressRef.current < 85 && order?.status !== "preparing") progressRef.current += 0.05; // Muy lento hasta el 85%
-        else if (progressRef.current < 99) progressRef.current += 0.01; // Casi estático hasta el 99%
-        
-        const currentProgress = Math.floor(progressRef.current);
-        setProgress(currentProgress);
-
-        // Sonido de alerta cuando llega al 85% o preparing
-        if ((order?.status === "preparing" || currentProgress >= 85) && !playedPreparingSound.current) {
-          playNotificationSound();
-          playedPreparingSound.current = true;
-          if (!notifiedRef.current.has("85")) {
-             notifiedRef.current.add("85");
-             notifyClient("¡Estamos por terminar! ⏳", "El proceso va en un 85%, prepárate para recibir tus credenciales.");
-          }
-        }
-
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [state, order?.status]);
+    };
+    playedPreparingSound.current = false;
+    updateProgress();
+    const interval = window.setInterval(updateProgress, 1000);
+    return () => window.clearInterval(interval);
+  }, [state, order?.console_code, order?.console_code_submitted_at, order?.created_at]);
 
   useEffect(() => {
     if (order?.payment_status === "rejected") {
@@ -283,99 +288,51 @@ export function EntregaWizard() {
 
   useEffect(() => {
     if (!params.codigo) return;
-    loadOrder();
+    const init = async () => {
+      await confirmarRetornoMercadoPago();
+      await loadOrder();
+    };
+    init().catch(error => {
+      console.error("[entrega] excepción al iniciar la orden", error);
+      setState("error");
+    });
 
     return () => {
-      if (subscriptionRef.current) {
-        supabase?.removeChannel(subscriptionRef.current);
-      }
       if (codeWarnTimer.current) clearTimeout(codeWarnTimer.current);
       if (codeSentTimer.current) clearTimeout(codeSentTimer.current);
     };
   }, [params.codigo]);
 
-  // Las cuentas van en su propia tabla desde que una compra puede traer varias.
-  // Las órdenes creadas a mano en el admin pueden no tener ítems: en ese caso
-  // se sigue usando la cuenta de la orden (modelo antiguo).
-  const loadItems = async (orderId: string): Promise<OrderItem[]> => {
-    if (!supabase) return [];
-    const { data, error } = await supabase
-      .from("order_items")
-      .select("*")
-      .eq("order_id", orderId)
-      .order("sort_order", { ascending: true });
-    if (error) {
-      console.warn("[entrega] no se pudieron cargar los ítems", error.message);
-      return [];
+  const confirmarRetornoMercadoPago = async () => {
+    if (mpReturnCheckedRef.current || typeof window === "undefined") return;
+    mpReturnCheckedRef.current = true;
+
+    const search = new URLSearchParams(window.location.search);
+    const status = search.get("status") || search.get("collection_status");
+    const paymentId = search.get("payment_id") || search.get("collection_id");
+    if (status !== "approved" || !paymentId) return;
+
+    try {
+      await deliveryApi("POST", { action: "confirm_mp_payment", payment_id: paymentId });
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, "", cleanUrl);
+    } catch (error) {
+      console.warn("[entrega] no se pudo confirmar el retorno de Mercado Pago", error);
     }
-    const lista = (data || []) as OrderItem[];
-    setItems(lista);
-    return lista;
   };
 
   const loadOrder = async () => {
-    if (!supabase) {
-      console.error("[entrega] supabase es null — faltan NEXT_PUBLIC_SUPABASE_URL / ANON_KEY en este build. Se queda en 'buscando'.");
-      return;
-    }
-    // El código va en la URL: normalizamos (trim + mayúsculas) para evitar
-    // fallos por espacios o minúsculas al copiar/pegar el enlace.
-    const code = (params.codigo || "").trim().toUpperCase();
     try {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("short_code", code)
-        .maybeSingle();
-
-      if (error) {
-        // Error real (RLS, red, etc.) — distinto de "no existe".
-        console.error("[entrega] error al buscar la orden", code, error);
-        setState("error");
-        return;
-      }
-      if (!data) {
-        console.warn("[entrega] no existe ninguna orden con código:", code);
-        setState("error");
-        return;
-      }
-
-      setOrder(data as Order);
-      const cargados = await loadItems(data.id);
-      determineNextState(data as Order, cargados);
-      setupRealtime(data.id);
+      const data = await deliveryApi("GET");
+      setOrder(data.order);
+      setItems(data.items || []);
+      setMessages(data.messages || []);
+      setUnreadCount((data.messages || []).filter(m => m.sender === "admin" && !m.read_at).length);
+      determineNextState(data.order, data.items || []);
     } catch (e) {
       console.error("[entrega] excepción al cargar la orden", e);
       setState("error");
     }
-  };
-
-  const setupRealtime = (orderId: string) => {
-    if (!supabase) return;
-    
-    // Subscribe to changes on this specific order
-    subscriptionRef.current = supabase
-      .channel(`order-${orderId}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        (payload) => {
-          const updatedOrder = payload.new as Order;
-          setOrder(updatedOrder);
-          determineNextState(updatedOrder);
-
-          // Avisar al cliente (notificación del navegador) cuando le enviamos
-          // las credenciales (status "ready"). Una sola vez por incidente.
-          if (updatedOrder.status === "ready" && !notifiedRef.current.has("ready")) {
-            notifiedRef.current.add("ready");
-            notifyClient(
-              "¡Tus credenciales están listas! 🎮",
-              "Ya puedes continuar con la instalación de tu juego en Alfeicon Games.",
-            );
-          }
-        }
-      )
-      .subscribe();
   };
 
   // Fallback: Polling de seguridad cada 5 segundos
@@ -385,27 +342,27 @@ export function EntregaWizard() {
     if (["loading", "select_console", "tutorial", "input_code"].includes(state)) return; // No hacer polling si aún no envía el código
     if (["credentials_ready", "tutorial_download", "ready"].includes(state)) return; // No hacer polling si ya terminó
 
-    if (order?.id && supabase) {
+    if (order?.id) {
       pollInterval = setInterval(async () => {
         try {
-          if (!supabase) return;
-          const { data, error } = await supabase.from("orders").select("*").eq("id", order.id).maybeSingle();
-          if (data && !error) {
-            const lista = await loadItems(order.id);
-            const siguiente = lista.find(i => !i.completed_at);
+          const data = await deliveryApi("GET");
+          const lista = data.items || [];
+          const siguiente = lista.find(i => !i.completed_at);
+          setItems(lista);
+          if (data.order) {
             // Si el estado o los datos clave cambiaron, actualizamos.
             // payment_status entra aquí porque aprobar o rechazar un comprobante
             // no toca `status`: sin esto, con el realtime caído el cliente se
             // quedaba mirando "comprobante en revisión" para siempre.
-            if (data.status !== order.status || data.account_email !== order.account_email || data.payment_status !== order.payment_status) {
-              setOrder(data as Order);
-              determineNextState(data as Order, lista);
-            } else if (state === "waiting_setup" && siguiente?.account_email && data.status === "ready") {
+            if (data.order.status !== order.status || data.order.account_email !== order.account_email || data.order.payment_status !== order.payment_status) {
+              setOrder(data.order);
+              determineNextState(data.order, lista);
+            } else if (state === "waiting_setup" && siguiente?.account_email && siguiente?.account_password) {
               // Cargamos la cuenta que faltaba y la orden ya está Lista: el cliente avanza.
               playNotificationSound();
               setState("credentials_ready");
             }
-          }
+            }
         } catch (e) {
           console.warn("Error polling order:", e);
         }
@@ -417,77 +374,43 @@ export function EntregaWizard() {
     };
   }, [state, order?.id, order?.status, order?.account_email, order?.payment_status]);
 
-  // Chat de soporte: carga el historial y se suscribe a mensajes nuevos en
-  // tiempo real mientras la burbuja está activa (mismo patrón de canal/limpieza
-  // que setupRealtime, arriba). Si llega un mensaje del admin con el panel
-  // cerrado, se cuenta como no leído para el badge de la burbuja.
+  // Chat de soporte: el servidor devuelve solo los mensajes de este código.
+  // Usamos sondeo liviano para no exponer order_messages vía Realtime público.
   useEffect(() => {
-    if (!order?.id || !supabase) return;
-    const client = supabase;
-    const orderId = order.id;
+    if (!order?.id) return;
     let cancelled = false;
-
-    client
-      .from("order_messages")
-      .select("*")
-      .eq("order_id", orderId)
-      .order("created_at", { ascending: true })
-      .then(({ data, error }) => {
-        if (cancelled || error || !data) return;
-        const list = data as OrderMessage[];
+    const refreshMessages = async () => {
+      try {
+        const data = await deliveryApi("GET");
+        if (cancelled) return;
+        const previous = new Set(messagesRef.current.map(m => m.id));
+        const list = data.messages || [];
+        const newAdminMessage = list.some(m => m.sender === "admin" && !previous.has(m.id));
+        messagesRef.current = list;
         setMessages(list);
-        // Lo que nos escribió y todavía no ve entra al badge de la burbuja.
+        if (newAdminMessage && !chatOpenRef.current) playNotificationSound();
         setUnreadCount(list.filter(m => m.sender === "admin" && !m.read_at).length);
-      });
-
-    const channel = client
-      .channel(`order-messages-${orderId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "order_messages", filter: `order_id=eq.${orderId}` },
-        (payload) => {
-          const msg = payload.new as OrderMessage;
-          setMessages((prev) => [...prev, msg]);
-          if (msg.sender === "admin" && !chatOpenRef.current) {
-            setUnreadCount((n) => n + 1);
-            playNotificationSound();
-          }
-        },
-      )
-      // El "visto" del admin llega como UPDATE de read_at.
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "order_messages", filter: `order_id=eq.${orderId}` },
-        (payload) => {
-          const msg = payload.new as OrderMessage;
-          setMessages((prev) => prev.map(m => (m.id === msg.id ? msg : m)));
-        },
-      )
-      // "Escribiendo…" del admin: efímero, va por broadcast y no toca la BD.
-      .on("broadcast", { event: "typing" }, ({ payload }) => {
-        if (payload?.from !== "admin") return;
-        setAdminTyping(true);
-        if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
-        typingTimerRef.current = window.setTimeout(() => setAdminTyping(false), 3000);
-      })
-      .subscribe();
-
-    chatChannelRef.current = channel;
+      } catch (error) {
+        if (!cancelled) console.warn("[entrega] no se pudieron actualizar mensajes", error);
+      }
+    };
+    refreshMessages();
+    const timer = window.setInterval(refreshMessages, 5000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
       if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
-      client.removeChannel(channel);
     };
   }, [order?.id]);
 
   // Marca como leídos los mensajes del admin cuando el panel está abierto.
   // Si falta correr order-messages-read.sql, el update falla sin romper nada.
   useEffect(() => {
-    if (!chatOpen || !supabase || messages.length === 0) return;
+    if (!chatOpen || messages.length === 0) return;
     const ids = messages.filter(m => m.sender === "admin" && !m.read_at).map(m => m.id);
     if (ids.length === 0) return;
-    supabase.from("order_messages").update({ read_at: new Date().toISOString() }).in("id", ids)
-      .then(({ error }) => { if (error) console.warn("[entrega] no se pudo marcar leído", error.message); });
+    deliveryApi("POST", { action: "read_messages", ids })
+      .catch(error => console.warn("[entrega] no se pudo marcar leído", error));
   }, [chatOpen, messages]);
 
   // Auto-scroll al último mensaje del chat de soporte.
@@ -509,16 +432,21 @@ export function EntregaWizard() {
 
   const sendSupportMessage = async () => {
     const body = messageInput.trim();
-    if (!body || !supabase || !order || sendingMessage) return;
+    if (!body || !order || sendingMessage) return;
     setSendingMessage(true);
-    const { error } = await supabase.from("order_messages").insert({ order_id: order.id, sender: "customer", body });
-    setSendingMessage(false);
-    if (error) {
+    try {
+      await deliveryApi("POST", { action: "message", message: body });
+      const data = await deliveryApi("GET");
+      messagesRef.current = data.messages || [];
+      setMessages(data.messages || []);
+    } catch (error) {
       // Antes esto solo iba a la consola: el cliente veía que "no pasaba nada".
       console.error("Error enviando mensaje de soporte", error);
       setChatError("No pudimos enviar tu mensaje. Escríbenos por Instagram y te ayudamos igual.");
+      setSendingMessage(false);
       return;
     }
+    setSendingMessage(false);
     setChatError(null);
     setMessageInput("");
 
@@ -554,10 +482,7 @@ export function EntregaWizard() {
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("comprobantes").getPublicUrl(path);
 
-      const { error: msgErr } = await supabase.from("order_messages").insert({
-        order_id: order.id, sender: "customer", body: marcarImagen(pub.publicUrl),
-      });
-      if (msgErr) throw msgErr;
+      await deliveryApi("POST", { action: "message", message: marcarImagen(pub.publicUrl) });
       setChatError(null);
 
       const ahora = Date.now();
@@ -597,8 +522,7 @@ export function EntregaWizard() {
         payment_status: "pending" as const,
         ...(nombre ? { client_name: nombre } : {}),
       };
-      const { error: updErr } = await supabase.from("orders").update(patch).eq("id", order.id);
-      if (updErr) throw updErr;
+      await deliveryApi("POST", { action: "upload_receipt", receipt_url: url, client_name: nombre });
       const ordenActualizada = { ...order, ...patch };
       setOrder(ordenActualizada);
 
@@ -618,6 +542,11 @@ export function EntregaWizard() {
   };
 
   const determineNextState = (o: Order, lista: OrderItem[] = items) => {
+    if (o.payment_status === "cancelled" || o.payment_status === "refunded") {
+      setState("closed");
+      return;
+    }
+
     // Gate de pago: una orden por transferencia que aún no está aprobada muestra
     // la pantalla de pago (datos + subir comprobante), antes de la instalación.
     // Las órdenes de siempre (payment_method null) saltan el gate y siguen igual.
@@ -636,7 +565,7 @@ export function EntregaWizard() {
         ? lista.every(i => garantiaVencida(i))
         : garantiaVencida(o);
       setState(vencido ? "expired" : "ready");
-    } else if (o.status === "ready") {
+    } else if (o.status === "ready" || lista.some(i => !i.completed_at && i.account_email && i.account_password)) {
       // Estado 4: credenciales entregadas → check, luego pasos de descarga.
       // Si ya está en el flujo (check / pasos / boleta), se respeta.
       setState((prev) => ["credentials_ready", "tutorial_download", "ready"].includes(prev) ? prev : "credentials_ready");
@@ -699,13 +628,13 @@ export function EntregaWizard() {
   const confirmCompleted = async () => {
     const ahora = new Date().toISOString();
 
-    if (supabase && itemActual) {
+    if (itemActual) {
       // Marca la cuenta recién instalada: aquí empieza SU garantía.
-      const { error } = await supabase
-        .from("order_items")
-        .update({ completed_at: ahora })
-        .eq("id", itemActual.id);
-      if (error) console.error("[entrega] no se pudo cerrar el ítem", error);
+      try {
+        await deliveryApi("POST", { action: "complete_item", item_id: itemActual.id });
+      } catch (error) {
+        console.error("[entrega] no se pudo cerrar el ítem", error);
+      }
 
       const restantes = items.filter(i => i.id !== itemActual.id && !i.completed_at);
       setItems(prev => prev.map(i => i.id === itemActual.id ? { ...i, completed_at: ahora } : i));
@@ -721,15 +650,13 @@ export function EntregaWizard() {
       }
     }
 
-    if (supabase && order) {
+    if (order) {
       // La orden se cierra cuando ya no queda ninguna cuenta por instalar.
       const completed_at = ahora;
-      const { error } = await supabase
-        .from("orders")
-        .update({ status: "completed", completed_at })
-        .eq("id", order.id);
-      if (error?.code === "42703") {
-        await supabase.from("orders").update({ status: "completed" }).eq("id", order.id);
+      try {
+        await deliveryApi("POST", { action: "complete_order" });
+      } catch (error) {
+        console.error("[entrega] no se pudo cerrar la orden", error);
       }
       setOrder({ ...order, status: "completed", completed_at });
       
@@ -755,8 +682,8 @@ export function EntregaWizard() {
   // burbuja de chat. El cliente NO pierde su paso: sigue instalando con el chat
   // encima. Instagram queda como enlace secundario dentro del panel.
   const openSupport = async () => {
-    if (supabase && order) {
-      await supabase.from("orders").update({ status: "issue" }).eq("id", order.id);
+    if (order) {
+      await deliveryApi("POST", { action: "issue" });
       setOrder({ ...order, status: "issue" });
 
       // Notificar por Telegram
@@ -802,21 +729,16 @@ export function EntregaWizard() {
       .replace(/[̀-ͯ]/g, "")
       .toUpperCase()
       .replace(/[^A-Z]/g, "");
-    if (cleanCode.length !== 8 || !order || !supabase) return;
+    if (cleanCode.length !== 8 || !order) return;
     setIsSubmitting(true);
-
-    const { error } = await supabase
-      .from("orders")
-      .update({
+    try {
+      await deliveryApi("POST", { action: "submit_code", console_code: cleanCode });
+      const updatedOrder = {
+        ...order,
         console_code: cleanCode,
-        status: "pending_setup"
-      })
-      .eq("id", order.id);
-
-    setIsSubmitting(false);
-
-    if (!error) {
-      const updatedOrder = { ...order, console_code: cleanCode, status: "pending_setup" as const };
+        console_code_submitted_at: new Date().toISOString(),
+        status: "pending_setup" as const,
+      };
       setOrder(updatedOrder);
 
       // Confirmación visible de "código enviado" + sonido de éxito.
@@ -846,6 +768,11 @@ export function EntregaWizard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'CODE_SUBMITTED', order: updatedOrder })
       }).catch(err => console.error("Error sending notification", err));
+    } catch (error) {
+      console.error("[entrega] no se pudo enviar el código", error);
+      setChatError("No pudimos enviar el código. Inténtalo nuevamente.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1067,7 +994,6 @@ export function EntregaWizard() {
                     value={messageInput}
                     onChange={(e) => {
                       setMessageInput(e.target.value);
-                      chatChannelRef.current?.send({ type: "broadcast", event: "typing", payload: { from: "customer" } });
                     }}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendSupportMessage(); } }}
                     placeholder="Escribe tu mensaje..."
@@ -1170,29 +1096,39 @@ export function EntregaWizard() {
                       <div className="absolute inset-0 animate-spin rounded-full border-4 border-white/5 border-t-red-500" />
                       <div className="h-6 w-6 rounded-full bg-red-500/20 backdrop-blur-sm" />
                     </div>
-                    <h2 className="text-sm font-black uppercase tracking-widest text-white">Cancelando</h2>
-                    <p className="mt-2 text-xs font-semibold text-gray-400">Volviendo a la tienda...</p>
+                    <h2 className="text-sm font-black uppercase tracking-widest text-white">
+                      {cancelDone ? "Orden cancelada" : "Cancelando"}
+                    </h2>
+                    <p className="mt-2 max-w-[260px] text-xs font-semibold leading-relaxed text-gray-400">
+                      {cancelDone
+                        ? order?.payment_status === "approved"
+                          ? "Tu solicitud quedó registrada. Te contactaremos para gestionar la devolución del dinero."
+                          : "Tu orden quedó cancelada. Volviendo a la tienda..."
+                        : "Estamos registrando la cancelación..."}
+                    </p>
                   </motion.div>
                 ) : (
                   <motion.div key="confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <h2 className="text-lg font-black uppercase tracking-widest text-white">Cancelar Orden</h2>
                     <p className="mt-3 text-sm leading-relaxed text-gray-300">
-                      Tu orden <strong className="text-yellow-500">{order?.short_code}</strong> se cancelará. ¿Estás seguro de volver a la tienda?
+                      Tu orden <strong className="text-yellow-500">{order?.short_code}</strong> se cancelará.
+                      {order?.payment_status === "approved"
+                        ? " Si ya pagaste, dejaremos registrada la solicitud de devolución para gestionarla contigo."
+                        : " ¿Estás seguro de volver a la tienda?"}
                     </p>
                     <div className="mt-6 flex flex-col gap-3">
                       <button onClick={async () => {
                         setIsCanceling(true);
-                        if (order && supabase) {
-                          await supabase.from('orders').update({ payment_status: 'cancelled' }).eq('id', order.id);
-                        }
+                        if (order) await deliveryApi("POST", { action: "cancel" });
+                        setCancelDone(true);
                         setTimeout(() => {
                           window.location.href = "/";
-                        }, 1600);
+                        }, order?.payment_status === "approved" ? 4200 : 1800);
                       }} className="motion-press flex w-full items-center justify-center rounded-full bg-white/10 py-3.5 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-red-500/20 hover:text-red-400">
                         Sí, Cancelar Orden
                       </button>
                       <button onClick={() => setShowCancelModal(false)} className="motion-press flex w-full items-center justify-center gap-2 rounded-full bg-white py-3.5 text-xs font-black uppercase tracking-widest text-black transition-colors hover:bg-gray-200">
-                        No, Continuar Pago
+                        {order?.payment_status === "approved" ? "No, Continuar Instalación" : "No, Continuar Pago"}
                       </button>
                     </div>
                   </motion.div>
@@ -1247,6 +1183,42 @@ export function EntregaWizard() {
             <a href="/" className="mt-8 rounded-full bg-white/10 px-6 py-3 text-xs font-black uppercase tracking-widest text-white hover:bg-white/20 transition-colors">
               Ir a la tienda
             </a>
+          </motion.div>
+        )}
+
+        {/* ORDEN CERRADA */}
+        {state === "closed" && order && (
+          <motion.div key="closed" variants={variants} initial="initial" animate="animate" exit="exit" className="flex flex-col flex-1 items-center justify-center text-center">
+            <div className={`mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border ${
+              order.payment_status === "refunded"
+                ? "border-green-500/20 bg-green-500/10"
+                : "border-yellow-500/25 bg-yellow-500/10"
+            }`}>
+              {order.payment_status === "refunded"
+                ? <CheckCircle2 className="text-green-400" size={28} />
+                : <Receipt className="text-yellow-500" size={28} />}
+            </div>
+            <p className={`mb-2 text-[10px] font-black uppercase tracking-widest ${
+              order.payment_status === "refunded" ? "text-green-400" : "text-yellow-500"
+            }`}>
+              Orden {order.short_code}
+            </p>
+            <h1 className="text-xl font-black uppercase tracking-widest">
+              {order.payment_status === "refunded" ? "Orden reembolsada" : "Orden cancelada"}
+            </h1>
+            <p className="mt-3 max-w-[310px] text-sm leading-relaxed text-gray-400">
+              {order.payment_status === "refunded"
+                ? "La devolución de esta compra ya fue registrada. Este enlace quedó cerrado y no se puede continuar con la instalación."
+                : "Esta compra fue cancelada y la solicitud de devolución quedó registrada. Este enlace quedó cerrado mientras gestionamos el reembolso."}
+            </p>
+            <div className="mt-6 flex flex-col gap-3">
+              <a href="/" className="rounded-full bg-white px-6 py-3 text-xs font-black uppercase tracking-widest text-black transition-colors hover:bg-gray-200">
+                Ir a la tienda
+              </a>
+              <a href={INSTAGRAM_DM} target="_blank" rel="noreferrer" className="rounded-full border border-white/10 px-6 py-3 text-xs font-black uppercase tracking-widest text-gray-300 transition-colors hover:bg-white/5 hover:text-white">
+                Contactar soporte
+              </a>
+            </div>
           </motion.div>
         )}
 
@@ -1430,6 +1402,16 @@ export function EntregaWizard() {
                 <ArrowRight className="text-gray-600 group-hover:text-yellow-500 transition-transform group-hover:translate-x-1" size={16} />
               </button>
             </div>
+
+            {order?.payment_status === "approved" && (
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(true)}
+                className="mt-8 w-full text-center text-[10px] font-black uppercase tracking-widest text-gray-500 underline decoration-white/20 underline-offset-4 transition hover:text-red-300"
+              >
+                Cancelar compra y solicitar devolución
+              </button>
+            )}
           </motion.div>
         )}
 
@@ -1483,6 +1465,16 @@ export function EntregaWizard() {
                     {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <>Enviar Código <ArrowRight size={16}/></>}
                   </button>
                 </div>
+
+                {order?.payment_status === "approved" && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelModal(true)}
+                    className="mt-6 w-full text-center text-[10px] font-black uppercase tracking-widest text-gray-500 underline decoration-white/20 underline-offset-4 transition hover:text-red-300"
+                  >
+                    Cancelar compra y solicitar devolución
+                  </button>
+                )}
               </>
             ) : (
               <>
@@ -1510,6 +1502,16 @@ export function EntregaWizard() {
                     className="mt-6 text-[10px] font-bold text-gray-500 hover:text-white uppercase tracking-widest transition-colors w-full text-center"
                   >
                     Ya conozco los pasos, saltar al código
+                  </button>
+                )}
+
+                {order?.payment_status === "approved" && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelModal(true)}
+                    className="mt-4 w-full text-center text-[10px] font-black uppercase tracking-widest text-gray-600 underline decoration-white/20 underline-offset-4 transition hover:text-red-300"
+                  >
+                    Cancelar compra y solicitar devolución
                   </button>
                 )}
               </>
@@ -1541,6 +1543,16 @@ export function EntregaWizard() {
                 {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : "Enviar Código"}
               </button>
             </div>
+
+            {order?.payment_status === "approved" && (
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(true)}
+                className="mt-8 w-full text-center text-[10px] font-black uppercase tracking-widest text-gray-500 underline decoration-white/20 underline-offset-4 transition hover:text-red-300"
+              >
+                Cancelar compra y solicitar devolución
+              </button>
+            )}
           </motion.div>
         )}
 

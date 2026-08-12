@@ -43,7 +43,9 @@ export const metadata: Metadata = {
     siteName: 'Alfeicon Games',
     images: [
       {
-        url: '/banner.png', // <--- BUSCARÁ ESTA FOTO EN TU CARPETA PUBLIC
+        // El parámetro cambia la URL de preview para que Instagram no reutilice
+        // la imagen antigua de packs que tenía almacenada en caché.
+        url: '/banner.jpg?v=general-2026-08-07',
         width: 1200,
         height: 630,
         alt: 'Portada Alfeicon Games',
@@ -56,7 +58,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Alfeicon Games 🎮 | Ofertas Nintendo Switch",
     description: "🔥 Packs y Juegos a precios bajos. ¡Entra y revisa nuestro catálogo con entrega inmediata!",
-    images: ["/banner.png"],
+    images: ["/banner.jpg?v=general-2026-08-07"],
   },
 };
 

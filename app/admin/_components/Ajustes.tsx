@@ -1,12 +1,12 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Handshake, Loader2, Plus, Save, Settings, ShieldCheck, Trash2, Truck } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { SETTING_KEYS } from "@/lib/settings";
 import type { Provider, SettingsState } from "../_types";
 import { Descuentos } from "./Descuentos";
-import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY, revalidarTienda, toPct, toPrice } from "../_helpers";
+import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY, PROFIT_GOAL_KEY, revalidarTienda, toPct, toPrice } from "../_helpers";
 
 // Días de garantía: entero entre 1 y 90. Un 0 dejaría la entrega vencida al
 // instante y le borraría la cuenta al cliente en el siguiente cron.
@@ -25,20 +25,27 @@ type Props = {
   setLoading: (v: boolean) => void;
   showNotice: (type: "success" | "error" | "info", text: string, playSound?: boolean) => void;
   onReloadProviders: () => Promise<void>;
+  onReloadSettings: () => Promise<void>;
 };
 
-export function Ajustes({ settings, providers, loading, setLoading, showNotice, onReloadProviders }: Props) {
+export function Ajustes({ settings, providers, loading, setLoading, showNotice, onReloadProviders, onReloadSettings }: Props) {
   const [form, setForm] = useState<SettingsState>(settings);
   const [newProvider, setNewProvider] = useState("");
 
+  useEffect(() => {
+    setForm(settings);
+  }, [settings]);
+
   const saveSetting = async (key: string, value: number) => {
-    if (!supabase) return;
-    await supabase.from("app_settings").upsert({ key, value }, { onConflict: "key" });
+    if (!supabase) throw new Error("Supabase no está configurado.");
+    const { error } = await supabase.from("app_settings").upsert({ key, value }, { onConflict: "key" });
+    if (error) throw error;
   };
 
   const saveTextSetting = async (key: string, value: string) => {
-    if (!supabase) return;
-    await supabase.from("app_settings").upsert({ key, value: 0, value_text: value }, { onConflict: "key" });
+    if (!supabase) throw new Error("Supabase no está configurado.");
+    const { error } = await supabase.from("app_settings").upsert({ key, value: 0, value_text: value }, { onConflict: "key" });
+    if (error) throw error;
   };
 
   const save = async (e: FormEvent) => {
@@ -47,12 +54,13 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
     try {
       await Promise.all([
         saveSetting(SETTING_KEYS.nintendoOnlinePrice, toPrice(form.nintendoOnlinePrice)),
-        saveSetting(SETTING_KEYS.packPriceIncrease, toPrice(form.packPriceIncrease)),
         saveSetting(SETTING_KEYS.garantiaJuegoDias, toDias(form.garantiaJuegoDias, 7)),
         saveSetting(SETTING_KEYS.garantiaPackDias, toDias(form.garantiaPackDias, 3)),
+        saveSetting(PROFIT_GOAL_KEY, Math.max(1, toPrice(form.profitGoal))),
         saveSetting(PARTNER_PCT_KEY, toPct(form.partnerSplitPct)),
         saveTextSetting(PARTNER_NAME_KEY, form.partnerName.trim() || DEFAULT_PARTNER_NAME),
       ]);
+      await onReloadSettings();
       // El precio de Nintendo Online y el incremento de packs se muestran en la
       // tienda, así que hay que botar su caché para que el cambio se vea ya.
       revalidarTienda(["settings", "catalog"]);
@@ -126,12 +134,24 @@ export function Ajustes({ settings, providers, loading, setLoading, showNotice, 
                 inputMode="numeric" className={INPUT} />
               <p className="mt-1 text-[10px] text-gray-700">Precio para la membresía</p>
             </label>
-            <label>
-              <span className={LABEL}>Incremento packs (%)</span>
-              <input value={form.packPriceIncrease}
-                onChange={e => setForm({ ...form, packPriceIncrease: e.target.value })}
-                inputMode="numeric" className={INPUT} />
-              <p className="mt-1 text-[10px] text-gray-700">Sobre el precio base de cada juego</p>
+          </div>
+
+          <div className="border-t border-white/5 pt-4">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/12">
+                <Save size={14} className="text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-widest">Meta del frasco</h2>
+                <p className="text-[10px] text-gray-600">Se llena con la ganancia después de recuperar la publicidad</p>
+              </div>
+            </div>
+            <label className="block max-w-[16rem]">
+              <span className={LABEL}>Meta de ganancia (CLP)</span>
+              <input value={form.profitGoal}
+                onChange={e => setForm({ ...form, profitGoal: e.target.value })}
+                inputMode="numeric" className={INPUT} placeholder="1000000" />
+              <p className="mt-1 text-[10px] text-gray-700">Ejemplo: 500000 para una meta de $500.000</p>
             </label>
           </div>
 

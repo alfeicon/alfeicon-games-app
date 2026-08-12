@@ -85,6 +85,13 @@ export function EntregaItems({ orderId, gameName, garantiaJuegoDias, garantiaPac
           showNotice("error", `Error al auto-guardar cuenta: ${error.message}`);
         } else {
           setItems(prev => prev.map(it => it.id === id ? { ...it, ...cambios } : it));
+          if (cambios.account_email && cambios.account_password) {
+            await supabase
+              .from("orders")
+              .update({ status: "ready" })
+              .eq("id", orderId)
+              .in("status", ["pending_setup", "preparing"]);
+          }
         }
         setGuardando(null);
       }

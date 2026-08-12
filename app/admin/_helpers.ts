@@ -3,7 +3,34 @@ import { supabase } from "@/lib/supabase/client";
 
 export const PARTNER_PCT_KEY = "partner_split_pct";
 export const PARTNER_NAME_KEY = "partner_name";
+export const PROFIT_GOAL_KEY = "profit_goal";
 export const DEFAULT_PARTNER_NAME = "Diego";
+
+/** Inicio real de una campaña; las antiguas solo tienen fecha y comienzan a medianoche. */
+export function inicioCampana(campaign: { date: string; start_at?: string | null }): Date {
+  if (campaign.start_at) {
+    const exact = new Date(campaign.start_at);
+    if (Number.isFinite(exact.getTime())) return exact;
+  }
+  return new Date(`${campaign.date}T00:00:00`);
+}
+
+/** Devuelve si una venta cae dentro de alguna campaña de publicidad. */
+export function ventaDentroDeCampana(
+  createdAt: string,
+  campaigns: Array<{ date: string; duration_days?: number | null }>,
+): boolean {
+  const saleDate = new Date(createdAt);
+  if (!Number.isFinite(saleDate.getTime())) return false;
+
+  return campaigns.some(campaign => {
+    const start = inicioCampana(campaign);
+    if (!Number.isFinite(start.getTime())) return false;
+    const end = new Date(start);
+    end.setDate(end.getDate() + Math.max(1, Number(campaign.duration_days) || 1));
+    return saleDate >= start && saleDate < end;
+  });
+}
 
 /**
  * Avisa a la tienda que sus datos cacheados quedaron viejos.

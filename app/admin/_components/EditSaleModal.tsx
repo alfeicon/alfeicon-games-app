@@ -3,11 +3,12 @@
 import { FormEvent, useState } from "react";
 import { Gamepad2, Gift, Handshake, Loader2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { saleNetProfit, saleNetRevenue, salePaymentFee } from "@/lib/sales-finance";
 import type { Provider, Sale } from "../_types";
 import { fmt, toPct, toPrice } from "../_helpers";
 
 const INPUT = "premium-control w-full rounded-xl px-3 py-2.5 text-sm outline-none";
-const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Débito", "Crédito", "Otro"];
+const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Mercado Pago", "Débito", "Crédito", "Otro"];
 
 type Props = {
   sale: Sale;
@@ -30,7 +31,10 @@ export function EditSaleModal({ sale, providers, partnerName, loading, setLoadin
   const [partnerPct, setPartnerPct] = useState(String(sale.partner_pct ?? 40));
   const activeProviders = providers.filter(p => p.is_active);
 
-  const gain = toPrice(price) - toPrice(cost);
+  const previewSale = { price_sold: toPrice(price), cost_price: toPrice(cost), payment_method: method };
+  const fee = salePaymentFee(previewSale);
+  const netRevenue = saleNetRevenue(previewSale);
+  const gain = saleNetProfit(previewSale);
 
   const save = async (e: FormEvent) => {
     e.preventDefault(); if (!supabase) return;
@@ -91,9 +95,21 @@ export function EditSaleModal({ sale, providers, partnerName, loading, setLoadin
               <span className={`font-black ${gain >= 0 ? "text-green-400" : "text-red-400"}`}>
                 ${fmt(gain)}
                 <span className="ml-1.5 text-[10px] opacity-70">
-                  ({Math.round((1 - toPrice(cost) / toPrice(price)) * 100)}%)
+                  ({Math.round((1 - toPrice(cost) / Math.max(1, netRevenue)) * 100)}%)
                 </span>
               </span>
+            </div>
+          )}
+          {fee > 0 && (
+            <div className="rounded-xl border border-sky-500/15 bg-sky-500/6 px-3 py-2 text-xs">
+              <div className="flex justify-between">
+                <span className="font-bold text-gray-500">Comisión Mercado Pago</span>
+                <span className="font-black text-sky-400">-${fmt(fee)}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-white/5 pt-1">
+                <span className="font-bold text-gray-500">Recibido</span>
+                <span className="font-black text-green-400">${fmt(netRevenue)}</span>
+              </div>
             </div>
           )}
 

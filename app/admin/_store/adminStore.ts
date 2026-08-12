@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AdminGame, AdminPack, AdminNews, AdSpend, Provider, Sale, SettingsState, SupportRequest, Order } from "../_types";
+import type { ActivityLog, AdminGame, AdminPack, AdminNews, AdSpend, Provider, Sale, SettingsState, SupportRequest, Order } from "../_types";
 
 type AdminState = {
   games: AdminGame[];
@@ -11,6 +11,7 @@ type AdminState = {
   views: { created_at: string; item_id: string | null; source: string | null }[];
   providers: Provider[];
   supportRequests: SupportRequest[];
+  activityLogs: ActivityLog[];
   settings: SettingsState;
   
   setGames: (games: AdminGame[]) => void;
@@ -22,6 +23,7 @@ type AdminState = {
   setViews: (views: { created_at: string; item_id: string | null; source: string | null }[]) => void;
   setProviders: (providers: Provider[]) => void;
   setSupportRequests: (supportRequests: SupportRequest[]) => void;
+  setActivityLogs: (activityLogs: ActivityLog[]) => void;
   setSettings: (settings: SettingsState) => void;
 
   resetAll: () => void;
@@ -37,11 +39,12 @@ export const useAdminStore = create<AdminState>((set) => ({
   views: [],
   providers: [],
   supportRequests: [],
+  activityLogs: [],
   settings: {
     nintendoOnlinePrice: "0",
-    packPriceIncrease: "0",
     garantiaJuegoDias: "0",
     garantiaPackDias: "0",
+    profitGoal: "1000000",
     partnerSplitPct: "0",
     partnerName: "",
   },
@@ -55,10 +58,11 @@ export const useAdminStore = create<AdminState>((set) => ({
   setViews: (views) => set({ views }),
   setProviders: (providers) => set({ providers }),
   setSupportRequests: (supportRequests) => set({ supportRequests }),
+  setActivityLogs: (activityLogs) => set({ activityLogs }),
   setSettings: (settings) => set({ settings }),
 
   resetAll: () => set({
     games: [], packs: [], news: [], orders: [], sales: [],
-    adSpend: [], views: [], providers: [], supportRequests: []
+    adSpend: [], views: [], providers: [], supportRequests: [], activityLogs: []
   })
 }));

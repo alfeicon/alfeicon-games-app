@@ -7,11 +7,11 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, ChevronLeft,
   Gamepad2, Gift, Home, Loader2, LogOut, Newspaper, Receipt, Settings, ShieldCheck, PackageCheck, LayoutGrid, LifeBuoy, X, PiggyBank,
-  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart, Lock, Mail, Bot
+  Pin, PinOff, RefreshCw, Search, Plus, Store, Bell, Trash2, LineChart, Lock, Mail, Bot, History
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { DEFAULT_APP_SETTINGS, SETTING_KEYS } from "@/lib/settings";
-import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY, revalidarTienda } from "./_helpers";
+import { DEFAULT_PARTNER_NAME, PARTNER_NAME_KEY, PARTNER_PCT_KEY, PROFIT_GOAL_KEY, revalidarTienda } from "./_helpers";
 import type { AdminGame, AdminPack, AdminNews, AdSpend, AdminSection, Provider, Sale, SettingsState, SupportRequest } from "./_types";
 import { Inicio } from "./_components/Inicio";
 import { JuegosCatalog } from "./_components/JuegosCatalog";
@@ -23,16 +23,17 @@ import { Entregas } from "./_components/Entregas";
 import { Ajustes } from "./_components/Ajustes";
 import { Soporte } from "./_components/Soporte";
 import { Marketing } from "./_components/Marketing";
+import { Historial } from "./_components/Historial";
 import { SaleModal } from "./_components/SaleModal";
 import { CommandPalette, type Command } from "./_components/CommandPalette";
 import { useAdminStore } from "./_store/adminStore";
-import type { Order } from "./_types";
+import type { ActivityLog, Order } from "./_types";
 
 const defaultSettings: SettingsState = {
   nintendoOnlinePrice: String(DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
-  packPriceIncrease: String(DEFAULT_APP_SETTINGS.packPriceIncrease),
   garantiaJuegoDias: String(DEFAULT_APP_SETTINGS.garantiaJuegoDias),
   garantiaPackDias: String(DEFAULT_APP_SETTINGS.garantiaPackDias),
+  profitGoal: "1000000",
   partnerSplitPct: "40",
   partnerName: DEFAULT_PARTNER_NAME,
 };
@@ -52,6 +53,7 @@ const NAV_ITEMS: { id: AdminSection; label: string; hint: string; Icon: React.El
   { id: "analiticas", label: "Analíticas", hint: "Métricas de tráfico e interés", Icon: LineChart,    accent: "text-pink-400",      rgb: "244,114,182" },
   { id: "soporte",  label: "Soporte",   hint: "Consultas entrantes de clientes validados",  Icon: LifeBuoy,     accent: "text-sky-400",       rgb: "56,189,248" },
   { id: "marketing", label: "Avisos",   hint: "Envío masivo de correos",          Icon: Mail,         accent: "text-purple-400",    rgb: "192,132,252" },
+  { id: "historial", label: "Historial", hint: "Cambios de precios, ofertas y ajustes", Icon: History, accent: "text-cyan-400", rgb: "34,211,238" },
   { id: "ajustes",  label: "Ajustes",   hint: "Precios, garantías y proveedores", Icon: Settings,     accent: "text-gray-400",      rgb: "156,163,175" },
 ];
 
@@ -149,12 +151,15 @@ export default function AdminPage() {
     views, setViews,
     providers, setProviders,
     supportRequests, setSupportRequests,
+    activityLogs, setActivityLogs,
     settings, setSettings,
     resetAll
   } = useAdminStore();
 
   const [salesTableExists, setSalesTableExists] = useState<boolean | null>(null);
   const [salesError, setSalesError] = useState<string | null>(null);
+  const [activityLogExists, setActivityLogExists] = useState<boolean | null>(null);
+  const [activityLogError, setActivityLogError] = useState<string | null>(null);
   const [newsTableExists, setNewsTableExists] = useState<boolean | null>(null);
   const [firstLoadDone, setFirstLoadDone] = useState(false);
   const didLoadRef = useRef(false);
@@ -362,11 +367,21 @@ export default function AdminPage() {
 
   const loadAdSpend = useCallback(async () => {
     if (!supabase) return;
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("ad_spend")
-      .select("id,platform,amount,description,date,created_at")
+      .select("id,platform,amount,description,date,start_at,duration_days,created_at")
       .order("date", { ascending: false })
       .limit(200);
+    // Compatibilidad mientras se agrega start_at en Supabase.
+    if (error?.code === "42703") {
+      const fallback = await supabase
+        .from("ad_spend")
+        .select("id,platform,amount,description,date,duration_days,created_at")
+        .order("date", { ascending: false })
+        .limit(200);
+      data = fallback.data?.map(row => ({ ...row, start_at: null })) ?? null;
+      error = fallback.error;
+    }
     if (error) { console.error("[loadAdSpend]", error); return; }
     setAdSpend((data || []) as AdSpend[]);
     // ad_spend no es crítico: si falla (tabla/políticas faltantes) solo lo logueamos
@@ -382,17 +397,39 @@ export default function AdminPage() {
     setProviders((data || []) as Provider[]);
   }, []);
 
+  const loadActivityLogs = useCallback(async () => {
+    if (!supabase) return;
+    setActivityLogError(null);
+    const { data, error } = await supabase
+      .from("activity_log")
+      .select("id,entity_table,entity_id,entity_title,action,changed_fields,old_values,new_values,reason,changed_by,created_at")
+      .order("created_at", { ascending: false })
+      .limit(300);
+    if (error) {
+      const code = error.code ?? "";
+      const msg = error.message ?? "";
+      const tableNotFound = code === "42P01" || code === "PGRST205" || (msg.includes("relation") && msg.includes("does not exist"));
+      setActivityLogExists(tableNotFound ? false : true);
+      setActivityLogError(tableNotFound ? null : `[${code}] ${msg}`);
+      if (tableNotFound) setActivityLogs([]);
+      return;
+    }
+    setActivityLogExists(true);
+    setActivityLogError(null);
+    setActivityLogs((data || []) as ActivityLog[]);
+  }, []);
+
   const loadSettings = useCallback(async () => {
     if (!supabase) return;
     const { data, error } = await supabase
-      .from("app_settings").select("key,value,value_text").in("key", [...Object.values(SETTING_KEYS), PARTNER_PCT_KEY, PARTNER_NAME_KEY]);
+      .from("app_settings").select("key,value,value_text").in("key", [...Object.values(SETTING_KEYS), PROFIT_GOAL_KEY, PARTNER_PCT_KEY, PARTNER_NAME_KEY]);
     if (error) { setSettings(defaultSettings); return; }
     const rows = new Map((data || []).map(r => [r.key, r]));
     setSettings({
       nintendoOnlinePrice: String(rows.get(SETTING_KEYS.nintendoOnlinePrice)?.value || DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
-      packPriceIncrease: String(rows.get(SETTING_KEYS.packPriceIncrease)?.value || DEFAULT_APP_SETTINGS.packPriceIncrease),
       garantiaJuegoDias: String(rows.get(SETTING_KEYS.garantiaJuegoDias)?.value || DEFAULT_APP_SETTINGS.garantiaJuegoDias),
       garantiaPackDias: String(rows.get(SETTING_KEYS.garantiaPackDias)?.value || DEFAULT_APP_SETTINGS.garantiaPackDias),
+      profitGoal: String(rows.get(PROFIT_GOAL_KEY)?.value || defaultSettings.profitGoal),
       partnerSplitPct: String(rows.get(PARTNER_PCT_KEY)?.value ?? defaultSettings.partnerSplitPct),
       partnerName: rows.get(PARTNER_NAME_KEY)?.value_text || defaultSettings.partnerName,
     });
@@ -418,7 +455,10 @@ export default function AdminPage() {
     if (s === "entregas") {
       loadOrders();
     }
-  }, [loadSales, loadAdSpend, loadOrders]);
+    if (s === "historial") {
+      loadActivityLogs();
+    }
+  }, [loadSales, loadAdSpend, loadOrders, loadActivityLogs]);
 
   const loadAll = useCallback(async () => {
     // 1. Cargar lo indispensable para que el Dashboard "Inicio" se pinte completo
@@ -430,6 +470,7 @@ export default function AdminPage() {
         loadViews(),
         loadAdSpend(),
         loadSettings(),
+        loadActivityLogs(),
       ]);
     } catch (err) {
       console.error("[loadAll] Error inesperado (posible AdBlock o fallo de red):", err);
@@ -445,7 +486,7 @@ export default function AdminPage() {
       loadSupport().catch(console.error);
       loadProviders().catch(console.error);
     }, 100);
-  }, [loadGames, loadPacks, loadSales, loadViews, loadAdSpend, loadSettings, loadOrders, loadNews, loadSupport, loadProviders, showNotice]);
+  }, [loadGames, loadPacks, loadSales, loadViews, loadAdSpend, loadSettings, loadActivityLogs, loadOrders, loadNews, loadSupport, loadProviders, showNotice]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -1092,9 +1133,13 @@ export default function AdminPage() {
           {section === "marketing" && (
             <Marketing loading={loading} setLoading={setLoading} showNotice={showNotice} />
           )}
+          {section === "historial" && (
+            <Historial logs={activityLogs} tableExists={activityLogExists} error={activityLogError} />
+          )}
           {section === "ajustes" && (
             <Ajustes settings={settings} providers={providers} loading={loading}
-              setLoading={setLoading} showNotice={showNotice} onReloadProviders={loadProviders} />
+              setLoading={setLoading} showNotice={showNotice} onReloadProviders={loadProviders}
+              onReloadSettings={loadSettings} />
           )}
         </div>
 

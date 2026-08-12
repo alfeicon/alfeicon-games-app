@@ -21,12 +21,27 @@ export default function AdminLogin() {
     if (!supabase) return;
     setLoading(true);
     setAuthError("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      setAuthError("Login inválido o usuario sin acceso.");
-    } else {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const { error } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error("auth-timeout")), 12_000);
+        }),
+      ]);
+
+      if (error) {
+        setAuthError("Login inválido o usuario sin acceso.");
+        return;
+      }
+
       window.location.href = "/admin";
+    } catch {
+      setAuthError("No se pudo conectar con Supabase. Revisa tu conexión e inténtalo otra vez.");
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      setLoading(false);
     }
   };
 

@@ -16,8 +16,8 @@ import crypto from "crypto";
 function signatureIsValid(req: NextRequest, dataId: string): boolean {
   const secret = process.env.MP_WEBHOOK_SECRET;
   if (!secret) {
-    console.warn("[mp-webhook] MP_WEBHOOK_SECRET sin configurar: no se valida la firma");
-    return true;
+    console.error("[mp-webhook] MP_WEBHOOK_SECRET sin configurar: webhook rechazado");
+    return false;
   }
 
   const signature = req.headers.get("x-signature") || "";
@@ -45,6 +45,11 @@ function signatureIsValid(req: NextRequest, dataId: string): boolean {
  * publica: `payment.payer` y `payment.additional_info.payer`.
  */
 type MpPayer = { first_name?: string | null; last_name?: string | null } | null | undefined;
+type MpWebhookBody = {
+  type?: string;
+  topic?: string;
+  data?: { id?: string | number };
+};
 
 const nombreDePagador = (p: MpPayer) =>
   [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim();
@@ -53,13 +58,13 @@ export async function POST(req: NextRequest) {
   try {
     const token = process.env.MP_ACCESS_TOKEN;
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!token || !supabaseUrl || !supabaseKey) {
       console.error("[mp-webhook] Faltan variables de entorno");
       return NextResponse.json({ error: "No configurado" }, { status: 500 });
     }
 
-    const body = await req.json().catch(() => ({} as any));
+    const body = await req.json().catch(() => ({} as MpWebhookBody)) as MpWebhookBody;
     // MP manda el id en el body o en la query, según el tipo de notificación.
     const type = body?.type || body?.topic || req.nextUrl.searchParams.get("type") || req.nextUrl.searchParams.get("topic");
     const paymentId = String(body?.data?.id || req.nextUrl.searchParams.get("data.id") || req.nextUrl.searchParams.get("id") || "");
@@ -106,10 +111,14 @@ export async function POST(req: NextRequest) {
     if (payment.status !== "approved") {
       const rejected = payment.status === "rejected";
       // Rechazado o pendiente: se registra, pero la orden no se destraba.
-      await supabase
+      const { error: rejectedUpdateError } = await supabase
         .from("orders")
         .update({ payment_status: rejected ? "rejected" : "pending" })
         .eq("id", order.id);
+      if (rejectedUpdateError) {
+        console.error("[mp-webhook] No se pudo guardar estado:", rejectedUpdateError.message);
+        return NextResponse.json({ error: "No se pudo actualizar la orden" }, { status: 500 });
+      }
 
       // Un rechazo sí requiere que sepas: el cliente quedó esperando en su
       // portal sin poder avanzar. Los "pendiente" no se avisan (son ruido:
@@ -142,18 +151,29 @@ export async function POST(req: NextRequest) {
     // distinguir dos órdenes iguales del mismo día sin abrir cada una.
     const clientName = nombreReal || (clientEmail ? String(clientEmail).split("@")[0] : "") || null;
 
-    await supabase
+    const approvedPatch = {
+      payment_status: "approved",
+      payment_method: "mercadopago",
+      sale_price: order.sale_price ?? Math.round(Number(payment.transaction_amount) || 0),
+      client_email: clientEmail,
+      client_name: clientName,
+      mp_payment_id: String(paymentId),
+      // Sale de borrador: el pago está confirmado y ya puede instalar.
+      status: order.status === "draft" ? "pending_console_code" : order.status,
+    };
+    let { error: approvedUpdateError } = await supabase
       .from("orders")
-      .update({
-        payment_status: "approved",
-        payment_method: "mercadopago",
-        sale_price: order.sale_price ?? Math.round(Number(payment.transaction_amount) || 0),
-        client_email: clientEmail,
-        client_name: clientName,
-        // Sale de borrador: el pago está confirmado y ya puede instalar.
-        status: order.status === "draft" ? "pending_console_code" : order.status,
-      })
+      .update(approvedPatch)
       .eq("id", order.id);
+    if (approvedUpdateError?.code === "PGRST204") {
+      const { mp_payment_id: _mpPaymentId, ...patchWithoutMpId } = approvedPatch;
+      const retry = await supabase.from("orders").update(patchWithoutMpId).eq("id", order.id);
+      approvedUpdateError = retry.error;
+    }
+    if (approvedUpdateError) {
+      console.error("[mp-webhook] No se pudo aprobar la orden:", approvedUpdateError.message);
+      return NextResponse.json({ error: "No se pudo actualizar la orden" }, { status: 500 });
+    }
 
     // Se manda lo que REALMENTE pagó Mercado Pago, no lo que dice la orden: es
     // el único dato que no salió del navegador del cliente. Con eso el aviso
