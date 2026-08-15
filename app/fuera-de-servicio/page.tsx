@@ -20,7 +20,10 @@ export default function FueraDeServicioPage() {
           <div className="mt-12 flex h-11 w-11 items-center justify-center rounded-lg border border-amber-300/25 bg-amber-400/10 text-amber-200">
             <CircleAlert size={22} aria-hidden />
           </div>
-          <h1 className="mt-5 max-w-xl text-3xl font-bold leading-tight text-white sm:text-4xl">
+          <h1
+            className="status-glitch mt-5 max-w-xl text-3xl font-bold leading-tight text-white sm:text-4xl"
+            data-text="Estamos temporalmente fuera de servicio."
+          >
             Estamos temporalmente fuera de servicio.
           </h1>
           <p className="mt-4 max-w-xl text-base leading-7 text-slate-300 sm:text-lg">

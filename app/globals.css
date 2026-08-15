@@ -84,6 +84,52 @@ html {
   scroll-behavior: smooth;
 }
 
+@keyframes statusGlitchBefore {
+  0%, 86%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+  87% { clip-path: inset(14% 0 72% 0); transform: translate(-3px, -1px); opacity: 0.85; }
+  89% { clip-path: inset(55% 0 26% 0); transform: translate(3px, 1px); opacity: 0.75; }
+  91% { clip-path: inset(31% 0 48% 0); transform: translate(-2px, 0); opacity: 0.65; }
+  93% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+}
+
+@keyframes statusGlitchAfter {
+  0%, 88%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+  89% { clip-path: inset(65% 0 16% 0); transform: translate(3px, 0); opacity: 0.72; }
+  91% { clip-path: inset(18% 0 60% 0); transform: translate(-2px, 1px); opacity: 0.65; }
+  93% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+}
+
+.status-glitch {
+  isolation: isolate;
+  position: relative;
+}
+
+.status-glitch::before,
+.status-glitch::after {
+  content: attr(data-text);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.status-glitch::before {
+  animation: statusGlitchBefore 5.5s steps(2, end) infinite;
+  color: #67e8f9;
+}
+
+.status-glitch::after {
+  animation: statusGlitchAfter 5.5s steps(2, end) infinite;
+  color: #fb7185;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-glitch::before,
+  .status-glitch::after {
+    animation: none;
+    display: none;
+  }
+}
+
 @keyframes softIn {
   from {
     opacity: 0;
