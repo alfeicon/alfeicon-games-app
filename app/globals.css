@@ -85,18 +85,71 @@ html {
 }
 
 @keyframes statusGlitchBefore {
-  0%, 86%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
-  87% { clip-path: inset(14% 0 72% 0); transform: translate(-3px, -1px); opacity: 0.85; }
-  89% { clip-path: inset(55% 0 26% 0); transform: translate(3px, 1px); opacity: 0.75; }
-  91% { clip-path: inset(31% 0 48% 0); transform: translate(-2px, 0); opacity: 0.65; }
-  93% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+  0%, 68%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+  70% { clip-path: inset(14% 0 72% 0); transform: translate(-5px, -1px); opacity: 0.9; }
+  73% { clip-path: inset(55% 0 26% 0); transform: translate(5px, 1px); opacity: 0.82; }
+  76% { clip-path: inset(31% 0 48% 0); transform: translate(-3px, 0); opacity: 0.72; }
+  79% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
 }
 
 @keyframes statusGlitchAfter {
-  0%, 88%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
-  89% { clip-path: inset(65% 0 16% 0); transform: translate(3px, 0); opacity: 0.72; }
-  91% { clip-path: inset(18% 0 60% 0); transform: translate(-2px, 1px); opacity: 0.65; }
-  93% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+  0%, 70%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+  72% { clip-path: inset(65% 0 16% 0); transform: translate(5px, 0); opacity: 0.78; }
+  75% { clip-path: inset(18% 0 60% 0); transform: translate(-4px, 1px); opacity: 0.72; }
+  78% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+}
+
+@keyframes outageFrameGlitch {
+  0%, 63%, 100% { filter: none; transform: translate3d(0, 0, 0); }
+  65% { filter: drop-shadow(-4px 0 rgba(34, 211, 238, 0.7)) drop-shadow(4px 0 rgba(244, 63, 94, 0.65)); transform: translate3d(-3px, 1px, 0); }
+  68% { filter: drop-shadow(5px 0 rgba(34, 211, 238, 0.65)) drop-shadow(-5px 0 rgba(244, 63, 94, 0.6)); transform: translate3d(3px, -1px, 0); }
+  71% { filter: drop-shadow(-2px 0 rgba(34, 211, 238, 0.48)) drop-shadow(2px 0 rgba(244, 63, 94, 0.45)); transform: translate3d(-1px, 0, 0); }
+  74% { filter: none; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes outageScan {
+  0%, 62%, 100% { opacity: 0; transform: translateY(-120%); }
+  65% { opacity: 0.7; transform: translateY(10vh); }
+  71% { opacity: 0.38; transform: translateY(72vh); }
+  75% { opacity: 0; transform: translateY(120vh); }
+}
+
+.status-outage {
+  isolation: isolate;
+  overflow: hidden;
+  position: relative;
+  background: #09090d;
+}
+
+.status-outage::before {
+  animation: outageScan 2.6s steps(2, end) infinite;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(34, 211, 238, 0.23) 0 2px,
+    rgba(244, 63, 94, 0.18) 2px 4px,
+    transparent 4px 10px
+  );
+  content: "";
+  height: 22vh;
+  inset-inline: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.status-outage::after {
+  background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(255, 255, 255, 0.025) 3px 4px);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.status-outage__content {
+  animation: outageFrameGlitch 2.6s steps(2, end) infinite;
+  position: relative;
+  z-index: 0;
 }
 
 .status-glitch {
@@ -113,19 +166,28 @@ html {
 }
 
 .status-glitch::before {
-  animation: statusGlitchBefore 5.5s steps(2, end) infinite;
+  animation: statusGlitchBefore 2.6s steps(2, end) infinite;
   color: #67e8f9;
 }
 
 .status-glitch::after {
-  animation: statusGlitchAfter 5.5s steps(2, end) infinite;
+  animation: statusGlitchAfter 2.6s steps(2, end) infinite;
   color: #fb7185;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .status-glitch::before,
-  .status-glitch::after {
+  .status-glitch::after,
+  .status-outage::before,
+  .status-outage__content {
     animation: none;
+    filter: none;
+    transform: none;
+  }
+
+  .status-glitch::before,
+  .status-glitch::after,
+  .status-outage::before {
     display: none;
   }
 }

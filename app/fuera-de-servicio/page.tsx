@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 
 export default function FueraDeServicioPage() {
   return (
-    <main className="min-h-screen bg-[#0a0a0a] px-5 py-8 text-white sm:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col justify-center">
+    <main className="status-outage min-h-screen px-5 py-8 text-white sm:px-8">
+      <div className="status-outage__content mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col justify-center">
         <div className="border-y border-white/10 py-8 sm:py-10">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Alfeicon Games" className="h-11 w-11 rounded-lg object-contain" />
