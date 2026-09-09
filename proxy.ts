@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 // Cambia este valor a false cuando la tienda pueda volver a recibir visitas.
 // No borra catálogo, órdenes ni ninguna otra información: solo redirige la web pública.
-const MAINTENANCE_MODE = true
+const MAINTENANCE_MODE = false
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -12,6 +12,19 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/fuera-de-servicio'
     return NextResponse.redirect(url)
+  }
+
+  if (!MAINTENANCE_MODE && pathname === '/fuera-de-servicio') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    return NextResponse.redirect(url)
+  }
+
+  // Si no es ruta de administración, no requiere validación de sesión de admin
+  if (!pathname.startsWith('/admin')) {
+    return NextResponse.next({
+      request,
+    })
   }
 
   let supabaseResponse = NextResponse.next({
