@@ -490,7 +490,7 @@ export function EntregaWizard() {
         lastMsgNotifyRef.current = ahora;
         fetch("/api/notify-order", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "NEW_MESSAGE", order, message: "📷 Te envió una foto" }),
+          body: JSON.stringify({ action: "NEW_MESSAGE", order, message: "📷 Te envió una foto", photo_url: pub.publicUrl }),
         }).catch(err => console.error("Error sending notification", err));
       }
     } catch (e) {

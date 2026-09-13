@@ -216,15 +216,96 @@ function doPost(e) {
     return;
   }
 
-  // ── RESPONDER AL CLIENTE DESDE TELEGRAM ──────────────────────────────────
-  // Basta con usar "Responder" sobre cualquier aviso que traiga el código de
-  // la orden (ALF-XXXX). Lo escrito se inserta en order_messages como si lo
-  // hubieras escrito desde el admin, y le llega al cliente al instante.
+  // ── GESTIÓN DE ENTREGAS Y RESPUESTAS DESDE TELEGRAM ──────────────────────
+  // 1. Si se responde a un mensaje que contiene el código de orden (ALF-XXXX):
   if (message.reply_to_message && mensajeCrudo) {
     const citado = message.reply_to_message.text || message.reply_to_message.caption || "";
     const match = citado.match(/ALF-[A-Z0-9]{4}/i);
     if (match) {
-      responderAlCliente(match[0].toUpperCase(), mensajeCrudo, chatID);
+      const shortCode = match[0].toUpperCase();
+      const lower = mensajeCrudo.toLowerCase().trim();
+
+      // Acción 1: /aprobar pago
+      if (lower === "/aprobar" || lower === "aprobar") {
+        aprobarPagoOrden(shortCode, chatID);
+        return;
+      }
+
+      // Acción 2: /preparar (avisa al cliente que se prepare, barra al 85%)
+      if (lower === "/preparar" || lower === "preparar") {
+        prepararOrden(shortCode, chatID);
+        return;
+      }
+
+      // Acción 3: /entregar [5 dígitos] [clave]
+      if (lower.startsWith("/entregar")) {
+        const partes = mensajeCrudo.replace(/^\/entregar/i, "").trim().split(/\s+/);
+        // Si puso /entregar ALF-XXXX 12345 clave
+        if (partes.length >= 3 && /^ALF-[A-Z0-9]{4}$/i.test(partes[0])) {
+          entregarCredencialesOrden(partes[0].toUpperCase(), partes[1], partes.slice(2).join(" "), chatID);
+          return;
+        }
+        // Si puso /entregar 12345 clave
+        if (partes.length >= 2) {
+          entregarCredencialesOrden(shortCode, partes[0], partes.slice(1).join(" "), chatID);
+          return;
+        }
+      }
+
+      // Acción 4 directa: "12345 contraseña" (5 dígitos numéricos seguidos de la clave)
+      const matchDirecto = mensajeCrudo.match(/^(\d{5})\s+(.+)$/);
+      if (matchDirecto) {
+        entregarCredencialesOrden(shortCode, matchDirecto[1], matchDirecto[2].trim(), chatID);
+        return;
+      }
+
+      // Acción 5: Soporte al cliente (envía el texto directamente a la pantalla del cliente)
+      responderAlCliente(shortCode, mensajeCrudo, chatID);
+      return;
+    }
+  }
+
+  // 2. Comandos directos sin responder a ningún mensaje:
+  if (mensajeCrudo.toLowerCase().startsWith("/aprobar")) {
+    const match = mensajeCrudo.match(/ALF-[A-Z0-9]{4}/i);
+    if (match) {
+      aprobarPagoOrden(match[0].toUpperCase(), chatID);
+      return;
+    } else {
+      enviarMensaje(chatID, "ℹ️ Uso: <code>/aprobar ALF-XXXX</code>");
+      return;
+    }
+  }
+
+  if (mensajeCrudo.toLowerCase().startsWith("/preparar")) {
+    const match = mensajeCrudo.match(/ALF-[A-Z0-9]{4}/i);
+    if (match) {
+      prepararOrden(match[0].toUpperCase(), chatID);
+      return;
+    } else {
+      enviarMensaje(chatID, "ℹ️ Uso: <code>/preparar ALF-XXXX</code>");
+      return;
+    }
+  }
+
+  if (mensajeCrudo.toLowerCase().startsWith("/entregar")) {
+    const partes = mensajeCrudo.trim().split(/\s+/);
+    // Formato: /entregar ALF-XXXX 12345 clave
+    if (partes.length >= 4 && /^ALF-[A-Z0-9]{4}$/i.test(partes[1])) {
+      entregarCredencialesOrden(partes[1].toUpperCase(), partes[2], partes.slice(3).join(" "), chatID);
+      return;
+    }
+    enviarMensaje(chatID, "ℹ️ Uso: <code>/entregar ALF-XXXX [5 dígitos] [contraseña]</code>");
+    return;
+  }
+
+  if (mensajeCrudo.toLowerCase().startsWith("/estado") || mensajeCrudo.toLowerCase().startsWith("/orden")) {
+    const match = mensajeCrudo.match(/ALF-[A-Z0-9]{4}/i);
+    if (match) {
+      consultarEstadoOrden(match[0].toUpperCase(), chatID);
+      return;
+    } else {
+      enviarMensaje(chatID, "ℹ️ Uso: <code>/estado ALF-XXXX</code>");
       return;
     }
   }
@@ -878,13 +959,198 @@ function responderAlCliente(shortCode, texto, chatID) {
   }
 }
 
+// ── FUNCIONES DE GESTIÓN DE ENTREGAS ───────────────────────────────────
+
+function aprobarPagoOrden(shortCode, chatID) {
+  try {
+    const orders = supabaseRequest(
+      `orders?short_code=eq.${encodeURIComponent(shortCode)}&select=id,game_name,sale_price,payment_status&limit=1`,
+      "get"
+    );
+
+    if (!orders || orders.length === 0) {
+      enviarMensaje(chatID, `⚠️ No encontré la orden <code>${shortCode}</code>.`);
+      return;
+    }
+
+    const order = orders[0];
+    supabaseRequest(`orders?id=eq.${order.id}`, "patch", {
+      payment_status: "approved"
+    });
+
+    enviarMensaje(
+      chatID,
+      `✅ <b>¡Pago APROBADO con éxito!</b>\n\n` +
+      `<b>Orden:</b> <code>${shortCode}</code>\n` +
+      `<b>Juego:</b> ${order.game_name}\n\n` +
+      `El portal del cliente ya se desbloqueó y le aparecerán las indicaciones para generar su código Switch.`
+    );
+  } catch (error) {
+    Logger.log(`aprobarPagoOrden: ${error.message}`);
+    enviarMensaje(chatID, `❌ Error aprobando pago: ${error.message}`);
+  }
+}
+
+function prepararOrden(shortCode, chatID) {
+  try {
+    const orders = supabaseRequest(
+      `orders?short_code=eq.${encodeURIComponent(shortCode)}&select=id,game_name,status&limit=1`,
+      "get"
+    );
+
+    if (!orders || orders.length === 0) {
+      enviarMensaje(chatID, `⚠️ No encontré la orden <code>${shortCode}</code>.`);
+      return;
+    }
+
+    const order = orders[0];
+    supabaseRequest(`orders?id=eq.${order.id}`, "patch", {
+      status: "preparing"
+    });
+
+    enviarMensaje(
+      chatID,
+      `⏳ <b>Orden en preparación (85%)</b>\n\n` +
+      `<b>Orden:</b> <code>${shortCode}</code>\n` +
+      `<b>Juego:</b> ${order.game_name}\n\n` +
+      `Al cliente le sonó la campana de aviso en su pantalla y su barra de carga avanzó al 85% ("¡Casi listo!").`
+    );
+  } catch (error) {
+    Logger.log(`prepararOrden: ${error.message}`);
+    enviarMensaje(chatID, `❌ Error al poner en preparación: ${error.message}`);
+  }
+}
+
+function entregarCredencialesOrden(shortCode, codigo5Digitos, password, chatID) {
+  try {
+    const cleanDigits = String(codigo5Digitos || "").trim();
+    if (!/^\d{5}$/.test(cleanDigits)) {
+      enviarMensaje(
+        chatID,
+        `⚠️ <b>Código inválido</b>: El código de acceso debe ser de exactamente 5 dígitos numéricos (recibido: "<code>${cleanDigits}</code>").\n\n` +
+        `Ejemplo de uso:\n<code>/entregar ${shortCode} 48291 MiClave2026</code>\n` +
+        `o simplemente responde al mensaje con:\n<code>48291 MiClave2026</code>`
+      );
+      return;
+    }
+
+    const cleanPassword = String(password || "").trim();
+    if (!cleanPassword) {
+      enviarMensaje(chatID, `⚠️ Falta la contraseña. Formato: <code>[5 dígitos] [contraseña]</code>`);
+      return;
+    }
+
+    const orders = supabaseRequest(
+      `orders?short_code=eq.${encodeURIComponent(shortCode)}&select=id,game_name,status,console_code&limit=1`,
+      "get"
+    );
+
+    if (!orders || orders.length === 0) {
+      enviarMensaje(chatID, `⚠️ No encontré la orden <code>${shortCode}</code>.`);
+      return;
+    }
+
+    const order = orders[0];
+
+    // 1. Actualizar orden madre a ready con los accesos
+    supabaseRequest(`orders?id=eq.${order.id}`, "patch", {
+      account_email: cleanDigits,
+      account_password: cleanPassword,
+      status: "ready"
+    });
+
+    // 2. Actualizar ítem pendiente si existe en order_items
+    try {
+      supabaseRequest(
+        `order_items?order_id=eq.${order.id}&completed_at=is.null`,
+        "patch",
+        {
+          account_email: cleanDigits,
+          account_password: cleanPassword
+        }
+      );
+    } catch (e) {
+      Logger.log(`order_items patch: ${e.message}`);
+    }
+
+    enviarMensaje(
+      chatID,
+      `🎉 <b>¡ENTREGA EXITOSA!</b>\n\n` +
+      `<b>Orden:</b> <code>${shortCode}</code>\n` +
+      `<b>Juego:</b> ${order.game_name}\n\n` +
+      `<b>Código (5 dígitos):</b> <code>${cleanDigits}</code>\n` +
+      `<b>Contraseña:</b> <code>${cleanPassword}</code>\n\n` +
+      `✅ El cliente ya tiene sus credenciales en pantalla con botón de copiar y el instructivo de descarga de la eShop.`
+    );
+  } catch (error) {
+    Logger.log(`entregarCredencialesOrden: ${error.message}`);
+    enviarMensaje(chatID, `❌ Error entregando orden: ${error.message}`);
+  }
+}
+
+function consultarEstadoOrden(shortCode, chatID) {
+  try {
+    const orders = supabaseRequest(
+      `orders?short_code=eq.${encodeURIComponent(shortCode)}&select=id,game_name,status,payment_status,payment_method,console_code,account_email,account_password,sale_price,created_at&limit=1`,
+      "get"
+    );
+
+    if (!orders || orders.length === 0) {
+      enviarMensaje(chatID, `⚠️ No encontré la orden <code>${shortCode}</code>.`);
+      return;
+    }
+
+    const o = orders[0];
+    const estados = {
+      draft: "Borrador / Nueva",
+      pending_console_code: "Esperando código Switch",
+      pending_setup: "Código Switch recibido (En espera)",
+      preparing: "En preparación (85%)",
+      ready: "Credenciales entregadas",
+      completed: "Completada / Instalado",
+      issue: "Problema reportado"
+    };
+
+    enviarMensaje(
+      chatID,
+      `📋 <b>INFORMACIÓN DE ORDEN</b>\n\n` +
+      `<b>Orden:</b> <code>${o.short_code || shortCode}</code>\n` +
+      `<b>Juego:</b> ${o.game_name}\n` +
+      `<b>Monto:</b> $${Number(o.sale_price || 0).toLocaleString("es-CL")}\n` +
+      `<b>Pago:</b> ${o.payment_status === "approved" ? "✅ Aprobado" : "⏳ " + (o.payment_status || "pendiente")} (${o.payment_method || "sin método"})\n` +
+      `<b>Estado:</b> ${estados[o.status] || o.status}\n` +
+      `<b>Código Switch:</b> ${o.console_code ? "<code>" + o.console_code + "</code>" : "<i>Aún no ingresado</i>"}\n` +
+      `<b>Acceso entregado:</b> ${o.account_email ? "<code>" + o.account_email + "</code> | <code>" + o.account_password + "</code>" : "<i>Sin credenciales aún</i>"}`
+    );
+  } catch (error) {
+    Logger.log(`consultarEstadoOrden: ${error.message}`);
+    enviarMensaje(chatID, `❌ Error consultando orden: ${error.message}`);
+  }
+}
+
 function enviarMensaje(chatId, texto, borrarTeclado = false) {
   if (!TELEGRAM_BOT_TOKEN) {
     throw new Error("Falta TELEGRAM_BOT_TOKEN en Script Properties.");
   }
 
-  const payload = { chat_id: chatId, text: texto }; if (borrarTeclado) payload.reply_markup = { remove_keyboard: true };
-  UrlFetchApp.fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { method: "post", contentType: "application/json", payload: JSON.stringify(payload) });
+  const payload = { chat_id: chatId, text: texto, parse_mode: "HTML" };
+  if (borrarTeclado) payload.reply_markup = { remove_keyboard: true };
+
+  try {
+    UrlFetchApp.fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+    });
+  } catch (e) {
+    // Si falla por formato HTML, enviar como texto plano
+    delete payload.parse_mode;
+    UrlFetchApp.fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+    });
+  }
 }
 function setWebhook() {
   const webAppUrl = PropertiesService.getScriptProperties().getProperty("WEB_APP_URL");
