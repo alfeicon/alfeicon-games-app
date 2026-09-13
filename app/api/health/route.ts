@@ -1,89 +1,171 @@
 // app/api/health/route.ts
-// Chequeo de salud de la base de datos. Lo llama el cron de Vercel cada 5 min
-// (ver vercel.json). Hace una consulta mínima a Supabase; si falla, te avisa
-// por Telegram (reutiliza el mismo bot). Incluye anti-spam (cooldown) y aviso
-// de recuperación cuando la base vuelve a responder.
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+// Chequeo de salud de la base de datos.
+// Diseñado para entornos Serverless (Vercel):
+// 1. Ping ultraligero con reintentos para no generar falsas alarmas por micro-latencias.
+// 2. Cooldown real de 30 min deduplicado vía mensaje anclado en Telegram (sin perder estado entre lambdas).
+// 3. Tareas secundarias (limpieza de borradores y garantías) aisladas para no falsear el estado de salud.
 
-// Nunca cachear: cada llamada debe consultar la base en vivo.
+import { NextResponse } from "next/server";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Estado en memoria para no enviar un correo en cada chequeo mientras la base
-// sigue caída. Es "best-effort": vive mientras la instancia esté caliente
-// (con Vercel Fluid Compute suele mantenerse entre ejecuciones del cron). Para
-// deduplicación 100% garantizada se podría mover a Upstash Redis / Edge Config.
-const ALERT_COOLDOWN_MS = 30 * 60 * 1000; // máx. 1 correo cada 30 min por incidente
-const alertState = { downSince: 0, lastAlertTs: 0 };
+const ALERT_COOLDOWN_SEC = 30 * 60; // 30 minutos
+const alertStateInMemory = { downSince: 0, lastAlertTs: 0 };
 
-async function checkDatabase(): Promise<{ ok: boolean; error?: string }> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return { ok: false, error: "Faltan variables NEXT_PUBLIC_SUPABASE_*" };
+interface PinnedAlert {
+  messageId: number;
+  date: number; // Unix seconds
+  text: string;
+}
 
-  const client = createClient(url, key, { auth: { persistSession: false } });
-
+// Consulta el mensaje anclado en el chat para saber si ya hay una alerta activa
+async function getPinnedAlert(token: string, chatId: string): Promise<PinnedAlert | null> {
   try {
-    // 1. Limpieza de borradores abandonados (consultas que no llegaron a pago).
-    //    IMPORTANTE: se excluye todo lo que tenga método de pago. Las órdenes
-    //    por transferencia y Mercado Pago también nacen en 'draft', y borrarlas
-    //    dejaría sin portal a un cliente que ya pagó (o que está por subir su
-    //    comprobante). `payment_method is null` = el flujo viejo, sin pago.
+    const res = await fetch(`https://api.telegram.org/bot${token}/getChat?chat_id=${chatId}`, {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pinned = data?.result?.pinned_message;
+    if (
+      pinned &&
+      typeof pinned.text === "string" &&
+      pinned.text.includes("Alfeicon: la base de datos NO responde")
+    ) {
+      return {
+        messageId: pinned.message_id,
+        date: pinned.date,
+        text: pinned.text,
+      };
+    }
+  } catch (e) {
+    console.warn("[health] Error al consultar estado en Telegram:", e);
+  }
+  return null;
+}
+
+async function sendTelegram(
+  token: string,
+  chatId: string,
+  text: string,
+  pin: boolean = false
+): Promise<number | null> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+    });
+
+    if (!res.ok) {
+      console.error("[health] Error enviando aviso Telegram:", res.status, await res.text());
+      return null;
+    }
+
+    const data = await res.json();
+    const messageId = data?.result?.message_id;
+
+    if (pin && messageId) {
+      await fetch(`https://api.telegram.org/bot${token}/pinChatMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          disable_notification: true,
+        }),
+      }).catch((e) => console.warn("[health] No se pudo anclar mensaje:", e));
+    }
+
+    return messageId ?? null;
+  } catch (e) {
+    console.error("[health] Fallo de conexión con Telegram:", e);
+    return null;
+  }
+}
+
+async function clearPinnedAlert(token: string, chatId: string, messageId?: number): Promise<void> {
+  try {
+    if (messageId) {
+      await fetch(`https://api.telegram.org/bot${token}/unpinChatMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+      });
+    } else {
+      await fetch(`https://api.telegram.org/bot${token}/unpinAllChatMessages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId }),
+      });
+    }
+  } catch (e) {
+    console.warn("[health] No se pudo desanclar el mensaje:", e);
+  }
+}
+
+// Ping ultraligero con hasta 3 intentos antes de alertar
+async function pingDatabase(client: SupabaseClient): Promise<{ ok: boolean; error?: string }> {
+  const maxAttempts = 3;
+  let lastError = "";
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const { error } = await client
+        .from("app_settings")
+        .select("key")
+        .limit(1)
+        .abortSignal(AbortSignal.timeout(6000));
+
+      if (!error) {
+        return { ok: true };
+      }
+      lastError = error.message;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  return { ok: false, error: lastError || "Tiempo de espera agotado (Timeout)" };
+}
+
+// Tareas secundarias de mantenimiento: no deben bloquear ni tirar abajo la salud del sitio
+async function runMaintenanceTasks(client: SupabaseClient): Promise<void> {
+  try {
+    // 1. Limpieza de borradores abandonados
     const limitDate = new Date(Date.now() - 15 * 60 * 1000).toISOString();
     await client
       .from("orders")
       .delete()
       .eq("status", "draft")
       .is("payment_method", null)
-      .lt("created_at", limitDate);
+      .lt("created_at", limitDate)
+      .abortSignal(AbortSignal.timeout(8000));
+  } catch (err) {
+    console.warn("[health] Limpieza de órdenes borrador omitida:", err);
+  }
 
-    // 2. Vencimiento de la garantía: cada cuenta entregada (order_items) dura
-    //    los días que se le congelaron al crearla. Pasado el plazo se vacía la
-    //    cuenta: el enlace deja de servir y no guardamos credenciales para
-    //    siempre. El cliente ya tiene su captura de la boleta.
-    //    La lógica vive en la base (add_garantia_config.sql) porque compara
-    //    `completed_at` contra la columna `dias_garantia`, y eso no se puede
-    //    expresar como filtro de PostgREST.
-    const { data: vencidas, error: errVencer } = await client.rpc("vencer_garantias");
-    if (errVencer) console.warn("[health] no se pudieron vencer las garantías:", errVencer.message);
+  try {
+    // 2. Vencer garantías
+    const { data: vencidas, error: errVencer } = await client
+      .rpc("vencer_garantias")
+      .abortSignal(AbortSignal.timeout(8000));
+    if (errVencer) console.warn("[health] RPC vencer_garantias no pudo completar:", errVencer.message);
     else if (vencidas) console.log(`[health] garantías vencidas: ${vencidas} cuenta(s) liberada(s)`);
-
-    // 3. Consulta mínima y barata contra una tabla de lectura pública para chequeo de salud.
-    const { error } = await client.from("app_settings").select("key").limit(1);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-async function sendTelegram(text: string): Promise<void> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID; // tu ADMIN_TELEGRAM_ID
-
-  if (!token || !chatId) {
-    console.warn("[health] TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no configurados; no se avisa.");
-    return;
-  }
-
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
-  });
-
-  if (!res.ok) {
-    console.error("[health] Error enviando aviso Telegram:", res.status, await res.text());
+  } catch (err) {
+    console.warn("[health] Fallo en vencer_garantias:", err);
   }
 }
 
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  // Si no defines CRON_SECRET, el endpoint queda abierto (menos seguro). Se
-  // recomienda definirlo: Vercel Cron manda automáticamente el header
-  // Authorization: Bearer <CRON_SECRET>. También aceptamos ?secret= para
-  // pingers externos (UptimeRobot, cron-job.org).
   if (!secret) return true;
   const header = request.headers.get("authorization");
   if (header === `Bearer ${secret}`) return true;
@@ -96,50 +178,101 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  // Modo prueba: ?test=1 envía un aviso de Telegram al instante para verificar
-  // que el token y el chat_id están bien configurados.
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  // Modo prueba: ?test=1
   if (new URL(request.url).searchParams.get("test") === "1") {
-    await sendTelegram(
-      `🔔 <b>Prueba de avisos Alfeicon</b>\n\n` +
-      `Si ves este mensaje, los avisos de salud de la base de datos funcionan.\n\n` +
-      `<i>${new Date().toLocaleString("es-CL")}</i>`,
-    );
+    if (token && chatId) {
+      await sendTelegram(
+        token,
+        chatId,
+        `🔔 <b>Prueba de avisos Alfeicon</b>\n\n` +
+        `Si ves este mensaje, los avisos de salud de la base de datos funcionan correctamente.\n\n` +
+        `<i>${new Date().toLocaleString("es-CL")}</i>`
+      );
+    }
     return NextResponse.json({ status: "test-sent" });
   }
 
-  const result = await checkDatabase();
-  const now = Date.now();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    return NextResponse.json({ status: "error", error: "Faltan variables NEXT_PUBLIC_SUPABASE_*" }, { status: 500 });
+  }
 
-  if (result.ok) {
-    // ¿Se estaba recuperando de una caída? Avisar que volvió.
-    if (alertState.downSince !== 0) {
-      const downMin = Math.round((now - alertState.downSince) / 60000);
-      await sendTelegram(
-        `✅ <b>Alfeicon: la base de datos se recuperó</b>\n\n` +
-        `Ya vuelve a responder correctamente.\n` +
-        `Estuvo con problemas ~<b>${downMin} min</b>.\n\n` +
-        `<i>Aviso automático · ${new Date().toLocaleString("es-CL")}</i>`,
-      );
-      alertState.downSince = 0;
-      alertState.lastAlertTs = 0;
+  const client = createClient(url, key, { auth: { persistSession: false } });
+
+  // 1. Chequeo de salud prioritario con reintentos
+  const health = await pingDatabase(client);
+  const now = Date.now();
+  const nowSec = Math.floor(now / 1000);
+
+  if (health.ok) {
+    // Si la base está sana, verificamos si veníamos de una caída
+    if (token && chatId) {
+      const activeAlert = await getPinnedAlert(token, chatId);
+
+      // Si había una alerta anclada en Telegram o en memoria
+      if (activeAlert || alertStateInMemory.downSince !== 0) {
+        const startSec = activeAlert ? activeAlert.date : Math.floor(alertStateInMemory.downSince / 1000);
+        const downMin = Math.max(1, Math.round((nowSec - startSec) / 60));
+
+        await sendTelegram(
+          token,
+          chatId,
+          `✅ <b>Alfeicon: la base de datos se recuperó</b>\n\n` +
+          `Ya vuelve a responder correctamente.\n` +
+          `Estuvo con problemas ~<b>${downMin} min</b>.\n\n` +
+          `<i>Aviso automático · ${new Date().toLocaleString("es-CL")}</i>`
+        );
+
+        // Desanclar para que ninguna otra lambda repita el mensaje de recuperación
+        if (activeAlert) {
+          await clearPinnedAlert(token, chatId, activeAlert.messageId);
+        }
+        alertStateInMemory.downSince = 0;
+        alertStateInMemory.lastAlertTs = 0;
+      }
     }
+
+    // 2. Ejecutar tareas secundarias de mantenimiento sin bloquear el resultado de salud
+    await runMaintenanceTasks(client);
+
     return NextResponse.json({ status: "ok" });
   }
 
-  // La base está fallando.
-  if (alertState.downSince === 0) alertState.downSince = now;
+  // ── La base falló los 3 intentos consecutivos ──
+  console.error("[health] Base de datos no responde tras reintentos:", health.error);
 
-  if (now - alertState.lastAlertTs > ALERT_COOLDOWN_MS) {
-    alertState.lastAlertTs = now;
-    await sendTelegram(
-      `⚠️ <b>Alfeicon: la base de datos NO responde</b>\n\n` +
-      `El chequeo automático detectó una falla.\n\n` +
-      `<b>Error:</b> <code>${result.error ?? "desconocido"}</code>\n\n` +
-      `Revisa https://status.supabase.com y tu proyecto en https://supabase.com/dashboard\n\n` +
-      `<i>Aviso automático · ${new Date().toLocaleString("es-CL")}\n` +
-      `No repetiré este aviso durante los próximos 30 min.</i>`,
-    );
+  if (alertStateInMemory.downSince === 0) {
+    alertStateInMemory.downSince = now;
   }
 
-  return NextResponse.json({ status: "error", error: result.error }, { status: 503 });
+  if (token && chatId) {
+    const activeAlert = await getPinnedAlert(token, chatId);
+
+    // Si ya existe una alerta activa y no han pasado 30 minutos, NO enviamos nada (anti-spam)
+    const lastAlertSec = activeAlert ? activeAlert.date : Math.floor(alertStateInMemory.lastAlertTs / 1000);
+    const inCooldown = lastAlertSec > 0 && (nowSec - lastAlertSec < ALERT_COOLDOWN_SEC);
+
+    if (!inCooldown) {
+      alertStateInMemory.lastAlertTs = now;
+      await sendTelegram(
+        token,
+        chatId,
+        `⚠️ <b>Alfeicon: la base de datos NO responde</b>\n\n` +
+        `El chequeo automático detectó una falla tras 3 intentos.\n\n` +
+        `<b>Error:</b> <code>${health.error ?? "desconocido"}</code>\n\n` +
+        `Revisa https://status.supabase.com y tu proyecto en https://supabase.com/dashboard\n\n` +
+        `<i>Aviso automático · ${new Date().toLocaleString("es-CL")}\n` +
+        `No repetiré este aviso durante los próximos 30 min.</i>`,
+        true // Anclar el mensaje para deduplicar entre instancias serverless
+      );
+    } else {
+      console.log("[health] Alerta en cooldown activo, omitiendo notificación duplicada a Telegram.");
+    }
+  }
+
+  return NextResponse.json({ status: "error", error: health.error }, { status: 503 });
 }
