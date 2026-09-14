@@ -10,9 +10,18 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const ALERT_COOLDOWN_SEC = 30 * 60; // 30 minutos
 const alertStateInMemory = { downSince: 0, lastAlertTs: 0 };
+
+function formatLocalDate(): string {
+  return new Date().toLocaleString("es-CL", {
+    timeZone: "America/Santiago",
+    dateStyle: "short",
+    timeStyle: "medium",
+  });
+}
 
 interface PinnedAlert {
   messageId: number;
@@ -107,18 +116,29 @@ async function clearPinnedAlert(token: string, chatId: string, messageId?: numbe
   }
 }
 
-// Ping ultraligero con hasta 3 intentos antes de alertar
+// Ping con reintentos progresivos (hasta 4 intentos con backoff de hasta 25s) para filtrar micro-mantenimientos transitorios
 async function pingDatabase(client: SupabaseClient): Promise<{ ok: boolean; error?: string }> {
-  const maxAttempts = 3;
+  const maxAttempts = 4;
+  const backoffs = [3000, 6000, 8000]; // pausas progresivas en ms
+  const startTime = Date.now();
+  const MAX_TOTAL_BUDGET_MS = 25000; // Máximo 25s en total para no chocar con timeouts de monitores HTTP (30s)
+
   let lastError = "";
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const elapsed = Date.now() - startTime;
+    if (elapsed > MAX_TOTAL_BUDGET_MS - 4000 && attempt > 1) {
+      break;
+    }
+
+    const timeoutMs = Math.min(8000, Math.max(4000, MAX_TOTAL_BUDGET_MS - elapsed - 2000));
+
     try {
       const { error } = await client
         .from("app_settings")
         .select("key")
         .limit(1)
-        .abortSignal(AbortSignal.timeout(6000));
+        .abortSignal(AbortSignal.timeout(timeoutMs));
 
       if (!error) {
         return { ok: true };
@@ -129,7 +149,10 @@ async function pingDatabase(client: SupabaseClient): Promise<{ ok: boolean; erro
     }
 
     if (attempt < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const delay = backoffs[attempt - 1] ?? 5000;
+      if (Date.now() - startTime + delay < MAX_TOTAL_BUDGET_MS) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
   }
 
@@ -189,7 +212,7 @@ export async function GET(request: Request) {
         chatId,
         `🔔 <b>Prueba de avisos Alfeicon</b>\n\n` +
         `Si ves este mensaje, los avisos de salud de la base de datos funcionan correctamente.\n\n` +
-        `<i>${new Date().toLocaleString("es-CL")}</i>`
+        `<i>${formatLocalDate()}</i>`
       );
     }
     return NextResponse.json({ status: "test-sent" });
@@ -203,7 +226,7 @@ export async function GET(request: Request) {
 
   const client = createClient(url, key, { auth: { persistSession: false } });
 
-  // 1. Chequeo de salud prioritario con reintentos
+  // 1. Chequeo de salud prioritario con reintentos progresivos
   const health = await pingDatabase(client);
   const now = Date.now();
   const nowSec = Math.floor(now / 1000);
@@ -213,9 +236,9 @@ export async function GET(request: Request) {
     if (token && chatId) {
       const activeAlert = await getPinnedAlert(token, chatId);
 
-      // Si había una alerta anclada en Telegram o en memoria
-      if (activeAlert || alertStateInMemory.downSince !== 0) {
-        const startSec = activeAlert ? activeAlert.date : Math.floor(alertStateInMemory.downSince / 1000);
+      // Solo avisamos de recuperación si efectivamente había una alerta anclada visible
+      if (activeAlert) {
+        const startSec = activeAlert.date;
         const downMin = Math.max(1, Math.round((nowSec - startSec) / 60));
 
         await sendTelegram(
@@ -224,13 +247,11 @@ export async function GET(request: Request) {
           `✅ <b>Alfeicon: la base de datos se recuperó</b>\n\n` +
           `Ya vuelve a responder correctamente.\n` +
           `Estuvo con problemas ~<b>${downMin} min</b>.\n\n` +
-          `<i>Aviso automático · ${new Date().toLocaleString("es-CL")}</i>`
+          `<i>Aviso automático · ${formatLocalDate()}</i>`
         );
 
         // Desanclar para que ninguna otra lambda repita el mensaje de recuperación
-        if (activeAlert) {
-          await clearPinnedAlert(token, chatId, activeAlert.messageId);
-        }
+        await clearPinnedAlert(token, chatId, activeAlert.messageId);
         alertStateInMemory.downSince = 0;
         alertStateInMemory.lastAlertTs = 0;
       }
@@ -242,8 +263,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ status: "ok" });
   }
 
-  // ── La base falló los 3 intentos consecutivos ──
-  console.error("[health] Base de datos no responde tras reintentos:", health.error);
+  // ── La base falló todos los intentos progresivos ──
+  console.error("[health] Base de datos no responde tras reintentos progresivos:", health.error);
 
   if (alertStateInMemory.downSince === 0) {
     alertStateInMemory.downSince = now;
@@ -262,10 +283,10 @@ export async function GET(request: Request) {
         token,
         chatId,
         `⚠️ <b>Alfeicon: la base de datos NO responde</b>\n\n` +
-        `El chequeo automático detectó una falla tras 3 intentos.\n\n` +
+        `El chequeo automático detectó una falla tras 4 intentos con espera progresiva (~25s).\n\n` +
         `<b>Error:</b> <code>${health.error ?? "desconocido"}</code>\n\n` +
         `Revisa https://status.supabase.com y tu proyecto en https://supabase.com/dashboard\n\n` +
-        `<i>Aviso automático · ${new Date().toLocaleString("es-CL")}\n` +
+        `<i>Aviso automático · ${formatLocalDate()}\n` +
         `No repetiré este aviso durante los próximos 30 min.</i>`,
         true // Anclar el mensaje para deduplicar entre instancias serverless
       );
