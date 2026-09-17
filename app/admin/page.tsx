@@ -27,7 +27,7 @@ import { Historial } from "./_components/Historial";
 import { SaleModal } from "./_components/SaleModal";
 import { CommandPalette, type Command } from "./_components/CommandPalette";
 import { useAdminStore } from "./_store/adminStore";
-import type { ActivityLog, Order } from "./_types";
+import type { ActivityLog, Order, PriceChangeSuggestion } from "./_types";
 
 const defaultSettings: SettingsState = {
   nintendoOnlinePrice: String(DEFAULT_APP_SETTINGS.nintendoOnlinePrice),
@@ -102,6 +102,7 @@ export default function AdminPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   type AppNotice = { id: string; type: "success" | "error" | "info"; text: string; timestamp: number; leaving: boolean; showToast: boolean };
   const [notices, setNotices] = useState<AppNotice[]>([]);
+  const [priceSuggestions, setPriceSuggestions] = useState<PriceChangeSuggestion[]>([]);
   const [noticesOpen, setNoticesOpen] = useState(false);
   const [noticesY, setNoticesY] = useState(0); // for drag if needed later
   const [bellY, setBellY] = useState<number | null>(null);
@@ -419,6 +420,22 @@ export default function AdminPage() {
     setActivityLogs((data || []) as ActivityLog[]);
   }, []);
 
+  const loadPriceSuggestions = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("price_change_suggestions")
+      .select("id,game_id,game_title,current_price,suggested_price,observed_cost,status,detected_at,decided_at")
+      .eq("status", "pending")
+      .order("detected_at", { ascending: false });
+
+    // La tabla puede no existir todavía mientras se aplica la migración.
+    if (error) {
+      if (error.code !== "42P01" && error.code !== "PGRST205") console.error("[price suggestions]", error);
+      return;
+    }
+    setPriceSuggestions((data || []) as PriceChangeSuggestion[]);
+  }, []);
+
   const loadSettings = useCallback(async () => {
     if (!supabase) return;
     const { data, error } = await supabase
@@ -471,6 +488,7 @@ export default function AdminPage() {
         loadAdSpend(),
         loadSettings(),
         loadActivityLogs(),
+        loadPriceSuggestions(),
       ]);
     } catch (err) {
       console.error("[loadAll] Error inesperado (posible AdBlock o fallo de red):", err);
@@ -486,7 +504,7 @@ export default function AdminPage() {
       loadSupport().catch(console.error);
       loadProviders().catch(console.error);
     }, 100);
-  }, [loadGames, loadPacks, loadSales, loadViews, loadAdSpend, loadSettings, loadActivityLogs, loadOrders, loadNews, loadSupport, loadProviders, showNotice]);
+  }, [loadGames, loadPacks, loadSales, loadViews, loadAdSpend, loadSettings, loadActivityLogs, loadPriceSuggestions, loadOrders, loadNews, loadSupport, loadProviders, showNotice]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -555,6 +573,44 @@ export default function AdminPage() {
       supabase?.removeChannel(channel);
     };
   }, [isLoggedIn, loadOrders, showNotice]);
+
+  // Sugerencias persistentes: se ven al abrir el panel y llegan en tiempo real
+  // si el administrador está trabajando cuando se detectan.
+  useEffect(() => {
+    if (!supabase || !isLoggedIn) return;
+    const channel = supabase
+      .channel("admin_price_suggestions")
+      .on("postgres_changes", { event: "*", schema: "public", table: "price_change_suggestions" }, (payload) => {
+        loadPriceSuggestions();
+        if (payload.eventType === "INSERT") {
+          const suggestion = payload.new as PriceChangeSuggestion;
+          showNotice("info", `Sugerencia de precio para ${suggestion.game_title}: $${Number(suggestion.suggested_price).toLocaleString("es-CL")}`, true);
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [isLoggedIn, loadPriceSuggestions, showNotice]);
+
+  const resolvePriceSuggestion = useCallback(async (suggestion: PriceChangeSuggestion, accept: boolean) => {
+    if (!supabase) return;
+    const { error } = await supabase.rpc("resolve_price_change_suggestion", {
+      p_suggestion_id: suggestion.id,
+      p_accept: accept,
+    });
+    if (error) {
+      showNotice("error", `No se pudo resolver la sugerencia: ${error.message}`);
+      return;
+    }
+    setPriceSuggestions(current => current.filter(item => item.id !== suggestion.id));
+    if (accept) {
+      setGames(current => current.map(game => game.id === suggestion.game_id
+        ? { ...game, price: Number(suggestion.suggested_price) }
+        : game));
+      showNotice("success", `Precio de ${suggestion.game_title} actualizado a $${Number(suggestion.suggested_price).toLocaleString("es-CL")}.`);
+    } else {
+      showNotice("info", `Se mantuvo el precio actual de ${suggestion.game_title}.`);
+    }
+  }, [showNotice, setGames]);
 
   // Preferencias del panel: última sección abierta y sidebar fijado.
   useEffect(() => {
@@ -808,9 +864,9 @@ export default function AdminPage() {
         <button onClick={() => setNoticesOpen(true)} aria-label="Notificaciones"
           className="admin-press relative rounded-full p-2 text-gray-400 hover:text-white transition-colors">
           <Bell size={16} />
-          {notices.length > 0 && (
+          {notices.length + priceSuggestions.length > 0 && (
             <span className="absolute right-1 top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-[#0c0f12] bg-blue-500 px-1 text-[8px] font-black text-white">
-              {notices.length}
+              {notices.length + priceSuggestions.length}
             </span>
           )}
         </button>
@@ -1046,9 +1102,9 @@ export default function AdminPage() {
               }`}>
               <div className="relative">
                 <Bell size={13} className="shrink-0 text-gray-700 group-hover:text-gray-400" />
-                {notices.length > 0 && (
+                {notices.length + priceSuggestions.length > 0 && (
                   <span className={`absolute ${sidebarOpen ? '-right-1.5 -top-1.5' : '-right-1.5 -top-1.5'} flex h-3 min-w-[12px] items-center justify-center rounded-full border border-[#090b0d] bg-blue-500 px-1 text-[7px] font-black text-white`}>
-                    {notices.length}
+                    {notices.length + priceSuggestions.length}
                   </span>
                 )}
               </div>
@@ -1211,13 +1267,29 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-                  {notices.length === 0 ? (
+                  {notices.length === 0 && priceSuggestions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 opacity-50">
                       <Bell size={24} className="mb-3 text-gray-500" />
                       <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Sin notificaciones</p>
                     </div>
                   ) : (
-                    notices.map(notice => (
+                    <>
+                      {priceSuggestions.map(suggestion => (
+                        <div key={suggestion.id} className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.07] p-3.5">
+                          <div className="flex gap-3">
+                            <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-300" />
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="text-[13px] font-bold leading-snug text-white">¿Cambiar precio de {suggestion.game_title}?</p>
+                              <p className="text-[11px] leading-relaxed text-gray-300">Se vendió varias veces con costo de ${Number(suggestion.observed_cost).toLocaleString("es-CL")}. Sugerencia: <span className="font-black text-amber-200">${Number(suggestion.current_price).toLocaleString("es-CL")} → ${Number(suggestion.suggested_price).toLocaleString("es-CL")}</span>.</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex gap-2 pl-7">
+                            <button onClick={() => resolvePriceSuggestion(suggestion, true)} className="rounded-lg bg-emerald-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-black">Sí, cambiar</button>
+                            <button onClick={() => resolvePriceSuggestion(suggestion, false)} className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-300">Mantener</button>
+                          </div>
+                        </div>
+                      ))}
+                      {notices.map(notice => (
                       <div key={notice.id} className="flex gap-3 rounded-2xl border border-white/[0.03] bg-white/[0.02] p-3.5 transition-colors hover:bg-white/[0.04]">
                         <div className={`mt-0.5 shrink-0 ${notice.type === "success" ? "text-green-400" : "text-red-400"}`}>
                           {notice.type === "success" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
@@ -1229,7 +1301,8 @@ export default function AdminPage() {
                           </p>
                         </div>
                       </div>
-                    ))
+                      ))}
+                    </>
                   )}
                 </div>
               </motion.div>
@@ -1257,10 +1330,25 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-5">
-                  {notices.length === 0 ? (
+                  {notices.length === 0 && priceSuggestions.length === 0 ? (
                     <p className="mt-10 text-center text-xs font-bold uppercase tracking-widest text-gray-600">No hay notificaciones</p>
                   ) : (
                     <div className="space-y-3">
+                      {priceSuggestions.map(suggestion => (
+                        <div key={suggestion.id} className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3.5">
+                          <div className="flex gap-3">
+                            <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-300" />
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="text-xs font-black text-white">¿Cambiar precio de {suggestion.game_title}?</p>
+                              <p className="text-xs leading-relaxed text-gray-300">Costo repetido: ${Number(suggestion.observed_cost).toLocaleString("es-CL")}. Propuesta: <span className="font-bold text-amber-200">${Number(suggestion.current_price).toLocaleString("es-CL")} → ${Number(suggestion.suggested_price).toLocaleString("es-CL")}</span>.</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex gap-2 pl-7">
+                            <button onClick={() => resolvePriceSuggestion(suggestion, true)} className="rounded-lg bg-emerald-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-black transition hover:bg-emerald-300">Sí, cambiar a ${Number(suggestion.suggested_price).toLocaleString("es-CL")}</button>
+                            <button onClick={() => resolvePriceSuggestion(suggestion, false)} className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-300 transition hover:bg-white/10">Mantener precio</button>
+                          </div>
+                        </div>
+                      ))}
                       {notices.map(notice => (
                         <div key={notice.id} className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3 transition-colors hover:bg-white/[0.04]">
                           <div className={`mt-0.5 shrink-0 ${notice.type === "success" ? "text-green-400" : "text-red-400"}`}>

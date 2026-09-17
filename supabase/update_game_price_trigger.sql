@@ -13,6 +13,7 @@ DECLARE
   v_game_id uuid;
   v_recent_costs integer[];
   v_new_cost integer;
+  v_current_price numeric;
   v_current_cost integer;
   v_eshop_price integer;
   
@@ -22,6 +23,12 @@ DECLARE
 BEGIN
   -- Solo nos importa si es un juego y es compra
   IF NEW.item_type != 'game' OR NEW.kind != 'compra' OR NEW.item_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- El 0 es el valor temporal de una orden nueva, no un costo real. Excluirlo
+  -- evita que cinco órdenes sin costo cargado reemplacen el precio por $8.990.
+  IF COALESCE(NEW.cost_price, 0) <= 0 THEN
     RETURN NEW;
   END IF;
 
@@ -36,6 +43,7 @@ BEGIN
     WHERE item_id = v_game_id
       AND item_type = 'game'
       AND kind = 'compra'
+      AND cost_price > 0
     ORDER BY created_at DESC
     LIMIT 5
   ) sub;
@@ -51,7 +59,7 @@ BEGIN
        v_new_cost := v_recent_costs[1];
 
        -- Obtener datos actuales del juego
-       SELECT cost_price, eshop_price INTO v_current_cost, v_eshop_price
+       SELECT price, cost_price, eshop_price INTO v_current_price, v_current_cost, v_eshop_price
        FROM games
        WHERE id = v_game_id;
 
@@ -77,11 +85,19 @@ BEGIN
           END IF;
 
           -- Actualizar el catálogo
-          UPDATE games 
-          SET cost_price = v_new_cost,
-              price = v_final_price,
-              updated_at = NOW()
-          WHERE id = v_game_id;
+          -- No modifica el catálogo: deja la decisión al administrador.
+          IF v_current_price IS DISTINCT FROM v_final_price THEN
+            INSERT INTO public.price_change_suggestions (
+              game_id, game_title, current_price, suggested_price, observed_cost
+            )
+            SELECT id, title, v_current_price, v_final_price, v_new_cost
+            FROM public.games WHERE id = v_game_id
+            ON CONFLICT (game_id) WHERE status = 'pending' DO UPDATE
+              SET current_price = EXCLUDED.current_price,
+                  suggested_price = EXCLUDED.suggested_price,
+                  observed_cost = EXCLUDED.observed_cost,
+                  detected_at = NOW();
+          END IF;
           
        END IF;
     END IF;
@@ -96,6 +112,6 @@ DROP TRIGGER IF EXISTS trigger_check_recurring_cost ON order_items;
 
 -- Crear el trigger que escucha después de cada INSERT en order_items
 CREATE TRIGGER trigger_check_recurring_cost
-AFTER INSERT ON order_items
+AFTER INSERT OR UPDATE OF cost_price ON order_items
 FOR EACH ROW
 EXECUTE FUNCTION check_recurring_cost_and_update_price();

@@ -163,6 +163,18 @@ export type ActivityLog = {
   created_at: string;
 };
 
+export type PriceChangeSuggestion = {
+  id: string;
+  game_id: string;
+  game_title: string;
+  current_price: number;
+  suggested_price: number;
+  observed_cost: number;
+  status: "pending" | "accepted" | "rejected";
+  detected_at: string;
+  decided_at: string | null;
+};
+
 export type AdminSection = "inicio" | "juegos" | "packs" | "noticias" | "analiticas" | "entregas" | "finanzas" | "soporte" | "marketing" | "historial" | "ajustes";
 
 /** Consulta enviada desde la sección Soporte de la tienda (sin orden detrás). */

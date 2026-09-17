@@ -9,6 +9,7 @@ declare
   v_game_id uuid;
   v_recent_costs integer[];
   v_new_cost integer;
+  v_current_price numeric;
   v_current_cost integer;
   v_eshop_price integer;
   v_price_marketing numeric;
@@ -16,6 +17,13 @@ declare
   v_final_price integer;
 begin
   if new.item_type <> 'game' or new.kind <> 'compra' or new.item_id is null then
+    return new;
+  end if;
+
+  -- Una orden recién creada todavía no tiene costo: se inserta con 0 y el
+  -- administrador lo completa al conseguir la cuenta. Cero no es un costo
+  -- válido y, si se contara, cinco órdenes nuevas bajarían el precio a $8.990.
+  if coalesce(new.cost_price, 0) <= 0 then
     return new;
   end if;
 
@@ -29,6 +37,7 @@ begin
     where item_id = v_game_id
       and item_type = 'game'
       and kind = 'compra'
+      and cost_price > 0
     order by created_at desc
     limit 5
   ) recent;
@@ -40,8 +49,8 @@ begin
      and v_recent_costs[4] = v_recent_costs[5] then
     v_new_cost := v_recent_costs[1];
 
-    select cost_price, eshop_price
-    into v_current_cost, v_eshop_price
+    select price, cost_price, eshop_price
+    into v_current_price, v_current_cost, v_eshop_price
     from public.games
     where id = v_game_id;
 
@@ -51,9 +60,20 @@ begin
       v_final_price := round(greatest(v_price_margin, v_price_marketing) / 1000) * 1000 - 10;
       v_final_price := greatest(v_final_price, 990);
 
-      update public.games
-      set cost_price = v_new_cost, price = v_final_price, updated_at = now()
-      where id = v_game_id;
+      -- El precio no se cambia solo: se guarda una propuesta para que el
+      -- administrador la acepte o la descarte en el panel.
+      if v_current_price is distinct from v_final_price then
+        insert into public.price_change_suggestions (
+          game_id, game_title, current_price, suggested_price, observed_cost
+        )
+        select id, title, v_current_price, v_final_price, v_new_cost
+        from public.games where id = v_game_id
+        on conflict (game_id) where status = 'pending' do update
+          set current_price = excluded.current_price,
+              suggested_price = excluded.suggested_price,
+              observed_cost = excluded.observed_cost,
+              detected_at = now();
+      end if;
     end if;
   end if;
 
@@ -63,5 +83,5 @@ $$;
 
 drop trigger if exists trigger_check_recurring_cost on public.order_items;
 create trigger trigger_check_recurring_cost
-after insert on public.order_items
+after insert or update of cost_price on public.order_items
 for each row execute function public.check_recurring_cost_and_update_price();
